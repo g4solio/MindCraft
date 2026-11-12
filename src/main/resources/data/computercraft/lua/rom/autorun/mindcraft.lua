@@ -12,7 +12,7 @@ while true do
     local job = mindcraft.status()
     if job and (job.state == "RUNNING" or job.state == "WAITING" or job.state == "SATISFIED") then
         -- The job names its module: "transport" or "keep_stock".
-        local ok, err = pcall(function() require("mindcraft." .. job.module).run() end)
+        local ok, err = pcall(function() require("mindcraft." .. job.module).run(job) end)
         if not ok then
             if err == "Terminated" then error(err, 0) end
             -- A module error must be visible to the owner. It must not kill the agent.

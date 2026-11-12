@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -52,53 +53,72 @@ public final class Uno {
     static volatile Provider provider = new RuleProvider();
     static final long TIMEOUT_MS = 20_000;
     private static final int SILENT_TICKS = 300;
-    /** Player to the time of a request that has no answer yet, in milliseconds. */
-    private static final Map<UUID, Long> ASKED = new ConcurrentHashMap<>();
+
+    /** A proposal that waits for a confirmation. The number tells it from the other proposals of the session. */
+    record Proposal(int number, Order order) {
+    }
 
     /**
-     * Proposals that wait for a confirmation. They are not saved: a proposal is not a decision.
-     * After a server restart Uno has no proposal, and says so.
+     * What Uno keeps for the players during one server session. Nothing here is saved.
+     * A proposal is not a decision: after a server restart Uno has no proposal, and says so.
      */
-    private static final Map<UUID, Order> PROPOSALS = new ConcurrentHashMap<>();
-    /** The last thing that Uno said to each player on a screen. Not saved. */
-    private static final Map<UUID, String> SAID = new ConcurrentHashMap<>();
+    private static final class Session {
+        final Map<UUID, Proposal> proposals = new ConcurrentHashMap<>();
+        /** The last thing that Uno said to each player on a screen. */
+        final Map<UUID, String> said = new ConcurrentHashMap<>();
+        /** The players with a request that has no answer yet. */
+        final Set<UUID> open = ConcurrentHashMap.newKeySet();
+        int proposalCount;
+    }
+
+    private static volatile Session session = new Session();
 
     private Uno() {
     }
 
+    /**
+     * Each server start calls this. See MindCraft.aboutToStart.
+     * A world that opens later in the same Java process gets no message, no proposal and no open request of the world before it.
+     */
+    static void newSession() {
+        session = new Session();
+    }
+
     static void say(Actor actor, String text) {
-        SAID.put(actor.id(), text);
+        session.said.put(actor.id(), text);
     }
 
     static String said(Actor actor) {
-        return SAID.getOrDefault(actor.id(), "Tell me what you need.");
+        return session.said.getOrDefault(actor.id(), "Tell me what you need.");
+    }
+
+    /** The proposal that waits for the confirmation of the actor, or null. */
+    static Proposal proposal(Actor actor) {
+        return session.proposals.get(actor.id());
     }
 
     static boolean hasProposal(Actor actor) {
-        return PROPOSALS.containsKey(actor.id());
+        return proposal(actor) != null;
+    }
+
+    /** A request to the provider of the server, with the ordinary time limit. */
+    public static void ask(MinecraftServer server, Actor actor, String request, Consumer<String> reply) {
+        ask(server, actor, request, provider, TIMEOUT_MS, reply);
     }
 
     /**
+     * The provider runs on a different thread. The server and the jobs in progress do not wait for it.
      * One request at a time for each player: a provider can cost money for each request.
-     * A provider always answers before the time limit. Thus an older entry is of a server that stopped, and does not count.
+     * A request that Uno accepts removes the proposal of the player. Thus a confirmation is always about the newest request.
      */
-    public static void ask(MinecraftServer server, Actor actor, String request, Consumer<String> reply) {
-        long now = System.currentTimeMillis();
-        Long asked = ASKED.get(actor.id());
-        if (asked != null && now - asked < TIMEOUT_MS) {
+    public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
+        Session mine = session;
+        String context = context(MindRuntime.get(server), actor);
+        if (!mine.open.add(actor.id())) {
             reply.accept("I am still working on your previous request.");
             return;
         }
-        ASKED.put(actor.id(), now);
-        ask(server, actor, request, provider, TIMEOUT_MS, answer -> {
-            ASKED.remove(actor.id());
-            reply.accept(answer);
-        });
-    }
-
-    /** The provider runs on a different thread. The server and the jobs in progress do not wait for it. */
-    public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
-        String context = context(MindRuntime.get(server), actor);
+        mine.proposals.remove(actor.id());
         CompletableFuture
             .supplyAsync(() -> {
                 try {
@@ -108,9 +128,13 @@ public final class Uno {
                 }
             })
             .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .whenComplete((json, error) -> server.execute(() -> reply.accept(error == null
-                ? propose(MindRuntime.get(server), actor, json)
-                : failure(error))));
+            .whenComplete((json, error) -> server.execute(() -> {
+                // The answer belongs to the session of its request. An answer for an earlier session changes nothing.
+                // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
+                if (server.isStopped() || mine != session) return;
+                mine.open.remove(actor.id());
+                reply.accept(error == null ? propose(mine, MindRuntime.get(server), actor, json) : failure(error));
+            }));
     }
 
     /** Only the data that the actor owns. A provider must not see the stations or robots of other players. */
@@ -134,7 +158,7 @@ public final class Uno {
         return context.toString();
     }
 
-    private static String propose(MindRuntime runtime, Actor actor, String json) {
+    private static String propose(Session mine, MindRuntime runtime, Actor actor, String json) {
         Order order;
         try {
             JsonObject o = JsonParser.parseString(json).getAsJsonObject();
@@ -149,19 +173,39 @@ public final class Uno {
         } catch (Refusal refusal) {
             return "I cannot propose this job: " + refusal.getMessage();
         }
-        PROPOSALS.put(actor.id(), order);
+        mine.proposals.put(actor.id(), new Proposal(++mine.proposalCount, order));
+        return "Proposal: " + describe(order) + ". I have done nothing yet. Confirm with /uno confirm.";
+    }
+
+    /** An order in words. The proposal and the screen use the same text. */
+    static String describe(Order order) {
         String item = MindRuntime.itemName(order.item());
         String what = order.module().equals(MindRuntime.KEEP_STOCK)
             ? "keep at least " + order.quantity() + " x " + item + " in '" + order.to() + "', taken from '" + order.from() + "'"
             : "carry " + order.quantity() + " x " + item + " from '" + order.from() + "' to '" + order.to() + "'";
-        return "Proposal: " + what + ". Reserve to leave in '" + order.from() + "': " + order.reserve()
-            + ". Robot #" + order.robot() + ". I have done nothing yet. Confirm with /uno confirm.";
+        return what + ". Reserve to leave in '" + order.from() + "': " + order.reserve() + ". Robot #" + order.robot();
     }
 
-    /** Starts the proposed order. The runtime validates it again: the world can be different now. */
+    /** The /uno confirm command: starts the proposal that the player has now. */
     public static String confirm(MinecraftServer server, Actor actor) {
-        Order order = PROPOSALS.remove(actor.id());
-        if (order == null) return "I have no pending proposal. A proposal that is not confirmed is not saved.";
+        Proposal proposal = proposal(actor);
+        return confirm(server, actor, proposal == null ? MindRuntime.UNKNOWN : proposal.number());
+    }
+
+    /**
+     * Starts the proposal with this number. A screen sends the number of the proposal that it showed.
+     * Thus a button of an older proposal starts nothing. The runtime validates the order again: the world can be different now.
+     */
+    static String confirm(MinecraftServer server, Actor actor, int number) {
+        Session mine = session;
+        if (mine.open.contains(actor.id())) return "I am still working on your request. I have no proposal to confirm yet.";
+        Proposal proposal = mine.proposals.get(actor.id());
+        if (proposal == null) {
+            return "I have no pending proposal. A new request replaces the proposal before it. A proposal that is not confirmed is not saved.";
+        }
+        if (proposal.number() != number) return "That is not my current proposal. I started nothing. Read the proposal again.";
+        mine.proposals.remove(actor.id());
+        Order order = proposal.order();
         try {
             Job job = MindRuntime.get(server).start(actor, order);
             return "Job " + job.id + " started on robot #" + order.robot() + ".";
@@ -190,18 +234,18 @@ public final class Uno {
             ? "keep at least " + job.quantity + " items in " + to + ", reserve " + job.reserve + " in " + from + ". "
             : "carry " + job.quantity + " items from " + from + " to " + to + ", reserve " + job.reserve + ". ");
         text.append("I delivered ").append(job.delivered).append(" items. ");
+        // The owner can lower the quantity below the deliveries. The record keeps the deliveries: the report must not hide the difference.
+        if (!job.keepStock() && job.delivered > job.quantity) text.append("That is more than the quantity of the job: the quantity became lower after those deliveries. ");
         if (job.carried > 0) text.append("The record says that I have ").append(job.carried).append(" on board. ");
         boolean live = RobotApi.live(robotId) != null;
         text.append(switch (job.state) {
             case RUNNING -> live ? "I am working. " : "The job is open, but the robot is stopped. ";
-            case SATISFIED -> "At the last observation the stock was at the requested level. ";
+            case SATISFIED -> "At the last observation the stock was at the requested level. "
+                + (job.carried > 0 ? "I keep the load on board for the next need. " : "");
             case DONE -> "The job is complete. ";
             case PAUSED -> "I am paused at your request. ";
             case CANCELLED -> "You cancelled the job. ";
-            case WAITING -> job.carried > 0
-                ? "The destination is full. I am waiting for free space. "
-                : job.fromSeen + " remain in " + from + ": that is the reserve you asked me to keep. To reach "
-                    + job.quantity + " in " + to + " I need more materials. ";
+            case WAITING -> waiting(job, from, to);
             case BLOCKED -> "I am stopped and I need your help. Recorded reason: " + job.reason + ". ";
             case RECOVERY -> "I cannot say how it went. Recorded reason: " + job.reason + ". You decide whether to resume or cancel. ";
         });
@@ -217,6 +261,24 @@ public final class Uno {
             }
         }
         return text.toString().trim();
+    }
+
+    /** Why the job waits. The sentence comes from the cause that the runtime recorded, not from a guess. */
+    private static String waiting(Job job, String from, String to) {
+        String missing = job.keepStock() ? "To reach " + job.quantity + " in " + to + " I need more materials. "
+            : "I must carry " + (job.quantity - job.delivered) + " more. I need more materials. ";
+        return switch (job.cause) {
+            case SOURCE_AT_RESERVE -> (job.reserve == 0 ? "Nothing remains in " + from + ". "
+                : job.fromSeen + " remain in " + from + (job.fromSeen == job.reserve ? ": that is the reserve you asked me to keep. "
+                    : ": that is less than the reserve of " + job.reserve + " you asked me to keep. ")) + missing;
+            case SOURCE_KEEPS -> from + " has the items, but it does not let me take them. ";
+            case ROBOT_FULL -> "My inventory is full: I cannot take the items from " + from + ". Make room in the robot. ";
+            case DESTINATION_FULL -> "The destination is full. I am waiting for free space. ";
+            case SOURCE_UNLOADED -> "The area of " + from + " is not loaded: I cannot see its inventory and I do not know its stock. ";
+            case DESTINATION_UNLOADED -> "The area of " + to + " is not loaded: I cannot see its inventory and I do not know its stock. ";
+            // A record of an older version has no cause. The recorded text is all that Uno knows.
+            case NONE -> "I am waiting. Recorded reason: " + job.reason + ". ";
+        };
     }
 
     static String seen(int count, long at, long now) {

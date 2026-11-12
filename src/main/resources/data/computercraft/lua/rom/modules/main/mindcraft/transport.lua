@@ -1,22 +1,33 @@
--- Transport module, version 1.
+-- Transport module, version 2.
 -- It moves one item type from the source station to the destination station.
 --
--- The module keeps no state. It reads the job state from the runtime before each step.
+-- The module keeps no state of the work: only the ID of its job. It reads the job state from the runtime before each step.
 -- Thus it can start again at any time, for example after a restart.
 -- The runtime does all item transfers (mindcraft.take, mindcraft.give) and counts them.
 -- The module moves the turtle with the standard turtle API. It does not dig or attack.
 --
 -- Limit: the path between the docks must be free on straight lines. There is no path search.
 
-local VERSION = "transport@1"
+local VERSION = "transport@2"
 local MOVE_RETRIES = 10 -- attempts before the module reports an impediment
 local MOVE_RETRY_SECONDS = 1
 local POLL_SECONDS = 5 -- time between two attempts when a station cannot give or accept items
 
 local TURNS = { north = 0, east = 1, south = 2, west = 3 }
 
+-- The ID of the job of this run. See "begin".
+local mine
+
+-- True while the robot has the job of this run and the job lets the robot act.
+-- A new job on the same robot is not the job of this run: the run ends, and the agent starts the module of the new job.
 local function active(job)
-    return job and (job.state == "RUNNING" or job.state == "WAITING" or job.state == "SATISFIED")
+    return job and job.id == mine and (job.state == "RUNNING" or job.state == "WAITING" or job.state == "SATISFIED")
+end
+
+-- Binds the run to the job that the agent saw. Returns false if the robot already has a different job.
+local function begin(job, version)
+    mine = mindcraft.attach(version)
+    return mine == job.id
 end
 
 local function face(direction)
@@ -100,8 +111,8 @@ local function step(job)
     return true
 end
 
-local function run()
-    mindcraft.attach(VERSION)
+local function run(job)
+    if not begin(job, VERSION) then return end
     while true do
         local job = mindcraft.status()
         if not active(job) then return end
@@ -110,5 +121,5 @@ local function run()
     end
 end
 
--- Other modules build on "step", "goTo" and "active". See keep_stock.lua.
-return { run = run, step = step, goTo = goTo, active = active, version = VERSION, POLL_SECONDS = POLL_SECONDS }
+-- Other modules build on "begin", "step", "goTo" and "active". See keep_stock.lua.
+return { run = run, begin = begin, step = step, goTo = goTo, active = active, version = VERSION, POLL_SECONDS = POLL_SECONDS }

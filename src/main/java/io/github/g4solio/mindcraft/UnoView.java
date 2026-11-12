@@ -41,6 +41,11 @@ final class UnoView {
         // ponytail: the view knows the Claude provider. Put this notice in the provider interface when a second real provider exists.
         if (Uno.provider instanceof ClaudeProvider) widgets.add(text("Written requests go to Claude, a model of Anthropic.", "muted"));
 
+        // "Confirm" has one meaning only: the proposal is in words next to the button, and the action names that proposal.
+        // The last sentence of Uno can be about something else, for example a report.
+        Uno.Proposal proposal = Uno.proposal(actor);
+        if (proposal != null) widgets.add(text("Waiting for your confirmation: " + Uno.describe(proposal.order()) + ".", "normal"));
+
         JsonObject input = new JsonObject();
         input.addProperty("type", "input");
         input.addProperty("id", "request");
@@ -49,7 +54,7 @@ final class UnoView {
 
         JsonArray buttons = new JsonArray();
         buttons.add(button("ask", "Send"));
-        if (Uno.hasProposal(actor)) buttons.add(button("confirm", "Confirm"));
+        if (proposal != null) buttons.add(button("confirm:" + proposal.number(), "Confirm"));
         buttons.add(button("report", "Report"));
         widgets.add(row(buttons));
 
@@ -81,10 +86,12 @@ final class UnoView {
         // Old data must not look like current data.
         if (RobotApi.live(robotId) == null) widgets.add(text("The robot is not running. These data are not the current state.", "muted"));
         JsonArray buttons = new JsonArray();
-        // The revision goes with the action. The runtime refuses a change that comes from an old view.
-        buttons.add(button("apply:" + robotId + ":" + job.revision, "Apply"));
-        buttons.add(job.state.active() ? button("pause:" + robotId, "Pause") : button("resume:" + robotId, "Resume"));
-        buttons.add(button("cancel:" + robotId, "Cancel"));
+        // Each action names the job, not only the robot. The runtime refuses an action of a view that showed an earlier job.
+        // "Apply" also carries the revision. The runtime refuses a change that comes from an old view of the same job.
+        String target = robotId + ":" + job.id;
+        buttons.add(button("apply:" + target + ":" + job.revision, "Apply"));
+        buttons.add(job.state.active() ? button("pause:" + target, "Pause") : button("resume:" + target, "Resume"));
+        buttons.add(button("cancel:" + target, "Cancel"));
         widgets.add(row(buttons));
     }
 
@@ -101,7 +108,7 @@ final class UnoView {
                 case "refresh" -> {
                 }
                 case "report" -> Uno.say(actor, Uno.report(server, actor));
-                case "confirm" -> Uno.say(actor, Uno.confirm(server, actor));
+                case "confirm" -> Uno.say(actor, Uno.confirm(server, actor, Integer.parseInt(part[1])));
                 case "ask" -> {
                     String request = values.get("request").getAsString().trim();
                     if (request.isEmpty()) {
@@ -112,7 +119,7 @@ final class UnoView {
                     }
                 }
                 case "pause", "resume", "cancel" -> {
-                    runtime.control(actor, Integer.parseInt(part[1]), part[0]);
+                    runtime.control(actor, Integer.parseInt(part[1]), Integer.parseInt(part[2]), part[0]);
                     Uno.say(actor, switch (part[0]) {
                         case "pause" -> "Job paused. The cargo stays on board.";
                         case "resume" -> "I resume the job.";
@@ -121,7 +128,7 @@ final class UnoView {
                 }
                 case "apply" -> {
                     int robotId = Integer.parseInt(part[1]);
-                    runtime.update(actor, robotId, Integer.parseInt(part[2]),
+                    runtime.update(actor, robotId, Integer.parseInt(part[2]), Integer.parseInt(part[3]),
                         values.get("quantity:" + robotId).getAsInt(), values.get("reserve:" + robotId).getAsInt());
                     Uno.say(actor, "I updated the quantity and the reserve.");
                 }

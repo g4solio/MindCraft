@@ -52,7 +52,7 @@ public class MindCraft {
     static final Logger LOGGER = LogUtils.getLogger();
 
     /** Computer ID to {boot count to reach, time limit in milliseconds}. Computers run in real time, not in ticks. */
-    private static final Map<Integer, long[]> REBOOTS = new HashMap<>();
+    static final Map<Integer, long[]> REBOOTS = new HashMap<>();
     private static final long REBOOT_LIMIT_MS = 30_000;
 
     private static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MOD_ID);
@@ -83,14 +83,22 @@ public class MindCraft {
         context.getModEventBus().addListener((FMLCommonSetupEvent event) -> RobotApi.register());
         MinecraftForge.EVENT_BUS.addListener(MindCraft::registerCommands);
         MinecraftForge.EVENT_BUS.addListener(MindCraft::tick);
-        MinecraftForge.EVENT_BUS.addListener(MindCraft::chooseProvider);
+        MinecraftForge.EVENT_BUS.addListener(MindCraft::aboutToStart);
     }
 
     /**
+     * A server starts. In a client this occurs each time the player opens a world, in the same Java process.
+     * Uno starts a new session: the messages, the proposals and the open requests of the world before it do not count.
+     * The same applies to the robots: a robot session, a boot count and a pending computer restart of the world before it.
+     * No computer of the new server runs at this moment.
+     * <p>
      * Uno asks Claude only if the server has an API key in its environment. Without a key Uno uses the fixed rules.
      * A game test server always uses the fixed rules. Thus the checks give the same result on each computer and cost nothing.
      */
-    private static void chooseProvider(ServerAboutToStartEvent event) {
+    static void aboutToStart(ServerAboutToStartEvent event) {
+        Uno.newSession();
+        RobotApi.newSession();
+        REBOOTS.clear();
         String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
         boolean claude = key != null && !key.isBlank() && !(event.getServer() instanceof GameTestServer);
         Uno.provider = claude ? ClaudeProvider.fromEnv() : new Uno.RuleProvider();
@@ -159,8 +167,9 @@ public class MindCraft {
         return IntegerArgumentType.getInteger(context, "robot");
     }
 
+    /** The runtime checks the actor, as for each other request. A player reads only the player's own robots and jobs. */
     private static String status(CommandContext<CommandSourceStack> context, MindRuntime runtime, Actor actor) {
-        return runtime.describe(robotId(context), context.getSource().getLevel().getGameTime());
+        return runtime.status(actor, robotId(context), context.getSource().getLevel().getGameTime());
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> control(String action) {

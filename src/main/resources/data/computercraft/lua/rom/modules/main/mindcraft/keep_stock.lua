@@ -1,4 +1,4 @@
--- Keep-stock module, version 1.
+-- Keep-stock module, version 2.
 -- It keeps a minimum quantity of one item type in the destination station. The job has no end.
 --
 -- The module is a composition of the transport module. It adds one thing: the robot observes
@@ -7,10 +7,10 @@
 
 local transport = require("mindcraft.transport")
 
-local VERSION = "keep_stock@1"
+local VERSION = "keep_stock@2"
 
-local function run()
-    mindcraft.attach(VERSION)
+local function run(job)
+    if not transport.begin(job, VERSION) then return end
     while true do
         local job = mindcraft.status()
         if not transport.active(job) then return end

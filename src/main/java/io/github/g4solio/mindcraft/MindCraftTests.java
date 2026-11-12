@@ -1,6 +1,7 @@
 package io.github.g4solio.mindcraft;
 
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
@@ -9,7 +10,10 @@ import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
 import io.github.g4solio.mindcraft.MindRuntime.Refusal;
 import io.github.g4solio.mindcraft.MindRuntime.State;
+import io.github.g4solio.mindcraft.MindRuntime.Station;
 import net.minecraft.Util;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
@@ -17,6 +21,7 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.GameTestSequence;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -29,6 +34,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -38,9 +44,12 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
@@ -247,7 +256,7 @@ public class MindCraftTests {
                 rig.assertTransferred(40, 24);
                 Job job = rig.job();
                 check(job.taken == 24 && job.delivered == 24 && job.fromSeen == 40 && job.toSeen == 24, rig.describe());
-                check(job.executor.equals("transport@1"), rig.describe());
+                check(job.executor.equals("transport@2"), rig.describe());
                 MindCraft.LOGGER.info("s1_transfer final status:\n{}", rig.describe());
             })
             .thenSucceed();
@@ -497,7 +506,7 @@ public class MindCraftTests {
     private static boolean sameJob(Job a, Job b) {
         return a.id == b.id && a.owner.equals(b.owner) && a.from.equals(b.from) && a.to.equals(b.to) && a.item == b.item
             && a.module.equals(b.module) && a.revision == b.revision
-            && a.quantity == b.quantity && a.reserve == b.reserve && a.state == b.state && a.reason.equals(b.reason)
+            && a.quantity == b.quantity && a.reserve == b.reserve && a.state == b.state && a.reason.equals(b.reason) && a.cause == b.cause
             && a.taken == b.taken && a.delivered == b.delivered && a.carried == b.carried && a.fromSeen == b.fromSeen
             && a.toSeen == b.toSeen && a.executor.equals(b.executor) && a.ops == b.ops && a.lastOp.equals(b.lastOp)
             && a.recoveries == b.recoveries && a.lastOpAt == b.lastOpAt;
@@ -664,7 +673,7 @@ public class MindCraftTests {
             .thenWaitUntil(() -> rig.state(State.SATISFIED))
             .thenExecute(() -> {
                 check(rig.coal(rig.dest) == 64 && rig.coal(rig.source) == 74 && rig.held() == 0, rig.describe());
-                check(rig.job().delivered == 54 && rig.job().executor.equals("keep_stock@1"), rig.describe());
+                check(rig.job().delivered == 54 && rig.job().executor.equals("keep_stock@2"), rig.describe());
                 // 2. Something uses 20 pieces.
                 dest.removeItem(0, 20);
             })
@@ -782,32 +791,29 @@ public class MindCraftTests {
         Rig rig = new Rig(helper, "t18", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
         List<String> invalid = new CopyOnWriteArrayList<>(), failed = new CopyOnWriteArrayList<>();
-        rig.begin()
-            .thenExecute(() -> {
-                Uno.ask(server, player, "x", (r, c) -> orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, "t18_unknown", 8), 5000, invalid::add);
-                Uno.ask(server, player, "x", (r, c) -> orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, -5), 5000, invalid::add);
-                Uno.ask(server, player, "x", (r, c) -> orderJson("dig_a_mine", rig.id, rig.from, rig.to, 8), 5000, invalid::add);
-            })
-            .thenWaitUntil(() -> check(invalid.size() == 3, "answers: " + invalid))
-            .thenExecute(() -> {
-                MindCraft.LOGGER.info("t18_provider_failures invalid orders: {}", invalid);
-                check(invalid.stream().allMatch(a -> a.startsWith("I cannot propose this job")), invalid.toString());
-                check(invalid.stream().anyMatch(a -> a.contains("Unknown station")) && invalid.stream().anyMatch(a -> a.contains("must be positive"))
-                    && invalid.stream().anyMatch(a -> a.contains("Unknown module")), invalid.toString());
-                check(Uno.confirm(server, player).startsWith("I have no pending proposal"), "an invalid order became a proposal");
-                rig.startJob(24, 0);
-                Uno.ask(server, player, "x", (r, c) -> {
-                    throw new IOException("provider offline");
-                }, 5000, failed::add);
-                Uno.ask(server, player, "x", (r, c) -> {
-                    Thread.sleep(3000);
-                    return "{}";
-                }, 300, failed::add);
-                Uno.ask(server, player, "x", (r, c) -> "this is not JSON", 5000, failed::add);
-                // Not a failure: the request has no quantity. The answer must not look like a failure of the provider.
-                Uno.ask(server, player, "carry coal", new Uno.RuleProvider(), 5000, failed::add);
-            })
-            .thenWaitUntil(() -> check(failed.size() == 4, "answers: " + failed))
+        GameTestSequence sequence = rig.begin();
+        sequence = ask(sequence, server, player, "x", (r, c) -> orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, "t18_unknown", 8), 5000, invalid);
+        sequence = ask(sequence, server, player, "x", (r, c) -> orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, -5), 5000, invalid);
+        sequence = ask(sequence, server, player, "x", (r, c) -> orderJson("dig_a_mine", rig.id, rig.from, rig.to, 8), 5000, invalid);
+        sequence = sequence.thenExecute(() -> {
+            MindCraft.LOGGER.info("t18_provider_failures invalid orders: {}", invalid);
+            check(invalid.stream().allMatch(a -> a.startsWith("I cannot propose this job")), invalid.toString());
+            check(invalid.stream().anyMatch(a -> a.contains("Unknown station")) && invalid.stream().anyMatch(a -> a.contains("must be positive"))
+                && invalid.stream().anyMatch(a -> a.contains("Unknown module")), invalid.toString());
+            check(Uno.confirm(server, player).startsWith("I have no pending proposal"), "an invalid order became a proposal");
+            rig.startJob(24, 0);
+        });
+        sequence = ask(sequence, server, player, "x", (r, c) -> {
+            throw new IOException("provider offline");
+        }, 5000, failed);
+        sequence = ask(sequence, server, player, "x", (r, c) -> {
+            Thread.sleep(3000);
+            return "{}";
+        }, 300, failed);
+        sequence = ask(sequence, server, player, "x", (r, c) -> "this is not JSON", 5000, failed);
+        // Not a failure: the request has no quantity. The answer must not look like a failure of the provider.
+        sequence = ask(sequence, server, player, "carry coal", new Uno.RuleProvider(), 5000, failed);
+        sequence
             .thenExecute(() -> {
                 MindCraft.LOGGER.info("t18_provider_failures failures: {}", failed);
                 check(failed.stream().filter(a -> a.startsWith("I cannot interpret the request now")).count() == 2, failed.toString());
@@ -819,6 +825,18 @@ public class MindCraftTests {
             .thenWaitUntil(() -> rig.state(State.DONE))
             .thenExecute(() -> rig.assertTransferred(40, 24))
             .thenSucceed();
+    }
+
+    /** Sends one request and waits for its answer. Uno accepts one request at a time from each player. */
+    private static GameTestSequence ask(GameTestSequence sequence, MinecraftServer server, Actor player, String request,
+                                        Uno.Provider provider, long timeoutMs, List<String> answers) {
+        int[] before = new int[1];
+        return sequence
+            .thenExecute(() -> {
+                before[0] = answers.size();
+                Uno.ask(server, player, request, provider, timeoutMs, answers::add);
+            })
+            .thenWaitUntil(() -> check(answers.size() > before[0], "Uno did not answer yet"));
     }
 
     /** An answer of the Messages API with one text block, or with no content if the text is null. */
@@ -882,11 +900,18 @@ public class MindCraftTests {
             new ClaudeCase(-1, () -> "", "(the model service is not reachable)"));
 
         List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
+        CountDownLatch open = new CountDownLatch(1);
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> {
-                Uno.ask(server, player, "x", busy::add);
+                // The provider of the first request waits for the test. A fast provider can answer before the second
+                // request arrives: then the first request is not open any more, and the test does not check the rule.
+                Uno.ask(server, player, "x", (r, c) -> {
+                    open.await(10, TimeUnit.SECONDS);
+                    throw new IllegalArgumentException("the quantity is missing");
+                }, 5000, busy::add);
                 Uno.ask(server, player, "x", busy::add);
                 check(busy.equals(List.of("I am still working on your previous request.")), "a second request did not wait: " + busy);
+                open.countDown();
             })
             .thenWaitUntil(() -> check(busy.size() == 2, "answers: " + busy));
         for (int i = 0; i < cases.size(); i++) {
@@ -904,8 +929,8 @@ public class MindCraftTests {
                 .thenExecute(() -> {
                     MindCraft.LOGGER.info("t18_claude_provider answer {}: {}", index, answers.get(index));
                     check(answers.get(index).contains(test.expected()), answers.get(index));
-                    // Only the complete order becomes a proposal.
-                    check(Uno.hasProposal(player) == (index >= 5), "wrong proposal state after answer " + index);
+                    // Only the complete order becomes a proposal. The request after it fails: then the proposal must be gone.
+                    check(Uno.hasProposal(player) == (index == 5), "wrong proposal state after answer " + index);
                 });
         }
         sequence
@@ -1003,15 +1028,19 @@ public class MindCraftTests {
         Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
         rig.begin()
             .thenExecute(() -> {
-                check(view.get().contains("I have no record of a job of yours.") && !view.get().contains("\"action\":\"confirm\""), view.get());
+                check(view.get().contains("I have no record of a job of yours.") && action(view.get(), "confirm") == null, view.get());
                 UnoView.act(server, player, "ask", "{\"request\":\"Keep at least 64 pieces of coal in " + rig.to
                     + ", taking them from " + rig.from + ". Leave at least 32 pieces in " + rig.from + ".\"}");
             })
-            .thenWaitUntil(() -> check(view.get().contains("\"action\":\"confirm\""), "no proposal in the view yet: " + view.get()))
+            .thenWaitUntil(() -> check(action(view.get(), "confirm") != null, "no proposal in the view yet: " + view.get()))
             .thenExecute(() -> {
                 check(rig.job() == null && view.get().contains("Proposal: keep at least 64"), view.get());
+                check(view.get().contains("Waiting for your confirmation: keep at least 64 x minecraft:coal in '" + rig.to + "'"), view.get());
+                // A "Confirm" that does not name the proposal starts nothing.
                 UnoView.act(server, player, "confirm", "{}");
-                check(rig.job() != null && rig.job().keepStock() && !view.get().contains("\"action\":\"confirm\""), view.get());
+                check(rig.job() == null && view.get().contains("I did not understand the action"), view.get());
+                UnoView.act(server, player, action(view.get(), "confirm"), "{}");
+                check(rig.job() != null && rig.job().keepStock() && action(view.get(), "confirm") == null, view.get());
             })
             .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 48, rig.describe()))
             .thenExecute(() -> {
@@ -1019,20 +1048,21 @@ public class MindCraftTests {
                 MindCraft.LOGGER.info("s2_tablet_view at the reserve limit: {}", atLimit);
                 check(atLimit.contains("waiting") && atLimit.contains("\"value\":58,\"max\":64"), atLimit);
                 check(atLimit.contains("\"id\":\"reserve:" + rig.id + "\",\"label\":\"Reserve in the source\",\"value\":32"), atLimit);
-                check(atLimit.contains("\"action\":\"apply:" + rig.id + ":0\""), atLimit);
+                String job = rig.id + ":" + rig.job().id;
+                check(atLimit.contains("\"action\":\"apply:" + job + ":0\""), atLimit);
                 check(view.get().equals(atLimit), "two views of the same state are different");
 
                 String otherView = UnoView.build(rig.runtime, other, rig.level.getGameTime());
                 check(!otherView.contains(rig.from) && otherView.contains("I have no record of a job of yours."), otherView);
-                UnoView.act(server, other, "cancel:" + rig.id, "{}");
+                UnoView.act(server, other, "cancel:" + job, "{}");
                 rig.state(State.WAITING);
 
                 String fields = "{\"quantity:" + rig.id + "\":\"64\",\"reserve:" + rig.id + "\":\"%s\"}";
-                UnoView.act(server, player, "apply:" + rig.id + ":0", String.format(fields, "0"));
+                UnoView.act(server, player, "apply:" + job + ":0", String.format(fields, "0"));
                 check(rig.job().reserve == 0 && rig.job().revision == 1, rig.describe());
-                UnoView.act(server, player, "apply:" + rig.id + ":0", String.format(fields, "50"));
+                UnoView.act(server, player, "apply:" + job + ":0", String.format(fields, "50"));
                 check(rig.job().reserve == 0 && view.get().contains("I cannot"), view.get());
-                UnoView.act(server, player, "apply:" + rig.id + ":1", String.format(fields, "abc"));
+                UnoView.act(server, player, "apply:" + job + ":1", String.format(fields, "abc"));
                 check(rig.job().reserve == 0 && view.get().contains("I did not understand the action"), view.get());
                 UnoView.act(server, player, "dig_a_mine:" + rig.id, "{}");
                 check(view.get().contains("I did not understand the action"), view.get());
@@ -1085,6 +1115,589 @@ public class MindCraftTests {
                 check(rig.runtime.places.stream().noneMatch(place -> place.pos().equals(pos)), "the place stays after the removal of the projector");
                 check(!rig.runtime.nearPlace(rig.level, pos, Net.REACH), "a removed projector is still a contact point");
             })
+            .thenSucceed();
+    }
+
+    // --- Findings of the code review of 2026-11 ------------------------------------------------------------------------
+
+    /** The actions of the buttons of a view, as a client sends them. */
+    private static List<String> actions(String view) {
+        List<String> actions = new ArrayList<>();
+        for (JsonElement widget : JsonParser.parseString(view).getAsJsonObject().getAsJsonArray("widgets")) {
+            if (!widget.getAsJsonObject().has("buttons")) continue;
+            for (JsonElement button : widget.getAsJsonObject().getAsJsonArray("buttons")) {
+                actions.add(button.getAsJsonObject().get("action").getAsString());
+            }
+        }
+        return actions;
+    }
+
+    /** The action of one button of a view, by its first word. Null if the view does not have that button. */
+    private static String action(String view, String verb) {
+        return actions(view).stream().filter(a -> a.equals(verb) || a.startsWith(verb + ":")).findFirst().orElse(null);
+    }
+
+    /**
+     * T22: "Confirm" starts only the proposal that the player sees.
+     * 1. A proposal, then a request that gives no order: the old proposal must not start.
+     * 2. A proposal, then a request without an answer yet: a confirmation must not start the old proposal.
+     * 3. The answer arrives: the button of the old proposal must not start the new one. A proposal starts one time only.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t22_confirm_only_the_shown_proposal(GameTestHelper helper) {
+        Actor player = player("t22shown");
+        Rig rig = new Rig(helper, "t22shown", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        String carry8 = "Carry 8 coal from " + rig.from + " to " + rig.to;
+        String[] button = new String[1];
+        List<String> answers = new CopyOnWriteArrayList<>();
+        CountDownLatch slow = new CountDownLatch(1);
+        rig.begin()
+            .thenExecute(() -> UnoView.act(server, player, "ask", "{\"request\":\"" + carry8 + "\"}"))
+            .thenWaitUntil(() -> check(action(view.get(), "confirm") != null, "no proposal in the view yet: " + view.get()))
+            .thenExecute(() -> {
+                button[0] = action(view.get(), "confirm");
+                // This request has no quantity. It gives no order.
+                UnoView.act(server, player, "ask", "{\"request\":\"Carry coal from " + rig.from + " to " + rig.to + "\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("I cannot propose a job"), view.get()))
+            .thenExecute(() -> {
+                List<String> wrong = new ArrayList<>();
+                if (action(view.get(), "confirm") != null) wrong.add("the view offers Confirm below the answer to a failed request");
+                UnoView.act(server, player, button[0], "{}");
+                if (rig.job() != null) wrong.add("the button started the old proposal: " + rig.describe());
+                String command = Uno.confirm(server, player);
+                if (wrong.size() < 2 && rig.job() != null) wrong.add("/uno confirm started the old proposal: " + command);
+                check(wrong.isEmpty(), wrong.toString());
+                Uno.ask(server, player, carry8, answers::add);
+            })
+            .thenWaitUntil(() -> check(answers.size() == 1, "Uno did not answer yet"))
+            .thenExecute(() -> {
+                check(answers.get(0).startsWith("Proposal: carry 8 x"), answers.get(0));
+                button[0] = action(view.get(), "confirm");
+                // A command made this request, not the screen. The screen must show in words what its button confirms.
+                check(button[0] != null && view.get().contains("carry 8 x minecraft:coal from '" + rig.from + "'"), view.get());
+                Uno.ask(server, player, "x", (request, context) -> {
+                    slow.await(10, TimeUnit.SECONDS);
+                    return orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 16);
+                }, 15_000, answers::add);
+                UnoView.act(server, player, button[0], "{}");
+                check(rig.job() == null, "Confirm started the old proposal while a newer request was open");
+                String command = Uno.confirm(server, player);
+                check(command.startsWith("I am still working") && rig.job() == null, "/uno confirm during an open request: " + command);
+                check(action(view.get(), "confirm") == null, view.get());
+                slow.countDown();
+            })
+            .thenWaitUntil(() -> check(answers.size() == 2, "Uno did not answer yet"))
+            .thenExecute(() -> {
+                check(answers.get(1).startsWith("Proposal: carry 16 x"), answers.get(1));
+                UnoView.act(server, player, button[0], "{}");
+                check(rig.job() == null, "the button of an older proposal started the newer proposal");
+                check(view.get().contains("carry 16 x minecraft:coal from '" + rig.from + "'"), view.get());
+                String current = action(view.get(), "confirm");
+                UnoView.act(server, player, current, "{}");
+                check(rig.job() != null && rig.job().quantity == 16, "the current button did not start the proposal: " + view.get());
+                int started = rig.job().id;
+                UnoView.act(server, player, current, "{}");
+                check(Uno.confirm(server, player).startsWith("I have no pending proposal") && rig.job().id == started, "a proposal started two times");
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(48, 16))
+            .thenSucceed();
+    }
+
+    /**
+     * T23: two server sessions in the same Java process. The player, the robot number and the station names are the same.
+     * The second session must get no message, no proposal and no open request of the first.
+     * An answer to a request of the first session must change nothing in the second.
+     * The test calls the function that each server start calls. It does not start a second server.
+     * It has its own batch: a new session also removes the proposals of the tests that run at the same time.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "uno_session")
+    public static void t23_state_of_an_earlier_session(GameTestHelper helper) {
+        Actor player = player("t23session");
+        Rig rig = new Rig(helper, "t23session", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        String carry8 = "Carry 8 coal from " + rig.from + " to " + rig.to;
+        List<String> late = new CopyOnWriteArrayList<>(), second = new CopyOnWriteArrayList<>();
+        CountDownLatch slow = new CountDownLatch(1);
+        rig.begin()
+            .thenExecute(() -> UnoView.act(server, player, "ask", "{\"request\":\"" + carry8 + "\"}"))
+            .thenWaitUntil(() -> check(Uno.hasProposal(player), "no proposal yet"))
+            .thenExecute(() -> {
+                check(view.get().contains("Proposal: carry 8 x"), view.get());
+                Uno.newSession();
+                List<String> wrong = new ArrayList<>();
+                if (Uno.hasProposal(player)) wrong.add("the new session has the proposal of the old session");
+                if (view.get().contains("carry 8 x")) wrong.add("the new session shows the message of the old session: " + Uno.said(player));
+                String confirmed = Uno.confirm(server, player);
+                if (rig.job() != null) wrong.add("the new session started the proposal of the old session: " + confirmed);
+                check(wrong.isEmpty(), wrong.toString());
+
+                // A request is open when the session ends. Its answer would be a valid order of 16.
+                Uno.ask(server, player, "x", (request, context) -> {
+                    slow.await(10, TimeUnit.SECONDS);
+                    return orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 16);
+                }, 15_000, late::add);
+                Uno.newSession();
+                // The open request of the old session must not keep the player waiting in the new session.
+                Uno.ask(server, player, carry8, second::add);
+            })
+            .thenWaitUntil(() -> check(second.size() == 1, "no answer in the new session"))
+            .thenExecute(() -> {
+                check(second.get(0).startsWith("Proposal: carry 8 x"), second.get(0));
+                slow.countDown();
+            })
+            .thenIdle(40)
+            .thenExecute(() -> {
+                check(late.isEmpty(), "the answer of the old session arrived in the new session: " + late);
+                check(!view.get().contains("carry 16 x"), view.get());
+                String started = Uno.confirm(server, player);
+                check(rig.job() != null && rig.job().quantity == 8, "the proposal of the new session changed: " + started);
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(56, 8))
+            .thenSucceed();
+    }
+
+    /**
+     * T23 for the robots: the static state of the robots belongs to one server session, as the state of Uno does.
+     * A robot session, a boot count and a pending computer restart of an earlier server must not count in the next server.
+     * The test calls the listener of the server start with a new event. It does not post the event and does not start a second server.
+     * It has its own batch: the listener also ends the robot sessions of the tests that run at the same time.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "robot_session")
+    public static void t23_robots_of_an_earlier_session(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "t23robots", 64, 1000);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> {
+                RobotApi old = rig.robot();
+                MindCraft.reboot(server, rig.id);
+                check(old != null && RobotApi.boots(rig.id) > 0 && MindCraft.REBOOTS.containsKey(rig.id), "the setup is not complete");
+                MindCraft.aboutToStart(new ServerAboutToStartEvent(server));
+                List<String> wrong = new ArrayList<>();
+                if (RobotApi.live(rig.id) != null) wrong.add("the robot session of the old server is a running robot in the new one");
+                if (RobotApi.boots(rig.id) != 0) wrong.add("the new server has the boot count of the old one: " + RobotApi.boots(rig.id));
+                if (!MindCraft.REBOOTS.isEmpty()) wrong.add("the new server has a pending computer restart of the old one");
+                try {
+                    rig.startJob(8, 0);
+                    wrong.add("the runtime started a job on a robot session of the old server");
+                } catch (Refusal expected) {
+                    if (!expected.getMessage().contains("is not running")) wrong.add("wrong refusal: " + expected.getMessage());
+                }
+                try {
+                    old.status();
+                    wrong.add("the robot session of the old server still has authority");
+                } catch (dan200.computercraft.api.lua.LuaException expected) {
+                    // The old session must not act.
+                }
+                check(wrong.isEmpty(), wrong.toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * T16: the owner lowers the quantity of a transport while the load is on board.
+     * The robot delivers the new quantity only. The rest stays on board and the job says so. The owner decides.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t16_quantity_lowered_with_load(GameTestHelper helper) {
+        Actor player = player("t16load");
+        Rig rig = new Rig(helper, "t16load", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> rig.startJob(64, 0))
+            .thenWaitUntil(() -> rig.carried(64))
+            .thenExecute(() -> rig.runtime.update(player, rig.id, 0, 10, 0))
+            .thenWaitUntil(() -> check(rig.job().delivered > 0, rig.describe()))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t16_quantity_lowered_with_load report: {}", report);
+                check(rig.coal(rig.dest) == 10 && rig.held() == 54 && rig.coal(rig.source) == 0,
+                    "destination " + rig.coal(rig.dest) + ", robot " + rig.held() + ". " + rig.describe());
+                rig.state(State.BLOCKED);
+                check(rig.job().delivered == 10 && rig.job().carried == 54 && rig.job().reason.contains("54 stay on board"), rig.describe());
+                check(report.contains("I delivered 10 items.") && report.contains("54 stay on board") && !report.contains("The job is complete"), report);
+            })
+            .thenIdle(140)
+            .thenExecute(() -> {
+                // Seven seconds later. The robot delivers nothing more without a decision of the owner.
+                rig.state(State.BLOCKED);
+                check(rig.coal(rig.dest) == 10 && rig.held() == 54, rig.describe());
+                rig.runtime.update(player, rig.id, 1, 64, 0);
+                rig.runtime.control(player, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(0, 64))
+            .thenSucceed();
+    }
+
+    /**
+     * T11, the sudden stop, without a second server run. The record says that the load is delivered, but the robot still holds it.
+     * The test writes the record of a later moment. It does not stop the server. See RestartTests for the real stop.
+     * After "resume" the robot must deliver the load that it holds: the limit of the quantity must not keep it on board.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t11_resume_when_the_world_is_older(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "t11older", 64, 1000);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                job.delivered = 24;
+                job.carried = 0;
+                job.lastOpAt = rig.level.getGameTime() + 10_000;
+                rig.runtime.set(job, State.RECOVERY, "the world is older than the record of this job");
+            })
+            .thenIdle(60)
+            .thenExecute(() -> {
+                rig.state(State.RECOVERY);
+                check(rig.held() == 24 && rig.coal(rig.dest) == 0, "the robot must stop: " + rig.describe());
+                rig.runtime.control(rig.actor, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> check(!rig.job().state.active(), rig.describe()))
+            .thenExecute(() -> {
+                rig.assertTransferred(40, 24);
+                check(rig.job().recoveries == 1 && rig.job().delivered == 24 && rig.describe().contains("inexact"), rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /** The rig of T03: the destination has 60 items of coal and room for 4 more. */
+    private static Container almostFull(Rig rig) {
+        Container dest = rig.chest(rig.dest);
+        dest.setItem(0, new ItemStack(Items.COAL, 60));
+        for (int slot = 1; slot < dest.getContainerSize(); slot++) dest.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+        return dest;
+    }
+
+    /** T16 with T03: the destination accepts a part, then the owner lowers the quantity. The robot delivers up to the new quantity. */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t16_quantity_lowered_after_partial_delivery(GameTestHelper helper) {
+        Actor player = player("t16part");
+        Rig rig = new Rig(helper, "t16part", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Container dest = almostFull(rig);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 4, rig.describe()))
+            .thenExecute(() -> {
+                rig.runtime.update(player, rig.id, 0, 10, 0);
+                dest.setItem(1, ItemStack.EMPTY);
+            })
+            .thenWaitUntil(() -> check(rig.job().delivered > 4, rig.describe()))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t16_quantity_lowered_after_partial_delivery report: {}", report);
+                check(rig.coal(rig.dest) == 70 && rig.held() == 14 && rig.coal(rig.source) == 40,
+                    "destination " + rig.coal(rig.dest) + ", robot " + rig.held() + ". " + rig.describe());
+                rig.state(State.BLOCKED);
+                check(rig.job().delivered == 10 && rig.job().carried == 14, rig.describe());
+                check(report.contains("I delivered 10 items.") && report.contains("14 stay on board"), report);
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * T16: the new quantity is lower than the delivered quantity, and a load is on board.
+     * The job must not be complete while a load is on board. No more items go to the destination.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t16_quantity_below_delivered(GameTestHelper helper) {
+        Actor player = player("t16below");
+        Rig rig = new Rig(helper, "t16below", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Container dest = almostFull(rig);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 4, rig.describe()))
+            .thenExecute(() -> rig.runtime.update(player, rig.id, 0, 2, 0))
+            // The robot tries the delivery again after 5 seconds. The destination is still full.
+            .thenWaitUntil(() -> check(rig.job().state != State.WAITING, rig.describe()))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t16_quantity_below_delivered report: {}", report);
+                rig.state(State.BLOCKED);
+                check(rig.coal(rig.dest) == 64 && rig.held() == 20 && rig.coal(rig.source) == 40, rig.describe());
+                check(rig.job().delivered == 4 && rig.job().carried == 20, rig.describe());
+                check(report.contains("carry 2 items") && report.contains("I delivered 4 items. That is more than the quantity"), report);
+                check(report.contains("20 stay on board") && !report.contains("The job is complete"), report);
+                // The destination has room now, and the owner resumes. The quantity stays 2.
+                dest.setItem(1, ItemStack.EMPTY);
+                rig.runtime.control(player, rig.id, "resume");
+            })
+            .thenIdle(140)
+            .thenExecute(() -> {
+                rig.state(State.BLOCKED);
+                check(rig.coal(rig.dest) == 64 && rig.held() == 20, "the robot delivered above the quantity: " + rig.describe());
+                rig.runtime.control(player, rig.id, "cancel");
+                rig.state(State.CANCELLED);
+                check(rig.describe().contains("on board 20"), rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * T16 for "keep_stock": the owner lowers the level while the load is on board.
+     * The robot fills the destination up to the new level. The rest stays on board for the next need.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t16_level_lowered_with_load(GameTestHelper helper) {
+        Actor player = player("t16level");
+        Rig rig = new Rig(helper, "t16level", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Container source = rig.chest(rig.source), dest = rig.chest(rig.dest);
+        source.setItem(0, new ItemStack(Items.COAL, 64));
+        source.setItem(1, new ItemStack(Items.COAL, 64));
+        dest.setItem(0, new ItemStack(Items.COAL, 10));
+        rig.begin()
+            .thenExecute(() -> rig.runtime.start(player, rig.order(MindRuntime.KEEP_STOCK, 64, 0)))
+            .thenWaitUntil(() -> rig.carried(54))
+            .thenExecute(() -> rig.runtime.update(player, rig.id, 0, 20, 0))
+            .thenWaitUntil(() -> check(rig.job().delivered > 0, rig.describe()))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t16_level_lowered_with_load report: {}", report);
+                check(rig.coal(rig.dest) == 20 && rig.held() == 44 && rig.coal(rig.source) == 74,
+                    "destination " + rig.coal(rig.dest) + ", robot " + rig.held() + ". " + rig.describe());
+                rig.state(State.SATISFIED);
+                check(rig.job().delivered == 10 && rig.job().carried == 44 && rig.job().reason.contains("44 stay on board"), rig.describe());
+                check(report.contains("I have 44 on board") && report.contains("I keep the load on board"), report);
+                // Something uses 15 items. The robot fills the level again from the load on board.
+                dest.removeItem(0, 15);
+            })
+            .thenWaitUntil(() -> check(rig.job().delivered == 25, rig.describe()))
+            .thenExecute(() -> {
+                rig.state(State.SATISFIED);
+                check(rig.coal(rig.dest) == 20 && rig.held() == 29 && rig.coal(rig.source) == 74, rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * T16, a stale view: the screen shows job A. Job A ends and job B starts on the same robot.
+     * The actions of the view of job A must not change job B: Apply, Pause, Resume and Cancel.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t16_actions_of_an_old_view(GameTestHelper helper) {
+        Actor player = player("t16view");
+        Rig rig = new Rig(helper, "t16view", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        String[] old = new String[3];
+        rig.begin()
+            .thenExecute(() -> {
+                rig.startJob(8, 0);
+                old[0] = action(view.get(), "apply");
+                old[1] = action(view.get(), "pause");
+                old[2] = action(view.get(), "cancel");
+                check(old[0] != null && old[1] != null && old[2] != null, view.get());
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                Job b = rig.startJob(8, 0);
+                String fields = "{\"quantity:" + rig.id + "\":\"50\",\"reserve:" + rig.id + "\":\"7\"}";
+                List<String> wrong = new ArrayList<>();
+                UnoView.act(server, player, old[0], fields);
+                if (b.quantity != 8 || b.reserve != 0 || b.revision != 0) wrong.add("Apply changed job B to " + b.quantity + ", reserve " + b.reserve);
+                UnoView.act(server, player, old[1], "{}");
+                if (b.state != State.RUNNING) wrong.add("Pause changed job B to " + b.state);
+                if (b.state.active()) rig.runtime.control(player, rig.id, "pause");
+                UnoView.act(server, player, old[1].replaceFirst("pause", "resume"), "{}");
+                if (b.state != State.PAUSED) wrong.add("Resume changed job B to " + b.state);
+                UnoView.act(server, player, old[2], "{}");
+                if (b.state == State.CANCELLED) wrong.add("Cancel changed job B");
+                check(wrong.isEmpty(), wrong.toString());
+                check(view.get().contains("I cannot"), view.get());
+
+                // The actions of the current view work on job B.
+                UnoView.act(server, player, action(view.get(), "resume"), "{}");
+                check(b.state == State.RUNNING, rig.describe());
+                UnoView.act(server, player, action(view.get(), "apply"), "{\"quantity:" + rig.id + "\":\"16\",\"reserve:" + rig.id + "\":\"0\"}");
+                check(b.quantity == 16 && b.revision == 1, rig.describe());
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(40, 24))
+            .thenSucceed();
+    }
+
+    /** Keeps the answers of the commands that a source sends. */
+    private static CommandSource sink(List<String> answers) {
+        return new CommandSource() {
+            @Override
+            public void sendSystemMessage(Component message) {
+                answers.add(message.getString());
+            }
+
+            @Override
+            public boolean acceptsSuccess() {
+                return true;
+            }
+
+            @Override
+            public boolean acceptsFailure() {
+                return true;
+            }
+
+            @Override
+            public boolean shouldInformAdmins() {
+                return false;
+            }
+        };
+    }
+
+    /**
+     * T15, minimum: a transport ends, and a "keep_stock" job starts on the same robot in the same tick.
+     * The Lua module of the first job must not run the second job. Each job runs with its own module.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t15_next_job_with_another_module(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "t15next", 64, 1000);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(8, 0))
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.runtime.start(rig.actor, rig.order(MindRuntime.KEEP_STOCK, 16, 0)))
+            .thenWaitUntil(() -> check(rig.job().state == State.SATISFIED || rig.job().state == State.BLOCKED, rig.describe()))
+            .thenExecute(() -> {
+                rig.state(State.SATISFIED);
+                check(rig.job().executor.equals("keep_stock@2") && rig.coal(rig.dest) == 16 && rig.coal(rig.source) == 48, rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /** A command source of a player entity with a permission level. */
+    private static CommandSourceStack source(Player player, int permission, List<String> answers) {
+        return player.createCommandSourceStack().withPermission(permission).withSource(sink(answers));
+    }
+
+    /**
+     * T19 for the status command. The test sends the real command as three player entities and as the console.
+     * Only the owner, an operator and the console read the job. A different player gets a refusal without data of the job.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t19_status_command(GameTestHelper helper) {
+        Player ownerPlayer = helper.makeMockPlayer(), otherPlayer = helper.makeMockPlayer();
+        Rig rig = new Rig(helper, "t19cmd", 64, 1000, new Actor(ownerPlayer.getUUID(), false));
+        MinecraftServer server = rig.level.getServer();
+        List<String> owner = new ArrayList<>(), other = new ArrayList<>(), operator = new ArrayList<>(), console = new ArrayList<>();
+        rig.begin()
+            .thenExecute(() -> {
+                rig.startJob(24, 0);
+                String status = "mindcraft job status " + rig.id;
+                check(server.getCommands().performPrefixedCommand(source(ownerPlayer, 0, owner), status) == 1
+                    && owner.toString().contains("Job " + rig.job().id) && owner.toString().contains(rig.from), "the owner: " + owner);
+                int result = server.getCommands().performPrefixedCommand(source(otherPlayer, 0, other), status);
+                check(result == 0 && other.toString().contains("not yours"), "a different player got result " + result + ": " + other);
+                check(!other.toString().contains(rig.from) && !other.toString().contains("minecraft:coal"), "a different player read the job: " + other);
+                check(server.getCommands().performPrefixedCommand(source(otherPlayer, 2, operator), status) == 1
+                    && operator.toString().contains(rig.from), "an operator: " + operator);
+                check(server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSource(sink(console)), status) == 1
+                    && console.toString().contains(rig.from), "the console: " + console);
+                // The same path for a control: the command of a different player changes nothing.
+                check(server.getCommands().performPrefixedCommand(source(otherPlayer, 0, other), "mindcraft job cancel " + rig.id) == 0, other.toString());
+                check(rig.job().state.active() && !other.toString().contains(rig.from), other.toString());
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(40, 24))
+            .thenSucceed();
+    }
+
+    /**
+     * T21: the cause of a wait in the report. The source is empty and the reserve is 0: the report must not name a reserve.
+     * Then the source has 44 and the reserve is 32: the report names the reserve, with the observed number.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t21_report_source_at_reserve(GameTestHelper helper) {
+        Actor player = player("t21reserve");
+        Rig rig = new Rig(helper, "t21reserve", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t21_report_source_at_reserve report, empty source: {}", report);
+                check(report.contains("Nothing remains in '" + rig.from + "'") && !report.contains("reserve you asked"), report);
+                rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 44));
+                rig.runtime.update(player, rig.id, 0, 24, 32);
+            })
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 12, rig.describe()))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t21_report_source_at_reserve report, at the reserve: {}", report);
+                check(rig.coal(rig.source) == 32 && rig.coal(rig.dest) == 12, rig.describe());
+                check(report.contains("32 remain in '" + rig.from + "': that is the reserve you asked me to keep"), report);
+                check(report.contains("I delivered 12 items.") && report.contains("'" + rig.from + "' 32 items,"), report);
+
+                // A save and a load keep the cause. A record of an older version has no cause: Uno gives the recorded text and adds nothing.
+                long now = rig.level.getGameTime();
+                CompoundTag saved = rig.runtime.save(new CompoundTag());
+                MindRuntime copy = MindRuntime.load(saved);
+                check(copy.jobs.get(rig.id).cause == rig.job().cause, "the saved cause is different");
+                check(Uno.report(copy, player, now).contains("that is the reserve you asked me to keep"), Uno.report(copy, player, now));
+                saved.getCompound("jobs").getCompound(String.valueOf(rig.id)).remove("cause");
+                String old = Uno.report(MindRuntime.load(saved), player, now);
+                check(old.contains("I am waiting. Recorded reason: the source has 32, the reserve is 32.") && !old.contains("reserve you asked"), old);
+            })
+            .thenSucceed();
+    }
+
+    /** T21: the robot waits because its inventory is full. The report must say that, not name the reserve. */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t21_report_robot_full(GameTestHelper helper) {
+        Actor player = player("t21full");
+        Rig rig = new Rig(helper, "t21full", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> {
+                Container inventory = rig.robot().turtle.getInventory();
+                for (int slot = 0; slot < inventory.getContainerSize(); slot++) inventory.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+                rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t21_report_robot_full report: {}", report);
+                check(rig.job().reason.contains("the robot inventory is full") && rig.coal(rig.source) == 64, rig.describe());
+                check(report.contains("My inventory is full") && !report.contains("reserve you asked"), report);
+                rig.robot().turtle.getInventory().setItem(0, ItemStack.EMPTY);
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(40, 24))
+            .thenSucceed();
+    }
+
+    /**
+     * T21: the robot waits because the area of the source inventory is not loaded. The report must say that the stock is unknown.
+     * Artificial condition: the test moves the inventory of the station record to an area that is not loaded. The dock stays.
+     * The runtime does not accept such a station at the registration: the dock must be next to the inventory.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t21_report_inventory_not_loaded(GameTestHelper helper) {
+        Actor player = player("t21far");
+        Rig rig = new Rig(helper, "t21far", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Station real = rig.runtime.stations.get(rig.from);
+        rig.begin()
+            .thenExecute(() -> {
+                rig.runtime.stations.put(rig.from, new Station(real.owner(), real.dim(), real.inventory().offset(1_000_000, 0, 0), real.dock()));
+                rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t21_report_inventory_not_loaded report: {}", report);
+                check(rig.job().reason.contains("the source inventory is not loaded"), rig.describe());
+                check(report.contains("is not loaded") && report.contains("I do not know its stock"), report);
+                check(!report.contains("reserve you asked") && !report.contains("-1") && report.contains("'" + rig.from + "' never observed"), report);
+                rig.runtime.stations.put(rig.from, real);
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(40, 24))
             .thenSucceed();
     }
 

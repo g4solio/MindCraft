@@ -46,6 +46,25 @@ public class MindRuntime extends SavedData {
         }
     }
 
+    /**
+     * Why a job waits. The runtime records the cause together with the WAITING state, from what it observed in that tick.
+     * Uno reads this value. It does not guess the cause from the load or from the text of the reason.
+     */
+    public enum Cause {
+        /** No recorded cause: the job does not wait, or an older version of the mod wrote the record. */
+        NONE,
+        /** The source has no item above the reserve. */
+        SOURCE_AT_RESERVE,
+        /** The source has items above the reserve and the robot has room, but the source released nothing. */
+        SOURCE_KEEPS,
+        /** The robot cannot accept one more item. */
+        ROBOT_FULL,
+        /** The destination did not accept the whole load. */
+        DESTINATION_FULL,
+        /** The area of the inventory is not loaded. Its stock is unknown. */
+        SOURCE_UNLOADED, DESTINATION_UNLOADED
+    }
+
     /** The player or console that makes a request. The server decides this value, not the client. */
     public record Actor(UUID id, boolean admin) {
         boolean owns(UUID owner) {
@@ -91,6 +110,8 @@ public class MindRuntime extends SavedData {
         public int revision;
         public State state = State.RUNNING;
         public String reason = "";
+        /** The cause of a WAITING state. NONE in each other state. */
+        public Cause cause = Cause.NONE;
         /** Totals of the transfers that the runtime did itself. */
         public int taken, delivered;
         /** The quantity that the record expects in the robot. */
@@ -257,9 +278,16 @@ public class MindRuntime extends SavedData {
         return job;
     }
 
-    /** Changes the quantity and the reserve of an open job. The robot uses the new values at its next step. */
-    public void update(Actor actor, int robotId, int expectedRevision, int quantity, int reserve) {
-        Job job = openJob(actor, robotId);
+    /**
+     * Changes the quantity and the reserve of an open job. The robot uses the new values at its next step.
+     * The request names the job and its revision. The job ID refuses a request that is about an earlier job of the robot.
+     * The revision refuses a request that is about an earlier state of the same job.
+     * <p>
+     * A lower quantity changes nothing that the robot already did: no item goes back.
+     * From the change on, the robot delivers only up to the new quantity. A load above it stays on board. See RobotApi.give.
+     */
+    public void update(Actor actor, int robotId, int jobId, int expectedRevision, int quantity, int reserve) {
+        Job job = openJob(actor, robotId, jobId);
         if (job.revision != expectedRevision) throw new Refusal("Job " + job.id + " changed. Read it again.");
         requireQuantities(quantity, reserve);
         job.quantity = quantity;
@@ -270,10 +298,21 @@ public class MindRuntime extends SavedData {
         if (robot != null) robot.wake();
     }
 
-    private Job openJob(Actor actor, int robotId) {
+    /** For a command that names only the robot: the request is about the job that the robot has now. */
+    public void update(Actor actor, int robotId, int expectedRevision, int quantity, int reserve) {
+        update(actor, robotId, currentJob(robotId), expectedRevision, quantity, reserve);
+    }
+
+    private int currentJob(int robotId) {
+        Job job = jobs.get(robotId);
+        return job == null ? UNKNOWN : job.id;
+    }
+
+    private Job openJob(Actor actor, int robotId, int jobId) {
         Job job = jobs.get(robotId);
         if (job == null || !job.state.open()) throw new Refusal("Robot #" + robotId + " has no open job.");
         if (!actor.owns(job.owner)) throw new Refusal("Job " + job.id + " is not yours.");
+        if (job.id != jobId) throw new Refusal("Robot #" + robotId + " has job " + job.id + " now, not job " + jobId + ". Read it again.");
         return job;
     }
 
@@ -281,9 +320,14 @@ public class MindRuntime extends SavedData {
         if (quantity <= 0 || reserve < 0) throw new Refusal("The quantity must be positive. The reserve must not be negative.");
     }
 
-    /** Pause, resume or cancel. The robot finishes its current single move or transfer first. */
+    /** For a command that names only the robot: the request is about the job that the robot has now. */
     public void control(Actor actor, int robotId, String action) {
-        Job job = openJob(actor, robotId);
+        control(actor, robotId, currentJob(robotId), action);
+    }
+
+    /** Pause, resume or cancel of the named job. The robot finishes its current single move or transfer first. */
+    public void control(Actor actor, int robotId, int jobId, String action) {
+        Job job = openJob(actor, robotId, jobId);
         RobotApi robot = RobotApi.live(robotId);
         switch (action) {
             case "pause" -> {
@@ -297,8 +341,15 @@ public class MindRuntime extends SavedData {
                 if (job.state == State.RECOVERY) {
                     // The owner accepts the observed load as the truth. The totals can be inexact after this.
                     if (robot == null) throw new Refusal("Robot #" + robotId + " is not running. The runtime cannot observe its load.");
-                    job.lastOp = "recovery: owner accepted load " + robot.held(job.item) + ", the record was " + job.carried;
-                    job.carried = robot.held(job.item);
+                    int held = robot.held(job.item);
+                    job.lastOp = "recovery: owner accepted load " + held + ", the record was " + job.carried;
+                    if (job.lastOpAt > robot.now() && held > job.carried) {
+                        // The world is older than the record, and the robot holds more than the record says.
+                        // Then the record counts deliveries of that load, but the world does not contain them.
+                        // The delivery limit uses the delivered total: with the wrong total the load would stay on board.
+                        job.delivered = Math.max(0, job.delivered - (held - job.carried));
+                    }
+                    job.carried = held;
                     job.lastOpAt = Math.min(job.lastOpAt, robot.now());
                     job.recoveries++;
                 }
@@ -309,7 +360,18 @@ public class MindRuntime extends SavedData {
         if (robot != null) robot.wake();
     }
 
-    public String describe(int robotId, long now) {
+    /** The status of a robot and its job, for a request of a player. Only the owner and an operator read it. */
+    public String status(Actor actor, int robotId, long now) {
+        UUID robotOwner = robots.get(robotId);
+        Job job = jobs.get(robotId);
+        if ((robotOwner != null && !actor.owns(robotOwner)) || (job != null && !actor.owns(job.owner))) {
+            throw new Refusal("Robot #" + robotId + " is not yours.");
+        }
+        return describe(robotId, now);
+    }
+
+    /** The whole record of a robot, without a check of the actor. A request of a player goes through status(). */
+    String describe(int robotId, long now) {
         Job j = jobs.get(robotId);
         if (j == null) return "Robot #" + robotId + ": no job.";
         return "Job " + j.id + " on robot #" + robotId + ": " + j.state + (j.reason.isEmpty() ? "" : " (" + j.reason + ")")
@@ -338,7 +400,14 @@ public class MindRuntime extends SavedData {
     void set(Job job, State state, String reason) {
         job.state = state;
         job.reason = reason;
+        job.cause = Cause.NONE;
         setDirty();
+    }
+
+    /** The job waits for a condition that can change without the owner. The cause is what the runtime observed. */
+    void waiting(Job job, Cause cause, String reason) {
+        set(job, State.WAITING, reason);
+        job.cause = cause;
     }
 
     private void requireRobot(Actor actor, int robotId) {
@@ -396,6 +465,7 @@ public class MindRuntime extends SavedData {
             t.putInt("reserve", j.reserve);
             t.putString("state", j.state.name());
             t.putString("reason", j.reason);
+            t.putString("cause", j.cause.name());
             t.putInt("taken", j.taken);
             t.putInt("delivered", j.delivered);
             t.putInt("carried", j.carried);
@@ -446,6 +516,8 @@ public class MindRuntime extends SavedData {
             j.reserve = t.getInt("reserve");
             j.state = State.valueOf(t.getString("state"));
             j.reason = t.getString("reason");
+            // A record of an older version has no cause.
+            if (t.contains("cause")) j.cause = Cause.valueOf(t.getString("cause"));
             j.taken = t.getInt("taken");
             j.delivered = t.getInt("delivered");
             j.carried = t.getInt("carried");

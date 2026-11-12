@@ -1,0 +1,21 @@
+# Gradle and build output
+.gradle/
+build/
+
+# Game folders that the Gradle run tasks create
+run/
+run-gametest/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+bin/
+.classpath
+.project
+.settings/
+.metadata/
+*.launch
+.vscode/

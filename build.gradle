@@ -1,0 +1,134 @@
+// Based on the official Forge 1.20.1-47.4.28 MDK (ForgeGradle 6, Gradle 8.8).
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+// An installed game does not have the Anthropic SDK. The jarJar task puts the SDK and its libraries inside
+// build/libs/<mod>-<version>-all.jar. Install that file, not the plain jar.
+jarJar.enable()
+
+// Selects a phase of the server restart check. See RestartTests.java.
+def restartPhase = findProperty('restartPhase') ?: ''
+// Read here, not inside a run configuration: there hasProperty asks the configuration, not the project.
+def live = project.hasProperty('live')
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.console.level', 'info'
+            property 'forge.enabledGameTestNamespaces', mod_id
+            // CC: Tweaked ships mixins with SRG refmaps. Remap them to the dev mappings.
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${buildDir}/createSrgToMcp/output.srg"
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {}
+
+        server {
+            args '--nogui'
+        }
+
+        // Starts a headless server, runs all game tests, then exits. This is the automated in-game check.
+        gameTestServer {
+            workingDirectory project.file('run-gametest')
+            if (restartPhase) {
+                property 'forge.enabledGameTestNamespaces', "${mod_id}_restart"
+                property 'mindcraft.restartPhase', restartPhase
+            }
+            // -Plive: the check of the Claude provider with the real service. See LiveTests.java.
+            if (live) property 'forge.enabledGameTestNamespaces', "${mod_id}_live"
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://maven.squiddev.cc'
+        content { includeGroup 'cc.tweaked' }
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    // CC: Tweaked. Only dan200.computercraft.api is public API.
+    compileOnly "cc.tweaked:cc-tweaked-${minecraft_version}-core-api:${cct_version}"
+    compileOnly fg.deobf("cc.tweaked:cc-tweaked-${minecraft_version}-forge-api:${cct_version}")
+    runtimeOnly fg.deobf("cc.tweaked:cc-tweaked-${minecraft_version}-forge:${cct_version}")
+
+    // The official Anthropic SDK, for the Claude provider of Uno. It is not a mod: minecraftLibrary puts it on the dev class path.
+    minecraftLibrary("com.anthropic:anthropic-java:${anthropic_version}") {
+        // Forge already has these libraries. The module system stops the game if a package is in two modules.
+        exclude group: 'org.jetbrains', module: 'annotations'
+        exclude group: 'org.slf4j'
+    }
+}
+
+// jarJar includes only direct dependencies. Thus each library of the SDK becomes a direct dependency of jarJar.
+// A different mod can bring a newer version of the same library: the game then loads one copy.
+// afterEvaluate: ForgeGradle completes the repositories at the end of the evaluation. A resolution before that fails.
+afterEvaluate {
+    configurations.minecraftLibrary.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+        def id = artifact.moduleVersion.id
+        dependencies.jarJar("${id.group}:${id.name}:${id.version}") {
+            transitive = false
+            jarJar.ranged(it, "[${id.version},)")
+        }
+    }
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version: forge_version, forge_version_range: forge_version_range,
+            loader_version_range: loader_version_range, cct_version: cct_version,
+            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors: mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+// Each game test run starts on a new world. Only the "check" phases of the restart check keep the world.
+// The world is flat. The default world of the Forge game test server has normal terrain and a random seed.
+// Then a check can fail because rock, gravel or a liquid is in the way.
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    doFirst {
+        if (!restartPhase.startsWith('check')) delete 'run-gametest/world'
+        mkdir 'run-gametest'
+        file('run-gametest/server.properties').text = 'level-type=minecraft:flat\ngenerate-structures=false\n'
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    finalizedBy 'reobfJar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "mood=idle": { "model": "mindcraft:block/projector" },
+    "mood=working": { "model": "mindcraft:block/projector_working" },
+    "mood=attention": { "model": "mindcraft:block/projector_attention" }
+  }
+}

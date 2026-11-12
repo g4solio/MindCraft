@@ -1,0 +1,316 @@
+package io.github.g4solio.mindcraft;
+
+import dan200.computercraft.api.ComputerCraftAPI;
+import dan200.computercraft.api.component.ComputerComponents;
+import dan200.computercraft.api.lua.IComputerSystem;
+import dan200.computercraft.api.lua.ILuaAPI;
+import dan200.computercraft.api.lua.LuaException;
+import dan200.computercraft.api.lua.LuaFunction;
+import dan200.computercraft.api.turtle.ITurtleAccess;
+import io.github.g4solio.mindcraft.MindRuntime.Job;
+import io.github.g4solio.mindcraft.MindRuntime.State;
+import io.github.g4solio.mindcraft.MindRuntime.Station;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.minecraftforge.items.IItemHandler;
+import net.minecraftforge.items.ItemHandlerHelper;
+import net.minecraftforge.items.wrapper.InvWrapper;
+
+import javax.annotation.Nullable;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * The "mindcraft" Lua API. CC: Tweaked creates one instance for each turtle computer.
+ * <p>
+ * The server binds each instance to its computer. A Lua program cannot claim to be a different robot.
+ * All functions run on the server thread. Thus an observation, a transfer and its record occur in the same tick.
+ */
+public class RobotApi implements ILuaAPI {
+    /** Computer ID to the newest running instance. An older instance with the same ID loses its authority. */
+    private static final Map<Integer, RobotApi> LIVE = new ConcurrentHashMap<>();
+    private static final Map<Integer, Integer> BOOTS = new ConcurrentHashMap<>();
+
+    final IComputerSystem computer;
+    final ITurtleAccess turtle;
+
+    private RobotApi(IComputerSystem computer, ITurtleAccess turtle) {
+        this.computer = computer;
+        this.turtle = turtle;
+    }
+
+    static void register() {
+        ComputerCraftAPI.registerAPIFactory(computer -> {
+            ITurtleAccess turtle = computer.getComponent(ComputerComponents.TURTLE);
+            return turtle == null ? null : new RobotApi(computer, turtle);
+        });
+    }
+
+    public static @Nullable RobotApi live(int computerId) {
+        return LIVE.get(computerId);
+    }
+
+    public static @Nullable RobotApi at(Level level, BlockPos pos) {
+        for (RobotApi robot : LIVE.values()) {
+            if (robot.turtle.getLevel() == level && robot.turtle.getPosition().equals(pos)) return robot;
+        }
+        return null;
+    }
+
+    static int boots(int computerId) {
+        return BOOTS.getOrDefault(computerId, 0);
+    }
+
+    public int id() {
+        return computer.getID();
+    }
+
+    void wake() {
+        computer.queueEvent("mindcraft");
+    }
+
+    int held(Item item) {
+        return count(new InvWrapper(turtle.getInventory()), item);
+    }
+
+    @Override
+    public String[] getNames() {
+        return new String[]{"mindcraft"};
+    }
+
+    @Override
+    public void startup() {
+        LIVE.put(id(), this);
+        BOOTS.merge(id(), 1, Integer::sum);
+    }
+
+    @Override
+    public void shutdown() {
+        LIVE.remove(id(), this);
+    }
+
+    // --- Lua functions -------------------------------------------------------------------------------------------
+
+    @LuaFunction(mainThread = true)
+    public final boolean enrolled() {
+        return runtime().robots.containsKey(id());
+    }
+
+    /** The true position and direction. The robot does not count its moves. */
+    @LuaFunction(mainThread = true)
+    public final Object[] pose() {
+        BlockPos pos = turtle.getPosition();
+        return new Object[]{pos.getX(), pos.getY(), pos.getZ(), turtle.getDirection().getName()};
+    }
+
+    /** The module tells the runtime which version runs the job. */
+    @LuaFunction(mainThread = true)
+    public final void attach(String executor) throws LuaException {
+        activeJob().executor = executor;
+        runtime().setDirty();
+    }
+
+    /** The current job, or nil. This call also compares the real load with the record. */
+    @LuaFunction(mainThread = true)
+    public final @Nullable Map<String, Object> status() throws LuaException {
+        Job job = contact();
+        if (job == null) return null;
+        int held = held(job.item);
+        if (job.state.active() && held != job.carried) {
+            runtime().set(job, State.RECOVERY, "the robot holds " + held + ", the record says " + job.carried);
+        }
+        Map<String, Object> out = new HashMap<>();
+        out.put("id", job.id);
+        out.put("module", job.module);
+        out.put("state", job.state.name());
+        // The module gets no "need" while the destination stock is unknown. Then it must observe first.
+        if (job.need() != MindRuntime.UNKNOWN) out.put("need", job.need());
+        out.put("reason", job.reason);
+        out.put("item", MindRuntime.itemName(job.item));
+        out.put("carried", job.carried);
+        out.put("from", point(runtime().stations.get(job.from).dock()));
+        out.put("to", point(runtime().stations.get(job.to).dock()));
+        return out;
+    }
+
+    /** Moves the job item from the source inventory into the robot. Returns the moved quantity. */
+    @LuaFunction(mainThread = true)
+    public final Object[] take() throws LuaException {
+        Job job = activeJob();
+        IItemHandler inventory = docked(job, job.from, "source");
+        if (inventory == null) return new Object[]{0, job.reason};
+        int need = job.need();
+        if (need == MindRuntime.UNKNOWN) throw new LuaException("The destination stock is unknown. Observe it first.");
+        int stock = count(inventory, job.item);
+        // The check and the effect are in the same tick. A different actor cannot change the stock between them.
+        int want = Math.min(need, stock - job.reserve);
+        int moved = want > 0 ? move(inventory, new InvWrapper(turtle.getInventory()), job.item, want) : 0;
+        job.taken += moved;
+        job.carried += moved;
+        job.fromSeen = stock - moved;
+        job.fromSeenAt = now();
+        if (moved > 0 || job.carried > 0) {
+            runtime().set(job, State.RUNNING, "");
+        } else if (need == 0) {
+            settle(job);
+        } else {
+            runtime().set(job, State.WAITING, want > 0 ? "the robot inventory is full"
+                : "the source has " + stock + ", the reserve is " + job.reserve);
+        }
+        record(job, "take", moved);
+        return new Object[]{moved, job.reason};
+    }
+
+    /** Observes the destination stock from its dock. A "keep_stock" job uses this to know when to bring more. */
+    @LuaFunction(mainThread = true)
+    public final Object[] observe() throws LuaException {
+        Job job = activeJob();
+        IItemHandler inventory = docked(job, job.to, "destination");
+        if (inventory == null) return new Object[]{null, job.reason};
+        job.toSeen = count(inventory, job.item);
+        job.toSeenAt = now();
+        settle(job);
+        return new Object[]{job.toSeen, job.reason};
+    }
+
+    /** Sets the state after an observation of the destination. */
+    private void settle(Job job) {
+        if (job.carried > 0) {
+            runtime().set(job, State.WAITING, "the destination is full, " + job.carried + " still on board");
+        } else if (!job.keepStock()) {
+            runtime().set(job, job.delivered >= job.quantity ? State.DONE : State.RUNNING, "");
+        } else if (job.toSeen >= job.quantity) {
+            runtime().set(job, State.SATISFIED, "the destination has " + job.toSeen + ", the target is " + job.quantity);
+        } else {
+            runtime().set(job, State.RUNNING, "");
+        }
+    }
+
+    /** Moves the load from the robot into the destination inventory. Returns the moved quantity. */
+    @LuaFunction(mainThread = true)
+    public final Object[] give() throws LuaException {
+        Job job = activeJob();
+        IItemHandler inventory = docked(job, job.to, "destination");
+        if (inventory == null) return new Object[]{0, job.reason};
+        int moved = move(new InvWrapper(turtle.getInventory()), inventory, job.item, job.carried);
+        job.delivered += moved;
+        job.carried -= moved;
+        job.toSeen = count(inventory, job.item);
+        job.toSeenAt = now();
+        if (!job.keepStock() && job.delivered >= job.quantity) {
+            runtime().set(job, State.DONE, "");
+        } else {
+            settle(job);
+        }
+        record(job, "give", moved);
+        return new Object[]{moved, job.reason};
+    }
+
+    /** The module reports an impediment that it cannot remove. The owner must resume the job. */
+    @LuaFunction(mainThread = true)
+    public final void block(String reason) throws LuaException {
+        runtime().set(activeJob(), State.BLOCKED, reason);
+    }
+
+    // --- Internals -------------------------------------------------------------------------------------------------
+
+    private MindRuntime runtime() {
+        return MindRuntime.get(computer.getLevel().getServer());
+    }
+
+    long now() {
+        return computer.getLevel().getGameTime();
+    }
+
+    /** Checks the authority of this instance. Returns the job of this robot, or null. */
+    private @Nullable Job contact() throws LuaException {
+        if (LIVE.get(id()) != this) throw new LuaException("A newer session of robot #" + id() + " replaced this session.");
+        if (!runtime().robots.containsKey(id())) return null;
+        Job job = runtime().jobs.get(id());
+        if (job != null) job.lastContact = now();
+        return job;
+    }
+
+    private Job activeJob() throws LuaException {
+        Job job = contact();
+        if (job == null || !job.state.active()) throw new LuaException("This robot has no active job.");
+        return job;
+    }
+
+    /** The inventory of a station, only when the robot is at its dock. Sets the job state when there is no inventory. */
+    private @Nullable IItemHandler docked(Job job, String stationName, String role) throws LuaException {
+        Station station = runtime().stations.get(stationName);
+        Level level = turtle.getLevel();
+        if (level.dimension() != station.dim() || !turtle.getPosition().equals(station.dock())) {
+            throw new LuaException("The robot is not at the " + role + " dock.");
+        }
+        if (!level.isLoaded(station.inventory())) {
+            runtime().set(job, State.WAITING, "the " + role + " inventory is not loaded, its stock is unknown");
+            return null;
+        }
+        IItemHandler inventory = inventoryAt(level, station.inventory(), station.dock());
+        if (inventory == null) {
+            runtime().set(job, State.BLOCKED, "the " + role + " station has no inventory at " + station.inventory().toShortString());
+        }
+        return inventory;
+    }
+
+    /** The inventory at a position, through the side that faces the dock. */
+    static @Nullable IItemHandler inventoryAt(Level level, BlockPos inventory, BlockPos dock) {
+        if (!level.isLoaded(inventory)) return null;
+        BlockEntity blockEntity = level.getBlockEntity(inventory);
+        if (blockEntity == null) return null;
+        Direction side = null;
+        for (Direction direction : Direction.values()) {
+            if (inventory.relative(direction).equals(dock)) side = direction;
+        }
+        return blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, side).orElse(null);
+    }
+
+    // ponytail: items match by type only. NBT is ignored. Add a stack filter when a job needs it.
+    static int count(IItemHandler inventory, Item item) {
+        int total = 0;
+        for (int slot = 0; slot < inventory.getSlots(); slot++) {
+            ItemStack stack = inventory.getStackInSlot(slot);
+            if (stack.is(item)) total += stack.getCount();
+        }
+        return total;
+    }
+
+    /** Moves at most {@code max} items of one type. Returns the quantity that arrived. */
+    static int move(IItemHandler from, IItemHandler to, Item item, int max) {
+        int moved = 0;
+        for (int slot = 0; slot < from.getSlots() && moved < max; slot++) {
+            if (!from.getStackInSlot(slot).is(item)) continue;
+            ItemStack offer = from.extractItem(slot, max - moved, true);
+            int accepted = offer.getCount() - ItemHandlerHelper.insertItemStacked(to, offer, true).getCount();
+            if (accepted <= 0) continue;
+            ItemStack taken = from.extractItem(slot, accepted, false);
+            ItemStack rest = ItemHandlerHelper.insertItemStacked(to, taken, false);
+            moved += taken.getCount() - rest.getCount();
+            if (!rest.isEmpty()) from.insertItem(slot, rest, false);
+        }
+        return moved;
+    }
+
+    private void record(Job job, String kind, int moved) {
+        job.ops++;
+        job.lastOp = "#" + job.ops + " " + kind + " " + moved + " at tick " + now();
+        MindCraft.LOGGER.info("Robot #{} job {} op {}", id(), job.id, job.lastOp);
+        if (moved > 0) {
+            job.lastOpAt = now();
+            runtime().setDirty();
+            runtime().flush(computer.getLevel().getServer());
+        }
+    }
+
+    private static Map<String, Object> point(BlockPos pos) {
+        return Map.of("x", pos.getX(), "y", pos.getY(), "z", pos.getZ());
+    }
+}

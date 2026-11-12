@@ -1,0 +1,7 @@
+{
+  "parent": "mindcraft:block/projector",
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "holo": "mindcraft:block/hologram_working"
+  }
+}

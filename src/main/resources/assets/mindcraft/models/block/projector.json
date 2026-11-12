@@ -1,0 +1,16 @@
+{
+  "render_type": "minecraft:translucent",
+  "ambientocclusion": false,
+  "textures": {
+    "base": "mindcraft:block/projector_base",
+    "holo": "mindcraft:block/hologram_idle",
+    "particle": "mindcraft:block/projector_base"
+  },
+  "elements": [
+    { "from": [1, 0, 1], "to": [15, 2, 15], "faces": { "north": { "texture": "#base" }, "south": { "texture": "#base" }, "west": { "texture": "#base" }, "east": { "texture": "#base" }, "up": { "texture": "#base" }, "down": { "texture": "#base" } } },
+    { "from": [5, 2, 5], "to": [11, 3, 11], "faces": { "north": { "texture": "#base" }, "south": { "texture": "#base" }, "west": { "texture": "#base" }, "east": { "texture": "#base" }, "up": { "texture": "#base" }, "down": { "texture": "#base" } } },
+    { "from": [3, 7, 3], "to": [13, 7.5, 13], "shade": false, "faces": { "north": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "south": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "west": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "east": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "up": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "down": { "texture": "#holo", "uv": [0, 0, 16, 16] } } },
+    { "from": [5, 10, 5], "to": [11, 16, 11], "shade": false, "faces": { "north": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "south": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "west": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "east": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "up": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "down": { "texture": "#holo", "uv": [0, 0, 16, 16] } } },
+    { "from": [4, 18.5, 4], "to": [12, 19, 12], "shade": false, "faces": { "north": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "south": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "west": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "east": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "up": { "texture": "#holo", "uv": [0, 0, 16, 16] }, "down": { "texture": "#holo", "uv": [0, 0, 16, 16] } } }
+  ]
+}

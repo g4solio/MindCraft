@@ -104,7 +104,7 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 
 **Status:** verified in the controlled case.
 
-- **Provisional choice:** the Lua module keeps no state. At each step it asks the runtime for the state. The next step depends on the observed cargo: with cargo on board the robot goes to deliver, otherwise it goes to withdraw.
+- **Provisional choice:** the Lua module keeps no state of the work. It keeps only the ID of its job (D26). At each step it asks the runtime for the state. The next step depends on the observed cargo: with cargo on board the robot goes to deliver, otherwise it goes to withdraw.
 - **Check:** at each step the runtime compares the real cargo of the turtle with the recorded cargo. If they are different, the job goes to `RECOVERY` and the robot stops.
 - **Exit from `RECOVERY`:** the owner chooses. `resume` accepts the observed cargo. `cancel` closes the job. After a `resume` the totals can be inexact and the state says so.
 - **Evidence:** T09, T10, T11 (restart of the computer, normal stop of the server, sudden stop after a save).
@@ -123,6 +123,7 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Counterexample:** the opposite case stays undetectable. If someone restores an old `mindcraft.dat` file on a new world, only the comparison of the cargo applies (T09).
 - **Limit:** the write of the file is not atomic, as for each `SavedData` of Minecraft. A stop during the write can corrupt the file. Then Minecraft creates empty data and the runtime loses stations, robots and jobs.
 - **Cost:** one file write on the server thread for each transfer. Not measured.
+- **Changed in the review of 2026-11-12:** at `resume` the runtime now corrects the delivered total by the load that the robot still holds. See D16.1. The guarantees of this section are not larger than before. The tests cover the same specific cases. The save of the world and the save of the record are still not one atomic operation.
 
 ## D09 — Pause, cancellation and forced stop
 
@@ -162,6 +163,9 @@ Facts found on the real Lua machine (`s0_probe_environment`, `s0_probe_no_yield`
 - **Provisional choice:** the server builds the actor from the command source. Each request checks the owner of the robot, of the stations and of the job. An operator (level 2) and the console can do everything.
 - **Enrollment:** a player can enroll only a turtle that the same player placed (`ITurtleAccess.getOwningPlayer`).
 - **Evidence:** T19.
+- **Status command:** `/mindcraft job status <robot>` goes through the same check. A player reads only the player's own robots and jobs. An operator and the console read all of them. A different player gets "Robot #N is not yours." and no data of the job.
+- **Defect found in the review of 2026-11-12, corrected:** the status command did not check the actor. Each player could read the stations, the quantities and the impediments of the jobs of the other players.
+- **Evidence for the command:** test `t19_status_command`. It failed before the correction. The test sends the real commands with the command source of a player entity that the test system creates, with permission level 0 or 2, and as the console. It is not a real client.
 - **Counterexample:** a chest has no owner. Any player can register the chest of another player as a station and empty it with a robot. An integration with the protections of the server is necessary. Only an operator can enroll a turtle that a mechanism placed, without a player.
 
 ## D12 — Fuel is separate from the material of the job
@@ -214,7 +218,7 @@ Facts found on the test server of Forge 47.4.28 (`runGameTestServer`):
 
 - **Problem:** the reference job has no end. It must keep a condition and respect a reserve.
 - **Provisional choice:** each job comes from a structured order: module, robot, source, destination, item, quantity, reserve. For `transport` the quantity is the total to deliver. For `keep_stock` it is the level to keep in the destination.
-- **Composition:** the Lua module `keep_stock` uses three functions of the `transport` module: `step`, `goTo` and `active`. It adds only one thing: the robot observes the destination from the dock and waits there while the stock is sufficient.
+- **Composition:** the Lua module `keep_stock` uses four functions of the `transport` module: `begin`, `step`, `goTo` and `active`. It adds only one thing: the robot observes the destination from the dock and waits there while the stock is sufficient.
 - **What changed in the abstractions of S1:** the job now has a module and a revision. The runtime calculates the quantity still to carry (`need`). The state `SATISFIED` is new. The primitives `take` and `give` stayed the same. `observe` was added.
 
 Definition of availability:
@@ -226,21 +230,44 @@ Definition of availability:
 | Available in the source | The stock read in the tick of the withdrawal, minus the reserve |
 | Material assigned to other jobs | There is no reservation. Each withdrawal checks the source again in the tick of the effect |
 
-- **Change of parameters:** the quantity and the reserve of an open job change with `update`. Each change increases the revision. A change based on an old revision is refused. The robot uses the new values at the next step, after 5 seconds at most.
+- **Change of parameters:** the quantity and the reserve of an open job change with `update`. Each change increases the revision. A change based on an old revision is refused. The robot uses the new values at the next step, after 5 seconds at most. For a lower quantity while a load is on board see D16.1.
 - **Evidence:** test `s2_keep_stock`: initial fill, two consumptions, reserve limit, change of the reserve, restart of the computer.
 - **Counterexample:** "at least 64" is a target, not a guarantee. Between two trips the stock can go below the level. While the robot waits for material at the source it does not observe the destination. A job occupies a whole robot, also when the stock is sufficient.
 - **Counterexample:** two jobs on the same source each respect their own reserve. They do not coordinate.
 - **Discard condition:** a job needs more than one robot, or a robot needs more than one job. Then a common coordination with reservations is necessary.
 
+### D16.1 — A lower quantity while a load is on board
+
+**Status:** verified with automatic in-game tests on 2026-11-12. It corrects a defect that the review of 2026-11-12 found.
+
+- **Problem:** the owner lowers the quantity of a job after the robot took the items. Before the correction the robot delivered its whole load. The delivery went above the new quantity without a word. With a destination that accepted only a part, a transport became `DONE` with a load on board.
+- **Meaning of the change:**
+  - The change is not retroactive. The delivered items stay in the destination. No item goes back to the source.
+  - The runtime starts no new physical operation to remove an excess. The owner did not ask for one.
+  - From the change on, a delivery never goes above the quantity. For `transport` the limit is the quantity minus the delivered total. For `keep_stock` the limit is the level minus the stock that the runtime counts in the tick of the delivery.
+  - The load above the limit stays on board. The record, the state, the reason and the report of Uno show it.
+- **`keep_stock`:** the job is `SATISFIED` and the reason gives the load on board. The robot stays at the destination and uses that load when the stock goes down.
+- **`transport`:** the job goes to `BLOCKED`. The reason gives the quantity, the delivered total and the load on board. A transport is never `DONE` while the record has a load on board. The owner decides: raise the quantity and `resume`, or `cancel` and empty the robot.
+- **Quantity lower than the delivered total:** nothing more is delivered, also after a `resume`. The report says that the deliveries are more than the quantity.
+- **Evidence:** tests `t16_quantity_lowered_with_load`, `t16_quantity_lowered_after_partial_delivery`, `t16_quantity_below_delivered` and `t16_level_lowered_with_load`. They check the real content of the two chests and of the turtle, the state and the report. The four failed before the correction.
+- **Counterexample:** `keep_stock` now never fills the destination above the level, also without a change by the owner. If a different actor fills the destination during the trip, the robot keeps the rest on board. Before the correction it delivered the whole load.
+- **Counterexample:** while a `SATISFIED` job has a load on board, the robot tries a delivery each 5 seconds. Each attempt writes one line in the server log.
+- **Counterexample:** after the owner raises the quantity of a `BLOCKED` transport, a second action is necessary: `resume`.
+- **Counterexample:** a load that stays on board after `cancel` follows D09. The owner must empty the turtle by hand.
+- **Interaction with a recovery, found by the restart test:** the limit uses the delivered total of the record. After a sudden stop the record can count a delivery that the world does not contain (D08.1). With the first version of this correction, the robot then kept its load on board after `resume`. The `check-crash` phase of T11 failed.
+- **Correction of that interaction:** at `resume` from `RECOVERY`, if the world is older than the record and the robot holds more than the recorded load, the runtime subtracts the difference from the delivered total. Then the robot delivers the load that it holds, as it did before the review.
+- **No new guarantee:** in the tested case the physical result is the same as before the review: source 40, destination 24, robot 0. Only the recorded total is different: "delivered 24" in place of "delivered 48". After a recovery the totals stay inexact and the state says so. If the owner also lowered the quantity, the limit works with these inexact totals.
+- **Evidence for the interaction:** test `t11_server_restart`, phases `crash` and `check-crash`, and test `t11_resume_when_the_world_is_older` in the normal run, with an artificial record. Both failed with the first version of the correction.
+
 ## D17 — Minimal Uno: proposal, confirmation, report
 
-**Status:** verified with the deterministic provider. Verified one time with the Claude provider and the real service. See D21.
+**Status:** verified with the deterministic provider. Verified with the Claude provider and the real service. See D21. The review of 2026-11-12 found three defects in this decision. They are corrected: see D23, D24 and D25.
 
 - **Provisional choice:** Uno has no authority of its own. A replaceable provider changes the request into an order in JSON format. The order goes through the same validation as the commands. The result is a proposal. The player confirms it with `/uno confirm`. At the confirmation the runtime validates again.
 - **Provider:** the interface is `propose(request, context) → JSON`. The provider runs off the server thread, with a limit of 20 seconds. The context contains only the stations and the robots of the actor.
 - **Deterministic provider:** it knows a few sentence patterns in English and Italian. It always gives the same answer to the same request. It serves the tests and lets a player try the path in the game without credentials.
-- **Memory:** a proposal that is not confirmed is not a decision and is not saved. After a restart Uno says that it has no proposal. The runtime saves the jobs and their limits.
-- **Report:** the text comes from a fixed template. Each number comes from the record of the runtime. The observations have their age. If the robot is not running, Uno says that the data are not the current state.
+- **Memory:** a proposal that is not confirmed is not a decision and is not saved. After a restart Uno says that it has no proposal. The runtime saves the jobs and their limits. A proposal lives only in one session of the server (D24), and only until the next request of the player (D23).
+- **Report:** the text comes from a fixed template. Each number comes from the record of the runtime. The observations have their age. If the robot is not running, Uno says that the data are not the current state. For a job that waits, the sentence comes from the cause that the runtime recorded (D25).
 - **Evidence:** tests `s2_uno_request`, `s2_uno_reference_sentence`, `t18_provider_failures`, `t21_report_with_old_data`, `t22_t23_proposals_and_contact_points`.
 
 Example of a report produced in the test, with the real data of the job:
@@ -250,7 +277,7 @@ Example of a report produced in the test, with the real data of the job:
 - **Counterexample:** the deterministic provider understands only the exact names of the stations. "The furnace chest" works only if a station is named `furnace`.
 - **Counterexample:** the confirmation is mandatory also for a clear request. It is friction for an expert player.
 - **Not done:** the character of Uno (tone, irony, spontaneous proposals). The report is correct but neutral.
-- **One request at a time:** Uno accepts only one written request in progress for each player. To the second it answers "I am still working on your previous request." Reason: a provider can cost money for each request. Evidence: test `t18_claude_provider`.
+- **One request at a time:** Uno accepts only one written request in progress for each player. To the second it answers "I am still working on your previous request." Reason: a provider can cost money for each request. The rule applies to each source of requests. It does not depend on a time limit any more: a request ends when its answer arrives, or when its own time limit gives the answer. Evidence: tests `t18_claude_provider` and `t22_confirm_only_the_shown_proposal`.
 - **A request without a complete order is not a failure:** a provider signals it with `IllegalArgumentException`. Uno answers "I cannot propose a job: …". Each other error of a provider is a failure: "I cannot interpret the request now (…)". Evidence: tests `t18_provider_failures` and `t18_claude_provider`.
 - **Decided by the project owner on 2026-11-12:** the first provider with a language model is Claude. See D21.
 
@@ -281,8 +308,11 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Provisional choice:** the server builds for each player a list of widgets in JSON format. There are five types: text, editable number, bar, row of buttons, text field. The client draws the list and sends back the actions with the text of the fields.
 - **Network messages:** there are two. The server sends a view. The client sends an action.
 - **No state for open screens:** the client asks for a new view each second. The server keeps no list of screens. To close the screen changes nothing.
-- **Checks:** the server builds the actor from the connection of the player. It refuses an action if the player has no tablet in the inventory. Each action goes through the ordinary requests of the runtime. The "Apply" action carries the revision of the job: an old view does not overwrite a more recent change.
-- **Evidence:** test `s2_tablet_view`. The test calls the same functions that the network messages call. It does not open a screen.
+- **Checks:** the server builds the actor from the connection of the player. It refuses an action if the player has no tablet in the inventory. Each action goes through the ordinary requests of the runtime.
+- **Identity of the actions:** each action of a job carries the number of the robot and the ID of the job. The runtime refuses an action for a job that the robot does not have any more. "Apply" also carries the revision of the job: the runtime refuses a change that comes from an old view of the same job. "Confirm" carries the number of the proposal (D23).
+- **Defect found in the review of 2026-11-12, corrected:** the actions named only the robot. Job A ended and job B started on the same robot, both at revision 0. Then the buttons of an old view of A changed, paused, resumed and cancelled B.
+- **Commands:** `/mindcraft job pause`, `resume`, `cancel` and `set` name only the robot. They are about the job that the robot has at the moment of the command.
+- **Evidence:** tests `s2_tablet_view` and `t16_actions_of_an_old_view`. The second failed before the correction. The tests call the same functions that the network messages call. They do not open a screen.
 - **Counterexample:** the text comes from the server in English. The client cannot translate it.
 - **Counterexample:** the five widget types are not sufficient for Blueprint. Lists with selection and scene views are missing.
 - **Counterexample:** the answers of Uno appear with a delay of up to one second. A view cannot be longer than 32767 characters: many jobs need pagination.
@@ -349,3 +379,79 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Decision:** the repository is public and its license is MIT. The text is in [LICENSE](../LICENSE). The mod metadata declares the same license.
 - **Scope:** the license applies to the code and the documents of this repository. MindCraft uses only the public API of CC: Tweaked and does not contain its code.
 - **Alternatives that the project owner did not choose:** MPL-2.0, and all rights reserved.
+
+## D23 — A confirmation starts only the proposal that the player sees
+
+**Status:** verified with automatic in-game tests on 2026-11-12, through the commands and the view that the server builds. Not tried in a client. It corrects a defect that the review of 2026-11-12 found.
+
+- **Problem:** Uno proposed job A. The player made request B. B failed or gave no order. Proposal A stayed, and the screen showed the answer to B together with the "Confirm" button. A press on the button started A.
+- **Choice:** a request that Uno accepts removes the proposal of the player, before the provider answers. Thus a proposal exists only as the answer to the newest request.
+- **While a request is open:** a confirmation starts nothing. Uno answers "I am still working on your request. I have no proposal to confirm yet."
+- **Late answers:** Uno accepts one request at a time for each player (D17). Thus an answer always belongs to the newest request of its session. For an answer of an earlier session see D24.
+- **On the screen:** the proposal is in words above the "Confirm" button, also when the last sentence of Uno is about something else, for example a report. The action of the button carries the number of the proposal. Uno refuses a number that is not the current one. Thus the button of an older view cannot start a newer proposal.
+- **One start:** the confirmation removes the proposal before it starts the job. A second confirmation finds no proposal.
+- **Discarded alternative:** keep the old proposal and mark it on the screen as an earlier proposal. It needs more state and more text. The player can make the request again.
+- **Evidence:** test `t22_confirm_only_the_shown_proposal`: a proposal, a request that gives no order, then a confirmation with the old button and with the command; a confirmation during an open request; the old button after a newer proposal; a double confirmation. Test `t18_claude_provider`: after a request that fails, the proposal of the request before it does not exist. Both failed before the correction.
+- **Corrected test:** `t18_claude_provider` expected that the proposal stayed after the next request failed. That expectation described the defect.
+- **Counterexample:** the `/uno confirm` command carries no number. It starts the newest proposal of the player, also when a different contact point made it. The chat can still show an older proposal as its last line.
+- **Counterexample:** a wrong request removes a good proposal. This is the cost of one meaning for "Confirm".
+- **Not verified:** the new line and the new button in a client.
+
+## D24 — The temporary state of Uno and of the robots belongs to one server session
+
+**Status:** the logic is verified with two automatic in-game tests on 2026-11-12. The link with the life cycle of the server comes from a code examination. No test changes the world in a client. It corrects a defect that the review of 2026-11-12 found. The part about the robots was not in the review: the project owner asked for it after the review.
+
+- **Problem:** in a single-player game the player leaves world A and opens world B without closing the game. The proposals, the last sentences and the open requests were in static maps, with the player as the key. Nothing cleared them. World B got the proposal of world A. With the same robot number and the same station names, a confirmation started it.
+- **Choice:** the temporary state is one session object. Each server start replaces it (`ServerAboutToStartEvent`). Each request keeps the session in which it started. Its answer does nothing if that session is not the current one, or if its server stopped.
+- **Requests that are open at the stop:** their answer is dropped. Uno does not call the reply of the request.
+- **Facts from the code examination** (`javap` on the jar of Forge 47.4.28 with the official mappings):
+  - `IntegratedServer.initServer`, `DedicatedServer.initServer` and `GameTestServer.initServer` call `ServerLifecycleHooks.handleServerAboutToStart`. Thus the event occurs each time a world opens in a client.
+  - At the stop, `MinecraftServer.runServer` calls in this order: `handleServerStopping`, `stopped = true`, `stopServer()`, `handleServerStopped`.
+  - `MinecraftServer.scheduleExecutables()` is false after `stopped = true`. Then `execute(task)` runs the task immediately, on the thread of the caller. Before the correction, an answer for a stopped server ran on the thread of the provider and wrote in the static maps.
+- **Evidence:** test `t23_state_of_an_earlier_session`: the same player, the same robot and the same station names in three sessions. A new session has no proposal and no message, and a confirmation starts nothing. An open request of the old session does not block a request in the new one. Its answer is a valid order: it arrives later and changes nothing. The test failed before the correction.
+- **Artificial condition:** the test calls `Uno.newSession()`, the function that each server start calls. It does not start a second server. It runs in its own batch: a new session also removes the proposals of the tests that run at the same time.
+- **Not verified:** a real change of world in a client. The branch for a stopped server (`server.isStopped()`): no test stops a server while a request is open.
+- **The robots:** three other static maps also lived across worlds: the running robot sessions (`RobotApi.LIVE`), the boot counts (`RobotApi.BOOTS`) and the pending computer restarts (`MindCraft.REBOOTS`). The same server start now clears them. No computer of the new server runs at that moment.
+- **Facts from the code examination of CC: Tweaked 1.121.0** (`javap` on its jar):
+  - At a server stop, `ServerContext.close` queues the stop of each computer. Then it waits one second in total for the computer threads.
+  - A worker of the computer thread runs each stop. The stop calls `shutdown()` on each API of the computer. That call removes the robot session from `LIVE`.
+  - Thus `LIVE` is normally empty after a server stop. A session stays only if the limit of one second expires. The log then says "Failed to stop computers under deadline."
+- **What a session that stayed could do:** the runtime took it for a running robot. It accepted a job for a robot that did not run. At `resume` after a recovery it read the load of a turtle of the old world.
+- **What a pending restart could do:** it sent `/computercraft shutdown` or `turn-on` to the computer with the same number in the next world, for 30 seconds at most.
+- **Evidence for the robots:** test `t23_robots_of_an_earlier_session`. It calls the listener of the server start with a new event object. Before the correction it failed with five problems. After it: the old session is not a running robot, the boot count and the pending restart do not exist, a job for that robot is refused, and the old session has no authority.
+- **Not verified for the robots:** a server stop in which CC: Tweaked exceeds its limit. No test builds one. The examination says that the correction is necessary only in that case, and for the pending restarts.
+- **Discard condition:** two servers run at the same time in one Java process. Then one static session is not sufficient.
+
+## D25 — The runtime records the cause of a wait
+
+**Status:** verified with automatic in-game tests on 2026-11-12. One of the three tested conditions is built artificially. It corrects a defect that the review of 2026-11-12 found.
+
+- **Problem:** the report of Uno guessed the cause of `WAITING` from the load. Without a load on board it always said that the reserve stopped the pickup. The same state also means a full robot, an inventory that is not loaded, or an empty source without a reserve. For a source that no robot observed, the report said "-1 remain".
+- **Choice:** the job has a `cause` field with fixed values. The runtime writes it together with the `WAITING` state, from what it observed in that tick. Minecraft saves it with the job. Uno chooses its sentence from this value. Uno does not read the text of the reason to decide.
+
+| Cause | The runtime writes it when | Sentence of Uno |
+| --- | --- | --- |
+| `SOURCE_AT_RESERVE` | The stock of the source is not above the reserve | With a reserve: "N remain in 'x': that is the reserve you asked me to keep." With less than the reserve: "that is less than the reserve of R". Without a reserve: "Nothing remains in 'x'." |
+| `ROBOT_FULL` | Nothing moved, and the robot cannot accept one item | "My inventory is full: I cannot take the items from 'x'." |
+| `SOURCE_KEEPS` | Nothing moved, and the robot can accept one item | "'x' has the items, but it does not let me take them." |
+| `DESTINATION_FULL` | A delivery moved less than the permitted quantity | "The destination is full. I am waiting for free space." |
+| `SOURCE_UNLOADED`, `DESTINATION_UNLOADED` | The area of the inventory is not loaded | "The area of 'x' is not loaded: I cannot see its inventory and I do not know its stock." |
+| `NONE` | A record of an older version of the mod | "I am waiting. Recorded reason: …", with the saved text and nothing more |
+
+- **Uncertainty:** the number in a sentence is the last observation of the source. The report still gives the age of each observation, and says when the robot is not running. For an inventory that is not loaded Uno says that it does not know the stock.
+- **Also corrected in the runtime:** "the destination is full" came from the load on board alone. Now the runtime writes it only when a delivery moved less than the permitted quantity. "The robot inventory is full" came from "nothing moved". Now the runtime writes it only if the robot cannot accept one item.
+- **Evidence:** tests `t21_report_source_at_reserve` (empty source without a reserve, then a source at the reserve, then a save and a load, then a record without a cause), `t21_report_robot_full` and `t21_report_inventory_not_loaded`. The three failed before the correction. Test `s2_uno_request` keeps the sentence of the reference request.
+- **Artificial condition:** for the inventory that is not loaded, the test moves the inventory of the station record to a far position. The dock stays. The runtime refuses such a station at the registration. In a normal game the chunk next to a working turtle is loaded, thus this state is rare. The cause is still written by the code of the runtime, during a real pickup attempt of the turtle.
+- **Not verified:** `SOURCE_KEEPS` and `DESTINATION_UNLOADED`. No test reaches them. The destination uses the same code as the source.
+- **Counterexample:** `BLOCKED` and `RECOVERY` still have only a free text. Uno prints it as the recorded reason and does not interpret it.
+
+## D26 — One run of a Lua module executes one job
+
+**Status:** verified with an automatic in-game test on 2026-11-12. The defect was not one of the findings of the review: a test of the review run found it.
+
+- **Problem:** a job ends, and a job with a different module starts on the same robot within one tick. The loop of the old module asked for the state, got the new job, and executed it. A `transport` loop ran a `keep_stock` job: it called `take` before an observation, and the job went to `BLOCKED` ("module error: … The destination stock is unknown"). The defect existed before the review. Test `s2_projector` hit it by chance in run 21.
+- **Choice:** `mindcraft.attach` returns the ID of the job. A run of a module keeps that ID. A job is "active" for a run only if it is the job of that run. With a different job the run ends, and the agent starts the module of the new job. The agent gives the job that it saw to the module: the run ends at once if the robot already has a different job.
+- **Versions:** the modules are now `transport@2` and `keep_stock@2`.
+- **Evidence:** test `t15_next_job_with_another_module`: a transport ends and a `keep_stock` job starts in the same tick. Before the correction the job went to `BLOCKED` with the module error. After it, the job reaches `SATISFIED` with the executor `keep_stock@2`.
+- **Limit:** the check is in the Lua modules of the mod. The functions `take`, `give`, `observe` and `block` carry no job ID. One tick stays between the last state reading of a run and its next call. In that tick a new job can get a call of the old run, for example its impediment.
+- **Proposed for T15 in S3:** each call of a module names its job, and the runtime refuses a call for a different job.

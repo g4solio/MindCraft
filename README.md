@@ -112,7 +112,7 @@ No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](
    /mindcraft job transport <robot> depot furnace minecraft:coal 24 32
    ```
 
-7. Check and control the job.
+7. Check and control the job. Only the owner of the robot, an operator and the console can read the status.
 
    ```
    /mindcraft job status <robot>
@@ -123,7 +123,9 @@ No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](
 
 8. Keep a stock. This job does not end: the robot stays at the dock of the destination and checks it each 5 seconds.
    The first number is the level to keep in the destination. The second is the reserve to leave in the source.
-   The `set` command changes the two numbers of an open job.
+   The `set` command changes the two numbers of an open job, also of a transport.
+   A lower quantity does not bring items back. From the change on, the robot delivers only up to the new quantity.
+   A load above it stays on board, and the job says so.
 
    ```
    /mindcraft job keep <robot> depot furnace minecraft:coal 64 32
@@ -133,6 +135,7 @@ No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](
 ## Talk with Uno
 
 Uno proposes, you confirm. A proposal does not change the world and is not saved.
+Uno accepts one request at a time. A new request replaces the proposal before it: `/uno confirm` starts only the newest proposal.
 
 ```
 /uno ask Keep at least 64 pieces of coal in the furnace chest, taking them from the depot. Leave at least 32 pieces in the depot.
@@ -148,6 +151,7 @@ Use it with the right mouse button: it opens the screen of Uno at any distance.
 The screen shows your jobs, with state, observed stocks and cargo on board.
 You can change the quantity and the reserve and press "Apply". You can pause, resume or cancel.
 At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the "Confirm" button appears.
+Above the button the screen repeats the proposal in words: the button starts that proposal and no other.
 The game does not pause while the screen is open.
 
 ### The projector
@@ -195,12 +199,12 @@ It also reads the same request in Italian, the first language of this project.
 | State | Meaning | Who unblocks it |
 | --- | --- | --- |
 | `RUNNING` | The robot works | |
-| `WAITING` | The source has no available material, or the destination is full. The robot tries again each 5 seconds | It unblocks by itself |
-| `SATISFIED` | Only for a stock: at the last observation the destination had the requested level | It starts again by itself when the stock goes down |
-| `BLOCKED` | The path is obstructed, the fuel ended or a station has no inventory. The reason contains the position, the direction and the block in front of the robot | The owner, with `resume` |
+| `WAITING` | The source has no material above the reserve, the destination is full, the robot is full, or the area of an inventory is not loaded. The runtime records which one. The robot tries again each 5 seconds | It unblocks by itself |
+| `SATISFIED` | Only for a stock: at the last observation the destination had the requested level. A load can stay on board, if the owner lowered the level after the pickup | It starts again by itself when the stock goes down |
+| `BLOCKED` | The path is obstructed, the fuel ended or a station has no inventory. The reason contains the position, the direction and the block in front of the robot. Also: a transport has a load on board above its quantity, because the owner lowered the quantity after the pickup | The owner, with `resume`. For a load above the quantity: raise the quantity first, or cancel |
 | `PAUSED` | The owner asked for a pause. The cargo stays on board | The owner, with `resume` |
 | `RECOVERY` | The real cargo of the robot is different from the recorded cargo, or the world is older than the record. The runtime does not know the result | The owner, with `resume` (accepts the observed cargo) or `cancel` |
-| `DONE` | The requested quantity was delivered | |
+| `DONE` | The requested quantity was delivered and no load of the job is on board | |
 | `CANCELLED` | The owner cancelled. The cargo stays on board | |
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.

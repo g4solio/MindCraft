@@ -10,6 +10,7 @@ The vision and the status of the choices are in [docs/MINDCRAFT_CLAUDE_BRIEF.md]
 - Use only `dan200.computercraft.api` of CC: Tweaked. The other classes are internal.
 - The build needs a JDK 17. Set `JAVA_HOME` before you use `gradlew`. A portable JDK can be in `%USERPROFILE%\.jdks`.
 - Compile with `gradlew compileJava`. Run the in-game tests with `gradlew runGameTestServer`.
+- The normal run does not contain the server restart test. After a change of the runtime or of the Lua modules, also run its four phases. See `RestartTests.java`.
 - The test `gradlew runGameTestServer -Plive` calls the real Claude service with the key of the project owner. It costs money. Run it only with the consent of the project owner.
 - Never write an API key in a file, in a visible command or in a message.
 - Keep the repository tidy: no local paths, no personal data and no generated files in a commit.

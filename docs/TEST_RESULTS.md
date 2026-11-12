@@ -7,7 +7,7 @@ Date: 2026-11-12. Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: T
 | Type | Meaning |
 | --- | --- |
 | **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer` |
-| **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0` |
+| **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0`, or of the compiled code of Minecraft and Forge with `javap`. A code examination is not a test: it says what the code does, not that it was seen to do it |
 | **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" |
 
 No test uses a simulation of the game. Where a condition is built artificially, the table says so.
@@ -50,11 +50,26 @@ x:  0          1      2        3    4      5
 | 15 | 1 of 1, with `-Plive` | None. Test `t18_claude_live` with the real Claude service. Log line: `Enabled Gametest Namespaces: [mindcraft_live]` |
 | 16 | 29 of 29 | None. After the correction of the build script |
 | 17 | 29 of 29 | None. With the new sentence of Uno for a request without a complete order |
-| 18 | **29 of 29** | None. Current code, with the English text of Uno. Server line: `All 29 required tests passed :)` |
+| 18 | 29 of 29 | None. The code of the commit `b6ae2b7`, with the English text of Uno. Server line: `All 29 required tests passed :)` |
 | 19 | 1 of 1, with `-Plive` | None. Test `t18_claude_live` with the real Claude service and the English text. Log line: `Enabled Gametest Namespaces: [mindcraft_live]` |
+| 20 | 28 of 40, expected | The code of the commit `b6ae2b7` with the 11 new tests of the review. The 11 new tests failed, and `t18_claude_provider` failed with its corrected expectation. Each failure shows one finding. See "Review of 2026-11-12" |
+| 21 | 39 of 40 | The corrected code. `s2_projector` failed: the Lua module of a job that ended executed the next job. The defect existed before the review. See D26 |
+| 22 | 39 of 41 | With the new test `t15_next_job_with_another_module`, before its correction: it failed as expected. `t21_report_source_at_reserve` failed for an error of the test: it compared the report of the running data with the report of a loaded copy, and a copy has no time of the last contact. The test was corrected |
+| 23, 24, 25 | 41 of 41, three times | None in these runs. But the restart test, repeated after run 25, failed in the `check-crash` phase: after the sudden stop and `resume`, the job went to `BLOCKED` with 24 items on board. Cause: the first version of the correction of finding 3. See D16.1 |
+| 26 | 41 of 42 | With the new test `t11_resume_when_the_world_is_older`, before its correction: it failed as expected, with the same message as the `check-crash` phase |
+| 27 | 42 of 42 | None |
+| 28 | 41 of 42 | `t18_claude_provider` failed for a race in the test, not in the mod. The deterministic provider answered before the second request arrived. Thus the first request was not open any more, and Uno accepted the second. The race existed before the review. The test now holds the first request open on purpose |
+| 29, 30 | 42 of 42, two times | None |
+| 31 | 42 of 43 | With the new test `t23_robots_of_an_earlier_session`, before its correction: it failed as expected |
+| 32, 33 | **43 of 43**, two times | None. Current code. Server line: `All 43 required tests passed :)` |
 
 Lesson from run 2: the exit code is not sufficient. The log must contain the line `GAME TESTS COMPLETE`.
 Lesson from run 14: that line is not sufficient either. The number of tests and the line `Enabled Gametest Namespaces` say which tests ran.
+Lesson from run 21: a test that passed 12 times can hide a defect that depends on one tick. A test must build such a moment on purpose.
+Lesson from the restart test after run 25: the normal run does not contain the restart test. A change of the transfer rules needs the four restart phases too. One case of them is now also in the normal run.
+Lesson from run 28: a test must not depend on which thread is faster. A fast provider can answer inside the call that sends the request.
+
+The real Claude service was not called after run 19. The corrections of the review were tested with the deterministic provider and with providers written in the tests.
 
 The test world is flat and has no structures. See D14 for the reason.
 
@@ -91,7 +106,7 @@ The default configuration has only one thread for the computers (`computer_threa
 
 ## S1 — Adversarial matrix
 
-All "passed" rows come from runs 6 and 7. The later runs confirm them, up to run 18.
+All "passed" rows come from runs 6 and 7. The later runs confirm them, up to run 33.
 
 | ID | Test | What it does | Result | Observed result |
 | --- | --- | --- | --- | --- |
@@ -132,8 +147,8 @@ The rig is the same, at a fixed position at y = 100, in a chunk that is kept loa
 
 | Phases | What they do | Result | Observed result |
 | --- | --- | --- | --- |
-| `stop`, then `check` | Normal stop of the server in the tick of the withdrawal. Then a restart | Passed, 6 times | After the restart the record says `RUNNING` with 24 items on board. The robot starts again by itself and delivers. Final: source 40, destination 24, robot 0. No `RECOVERY` |
-| `crash`, then `check-crash` | A save after the withdrawal. A delivery. After 15 seconds, a stop of the process without a save. Then a restart | Passed, 6 times | See below |
+| `stop`, then `check` | Normal stop of the server in the tick of the withdrawal. Then a restart | Passed, 9 times | After the restart the record says `RUNNING` with 24 items on board. The robot starts again by itself and delivers. Final: source 40, destination 24, robot 0. No `RECOVERY` |
+| `crash`, then `check-crash` | A save after the withdrawal. A delivery. After 15 seconds, a stop of the process without a save. Then a restart | Passed, 8 times. Failed 1 time, after run 25, with a first version of a correction. See "Review of 2026-11-12" | See below |
 
 State on disk after the sudden stop:
 
@@ -145,7 +160,8 @@ State on disk after the sudden stop:
 - At the first access after the restart the job goes to `RECOVERY` ("the world is older than the record of this job"). The observed stocks become "unknown" again.
 - The runtime does not declare the delivery as a fact. The robot stays stopped with the cargo.
 - After `resume` of the owner the robot delivers. Final: source 40, destination 24, robot 0.
-- The final record says "delivered 48" and declares "1 recovery. The totals can be inexact". This is the expected limit: the record also counts the delivery that the world lost.
+- Until run 19 the final record said "delivered 48" and declared "1 recovery. The totals can be inexact": the record also counted the delivery that the world lost.
+- Since the review of 2026-11-12 the final record says "delivered 24", with the same declaration. At `resume` the runtime subtracts the load that the robot still holds from the delivered total. See D16.1. The physical result is the same.
 
 Errors found during this test:
 
@@ -174,9 +190,12 @@ The project owner confirmed the screen and the projector in the game.
 The Claude provider exists. Its code is tested automatically against a false API.
 The test with the real service (`t18_claude_live`) passed two times on 2026-11-12, with the consent of the project owner and with the key of the project owner.
 
-The "passed" rows without another note come from run 18: 29 tests of 29, with the current code.
-The "real Claude" rows come from run 19, with the current code. Run 15 was the first run with the real service. At that time Uno and the prompt were in Italian. It gave the same order and three refusals with the same meaning.
-The four phases of the restart test (T11) were repeated after run 19, with the current code. They passed, with the same values as before.
+The "passed" rows without another note come from run 18: 29 tests of 29, with the code of the commit `b6ae2b7`.
+The "real Claude" rows come from run 19, with the same code. The real service was not called with the corrected code of the review. Run 15 was the first run with the real service. At that time Uno and the prompt were in Italian. It gave the same order and three refusals with the same meaning.
+The four phases of the restart test (T11) were repeated after run 19. They passed, with the same values as before.
+Runs 32 and 33 confirm all the rows of this table with the final code, except the "real Claude" rows.
+The four phases of the restart test were repeated after run 33, with the final code. They passed.
+One sentence of the report changed in the review: for a transport that waits at the reserve, Uno now says "I must carry N more" in place of "To reach N in …". The sentence for a stock is the same as before.
 
 | ID | Test | What it does | Result | Observed result |
 | --- | --- | --- | --- | --- |
@@ -224,6 +243,65 @@ Conditions built artificially:
 - **T23:** "another contact point" is a second call to the same command and a copy of the data loaded again in memory.
 - **Players:** the actors are identifiers that the test creates.
 
+## Review of 2026-11-12 — six findings and three more defects
+
+A review of the commit `b6ae2b7` found six problems by a code examination, without tests.
+Method for each finding: a test that shows it, a run on the old code, the smallest correction, a run on the new code.
+Run 20 is the run on the old code: the tests of the review with the code of `b6ae2b7`. Runs 32 and 33 are the runs on the final code. Runs 23 to 25, 27, 29 and 30 gave the same results for these tests.
+All tests of this section are in the game and automatic, with the deterministic provider or with providers written in the tests.
+
+| No. | Finding | Verdict | Test | Run 20, old code | Runs 32 and 33, final code |
+| --- | --- | --- | --- | --- | --- |
+| 1 | "Confirm" starts an old proposal after a new request failed | Confirmed and corrected. D23 | `t22_confirm_only_the_shown_proposal` | Failed: "the view offers Confirm below the answer to a failed request", "the button started the old proposal" | Passed. No job starts. During an open request Uno answers "I am still working on your request". The button of an older proposal starts nothing. A proposal starts one time |
+| 1 | The same, at the level of the Claude provider | Confirmed and corrected | `t18_claude_provider`, with a corrected expectation | Failed: "wrong proposal state after answer 6". The proposal of answer 5 stayed after the next request failed | Passed |
+| 2 | The temporary state of Uno goes from one world to the next | Confirmed and corrected. D24 | `t23_state_of_an_earlier_session` | Failed: the new session had the proposal and the message of the old one, and a confirmation started job 37 | Passed. The new session has no proposal and no message. An open request of the old session does not block the new one, and its late answer changes nothing |
+| 3 | A lower quantity with a load on board is exceeded | Confirmed and corrected. D16.1 | `t16_quantity_lowered_with_load` | Failed: quantity 10, but destination 64, robot 0, `DONE` | Passed. Destination 10, robot 54, `BLOCKED` with the reason. No delivery in the next 7 seconds. After a raise to 64 and `resume`: destination 64, robot 0, `DONE` |
+| 3 | The same, after a partial delivery | Confirmed and corrected | `t16_quantity_lowered_after_partial_delivery` | Failed: quantity 10, but destination 84 (60 + 24), robot 0, `DONE` | Passed. Destination 70 (60 + 10), robot 14, source 40, `BLOCKED` |
+| 3 | The same, with a quantity lower than the delivered total | Confirmed and corrected | `t16_quantity_below_delivered` | Failed: `DONE` with 20 items on board | Passed. `BLOCKED`, destination 64, robot 20. The report says that the 4 delivered items are more than the quantity of 2. After room in the destination and `resume`: nothing more is delivered. After `cancel`: `CANCELLED`, 20 on board |
+| 3 | The same, for a stock | Confirmed and corrected | `t16_level_lowered_with_load` | Failed: level 20, but destination 64, robot 0 | Passed. Destination 20, robot 44, source 74, `SATISFIED` with "44 stay on board". After a consumption of 15: destination 20 again, robot 29 |
+| 4 | The actions of an old view change the next job of the robot | Confirmed and corrected. D19 | `t16_actions_of_an_old_view` | Failed: "Apply changed job B to 50, reserve 7", "Pause changed job B to PAUSED", "Resume changed job B to RUNNING", "Cancel changed job B" | Passed. Job B does not change and Uno answers "I cannot". The actions of the current view work. Final: source 40, destination 24 |
+| 5 | Each player reads the jobs of the others with the status command | Confirmed and corrected. D11 | `t19_status_command` | Failed: a different player got result 1 and the whole status of the job | Passed. The owner, an operator and the console read the status. A different player gets "Robot #N is not yours." and no data. A `cancel` command of that player changes nothing |
+| 6 | The report gives a wrong cause for a wait | Confirmed and corrected. D25 | `t21_report_robot_full` | Failed: the robot was full, but the report said "64 remain in 't21full_source': that is the reserve you asked me to keep", with a reserve of 0 | Passed: "My inventory is full: I cannot take the items from 't21full_source'." After one free slot: complete delivery |
+| 6 | The same, for an inventory that is not loaded | Confirmed and corrected | `t21_report_inventory_not_loaded` | Failed: "-1 remain in 't21far_source': that is the reserve you asked me to keep" | Passed: "The area of 't21far_source' is not loaded: I cannot see its inventory and I do not know its stock." The stock stays "never observed" |
+| 6 | The same, for an empty source without a reserve, and for the reserve | Confirmed and corrected | `t21_report_source_at_reserve` | Failed: "0 remain in 't21reserve_source': that is the reserve you asked me to keep", with a reserve of 0 | Passed: "Nothing remains in 't21reserve_source'." Then, with 44 items and a reserve of 32: 12 delivered and "32 remain in 't21reserve_source': that is the reserve you asked me to keep." A save and a load keep the cause. A record without a cause gives "I am waiting. Recorded reason: …" |
+
+Three more defects, not in the review. The runs of the review found the first two. The third has the same kind as finding 2: the project owner asked for its correction after the review.
+
+| Defect | Test | Before the correction | After the correction |
+| --- | --- | --- | --- |
+| It existed before the review. A job ends and a job with a different module starts in the same tick. The Lua module of the first job executes the second. See D26 | `t15_next_job_with_another_module` | Run 22, failed: `BLOCKED` ("module error: … transport.lua:99: The destination stock is unknown. Observe it first.") | Runs 23 to 33, passed: `SATISFIED`, executor `keep_stock@2`, destination 16, source 48 |
+| The first correction of finding 3 caused it. After a sudden stop the record says "delivered 24" but the robot still holds the 24 items. After `resume` the new limit kept the load on board. See D16.1 | `t11_server_restart`, phases `crash` and `check-crash`. In the normal run: `t11_resume_when_the_world_is_older`, with an artificial record | Failed after run 25 and in run 26: `BLOCKED` ("the quantity is 24 and 24 are delivered: 24 stay on board") | Passed: source 40, destination 24, robot 0, `DONE`, "1 recovery. The totals can be inexact" |
+| The same kind as finding 2, for the robots. The running robot sessions, the boot counts and the pending computer restarts were static, and lived from one world to the next. See D24 | `t23_robots_of_an_earlier_session` | Run 31, failed: "the robot session of the old server is a running robot in the new one", "the new server has the boot count of the old one: 2", "the new server has a pending computer restart of the old one", "the runtime started a job on a robot session of the old server", "the robot session of the old server still has authority" | Runs 32 and 33, passed. A job for that robot is refused: "is not running" |
+
+### What each statement of the review rests on
+
+| Kind of evidence | Statements |
+| --- | --- |
+| **Verified automatically, in the game** | All rows of the two tables above. The older tests also pass with the final code: 43 tests of 43 in runs 32 and 33, and the four phases of the restart test |
+| **Verified manually** | Nothing. No person tried the corrected code in a client |
+| **Deduced from a code examination** | A server start in a client calls the function that starts a new session of Uno: `IntegratedServer.initServer` calls `ServerLifecycleHooks.handleServerAboutToStart`. After a server stop, `MinecraftServer.execute` runs a task immediately on the thread of the caller: this is how an answer of a stopped world wrote in the static state. The test system runs the batches one after the other, thus the session test does not disturb the others. The causes `SOURCE_KEEPS` and `DESTINATION_UNLOADED`. At a server stop, CC: Tweaked stops each computer and calls `shutdown()` on its APIs, with a limit of one second in total: a robot session stays only if that limit expires |
+| **Not verified** | A real change of world in a client. A request that is open when a real server stops. The screen in a client with the corrected code: the line of the proposal, and the buttons with the new actions. A real client without operator permissions that sends the commands. A server stop in which CC: Tweaked exceeds its limit and leaves a robot session (D24). The Claude provider with the real service after the corrections |
+
+Conditions built artificially in the tests of the review:
+
+- **Session (finding 2):** the test calls `Uno.newSession()`, the function that each server start calls. It does not start a second server. The player, the robot and the stations are the same before and after, because the test uses one rig.
+- **Robots of an earlier session:** the test calls the listener of the server start event with a new event object. It does not post the event, because CC: Tweaked also listens to it. It does not start a second server. It has its own batch: the listener ends the robot sessions of all running tests.
+- **Slow provider (findings 1 and 2):** a provider written in the test waits for a signal of the test, then gives a valid order.
+- **Old view (finding 4):** the test reads the actions of the buttons from the view of job A and sends them after job B starts. It calls the function that the network message calls.
+- **Players of the status command (finding 5):** the owner and the other player are player entities of the test system, not clients. The operator is the second player with permission level 2.
+- **Inventory not loaded (finding 6):** the test moves the inventory of the station record to a position 1,000,000 blocks away. The dock stays. The runtime refuses such a station at the registration.
+- **Full robot (finding 6):** the test fills the 16 slots of the turtle with cobblestone.
+- **Record of an older version (finding 6):** the test removes the cause from the saved data of the job, then loads them.
+- **World older than the record (`t11_resume_when_the_world_is_older`):** the test writes in the record that the load is delivered, with a time of the last transfer in the future. It does not stop the server. The real sudden stop is in the `crash` and `check-crash` phases.
+
+Changes to the older tests:
+
+- `t18_claude_provider`: the expectation "the proposal stays after the next request fails" described finding 1. It now expects the opposite.
+- `t18_provider_failures`: the test sent three and four requests of one player in the same tick. Uno now accepts one request at a time from each source. The test sends them one after the other.
+- `s2_tablet_view`: the test reads the "Confirm" action from the view, and uses the actions with the job ID. It also sends a "Confirm" without the number of the proposal: nothing starts.
+- `s1_transfer` and `s2_keep_stock`: the module versions are `transport@2` and `keep_stock@2`.
+- `t18_claude_provider`, second change: the first of two requests in the same tick now has a provider that waits for the test. See run 28.
+
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.
@@ -251,12 +329,17 @@ Third manual test, on the projector and its hologram:
 
 | Case | Reason |
 | --- | --- |
-| The `/mindcraft` commands sent by a player without operator permissions | The manual test uses a world with commands enabled. Thus the player is an operator. The ownership check is tested only at the level of the runtime (T19) |
+| The `/mindcraft` commands sent by a real client without operator permissions | The manual test uses a world with commands enabled. Thus the player is an operator. The `status` and `cancel` commands are tested with a player entity of the test system (`t19_status_command`). The other commands are tested only at the level of the runtime (T19) |
 | T11: unload and reload of a chunk during the transport | It needs a player or forced chunk loading |
 | T11: sudden stop on a normal server | The test server has no idle time in the tick. A normal server can write chunks to disk at different moments |
 | T05: a player on the path | It needs a client |
 | T08: delayed confirmation | Not applicable: the runtime and the turtle are in the same process, without network messages |
-| Inventory not loaded (`WAITING` with unknown stock) | The branch exists in the code. No test reaches it |
+| Inventory not loaded (`WAITING` with unknown stock) in a real area that is not loaded | One test reaches the branch with an artificial station record (`t21_report_inventory_not_loaded`). No test unloads a chunk |
+| A change of world in a client: two servers, one after the other, in one Java process | It needs a person at the game. The logic is tested with an artificial session change (`t23_state_of_an_earlier_session`). See D24 |
+| A request to Uno that is open when a real server stops | It needs a server stop during a test. The branch comes from a code examination. See D24 |
+| The screen in a client after the review: the line of the proposal, "Confirm" and the buttons of a job with the new actions | It needs a person at the game. The view that the server builds is tested automatically |
+| A source that has the items but does not release them (`SOURCE_KEEPS`) | It needs an inventory that refuses the extraction. The chests of the rig do not |
+| A robot session that CC: Tweaked does not stop in time at a real server stop, then a second world | It needs a person at the game and a stop that exceeds the limit of one second. The logic is tested with an artificial server start (`t23_robots_of_an_earlier_session`). See D24 |
 | Double chests, inventories with sides (furnaces), hoppers, items with NBT | Outside the S1 rig |
 | More turtles on different jobs with shared resources | Outside S1 |
 | New world with an old `mindcraft.dat` file | Only the variant in memory (T09) |
@@ -269,7 +352,7 @@ Third manual test, on the projector and its hologram:
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
-| T15, T17 and the rest of T16 | They belong to S3 |
+| T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
 
 ## Known limits
 
@@ -280,3 +363,6 @@ Third manual test, on the projector and its hologram:
 - Outside loaded areas the robot does not work and the job stays `RUNNING`. The state shows the robot as not loaded.
 - A chest has no owner. There is no integration with the protections of the server.
 - Uno answers only in English, also to a request in another language.
+- The `/uno confirm` command starts the newest proposal of the player, also when a different contact point made it. Only the screen names the proposal that its button confirms.
+- A lower quantity does not bring items back. The load above the new quantity stays on board until the owner decides.
+- The Lua calls of a module carry no job ID. A module of the mod stops when the robot gets a different job, but one tick stays open. See D26.

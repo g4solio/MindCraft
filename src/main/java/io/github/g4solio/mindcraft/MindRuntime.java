@@ -47,12 +47,18 @@ public class MindRuntime extends SavedData {
     }
 
     /**
-     * Why a job waits. The runtime records the cause together with the WAITING state, from what it observed in that tick.
+     * Why a job waits or is blocked. The runtime records the cause together with the state, from what it observed in that tick.
      * Uno reads this value. It does not guess the cause from the load or from the text of the reason.
+     * D34: a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
      */
     public enum Cause {
-        /** No recorded cause: the job does not wait, or an older version of the mod wrote the record. */
+        /**
+         * No recorded cause: the job does not wait and is not blocked, an older version of the mod wrote the record,
+         * or a module reported an impediment of an unknown kind. Then the recorded reason is all that Uno knows.
+         */
         NONE,
+
+        // Causes of WAITING.
         /** The source has no item above the reserve. */
         SOURCE_AT_RESERVE,
         /** The source has items above the reserve and the robot has room, but the source released nothing. */
@@ -62,8 +68,21 @@ public class MindRuntime extends SavedData {
         /** The destination did not accept the whole load. */
         DESTINATION_FULL,
         /** The area of the inventory is not loaded. Its stock is unknown. */
-        SOURCE_UNLOADED, DESTINATION_UNLOADED
+        SOURCE_UNLOADED, DESTINATION_UNLOADED,
+        /** The robot cannot move. It tries again, and the job works again at the first move that succeeds. */
+        PATH_OBSTRUCTED,
+
+        // Causes of BLOCKED.
+        /** The robot cannot move and has no fuel item. The owner gives fuel and resumes. */
+        OUT_OF_FUEL,
+        /** The robot is at the dock, but the station has no inventory at its position. */
+        SOURCE_NO_INVENTORY, DESTINATION_NO_INVENTORY,
+        /** A transport reached its quantity with a load on board: the owner lowered the quantity after the pickup. */
+        LOAD_ABOVE_QUANTITY
     }
+
+    /** The kinds of impediment that a Lua module reports. The runtime decides the state from the kind. See impediment(). */
+    static final String OBSTACLE = "obstacle", NO_FUEL = "fuel";
 
     /** The player or console that makes a request. The server decides this value, not the client. */
     public record Actor(UUID id, boolean admin) {
@@ -398,16 +417,43 @@ public class MindRuntime extends SavedData {
     }
 
     void set(Job job, State state, String reason) {
+        set(job, state, Cause.NONE, reason);
+    }
+
+    /** The one place where the state of a job changes. The cause belongs to the state: a new state without a cause has NONE. */
+    void set(Job job, State state, Cause cause, String reason) {
         job.state = state;
         job.reason = reason;
-        job.cause = Cause.NONE;
+        job.cause = cause;
         setDirty();
     }
 
     /** The job waits for a condition that can change without the owner. The cause is what the runtime observed. */
     void waiting(Job job, Cause cause, String reason) {
-        set(job, State.WAITING, reason);
-        job.cause = cause;
+        set(job, State.WAITING, cause, reason);
+    }
+
+    /** The job needs the hands of the owner. It continues only after a resume. */
+    void blocked(Job job, Cause cause, String reason) {
+        set(job, State.BLOCKED, cause, reason);
+    }
+
+    /**
+     * A Lua module reports an impediment that it cannot remove. The runtime decides the state from the kind (D34).
+     * A condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
+     * An unknown kind is a block without a cause. The reason keeps the kind: the cause cannot name it.
+     */
+    void impediment(Job job, String kind, String detail) {
+        switch (kind) {
+            case OBSTACLE -> waiting(job, Cause.PATH_OBSTRUCTED, detail);
+            case NO_FUEL -> blocked(job, Cause.OUT_OF_FUEL, detail);
+            default -> blocked(job, Cause.NONE, kind + ": " + detail);
+        }
+    }
+
+    /** The robot moved. A job that waited for a free path works again. The owner gives no resume. */
+    void moved(Job job) {
+        if (job.state == State.WAITING && job.cause == Cause.PATH_OBSTRUCTED) set(job, State.RUNNING, "");
     }
 
     private void requireRobot(Actor actor, int robotId) {

@@ -345,15 +345,21 @@ public class MindRuntime extends SavedData {
      * From the change on, the robot delivers only up to the new quantity. A load above it stays on board. See RobotApi.give.
      */
     public void update(Actor actor, int robotId, int jobId, int expectedRevision, int quantity, int reserve) {
-        Job job = openJob(actor, robotId, jobId);
-        if (job.revision != expectedRevision) throw new Refusal("Job " + job.id + " changed. Read it again.");
-        requireQuantities(quantity, reserve);
+        Job job = checkUpdate(actor, robotId, jobId, expectedRevision, quantity, reserve);
         job.quantity = quantity;
         job.reserve = reserve;
         job.revision++;
         setDirty();
         RobotApi robot = RobotApi.live(robotId);
         if (robot != null) robot.wake();
+    }
+
+    /** The validation of update(), without the change. Uno checks a change with it before the proposal. update() checks again. */
+    Job checkUpdate(Actor actor, int robotId, int jobId, int expectedRevision, int quantity, int reserve) {
+        Job job = openJob(actor, robotId, jobId);
+        if (job.revision != expectedRevision) throw new Refusal("Job " + job.id + " changed. Read it again.");
+        requireQuantities(quantity, reserve);
+        return job;
     }
 
     /** For a command that names only the robot: the request is about the job that the robot has now. */
@@ -383,19 +389,32 @@ public class MindRuntime extends SavedData {
         control(actor, robotId, currentJob(robotId), action);
     }
 
-    /** Pause, resume or cancel of the named job. The robot finishes its current single move or transfer first. */
-    public void control(Actor actor, int robotId, int jobId, String action) {
+    /** The validation of control(), without the change. Uno checks a resume or a cancellation with it before the proposal. control() checks again. */
+    Job checkControl(Actor actor, int robotId, int jobId, String action) {
         Job job = openJob(actor, robotId, jobId);
-        RobotApi robot = RobotApi.live(robotId);
         switch (action) {
             case "pause" -> {
                 if (!job.state.active()) throw new Refusal("Job " + job.id + " is not running (" + job.state + ").");
-                set(job, State.PAUSED, Cause.NONE, "paused by the owner", true);
             }
+            case "resume" -> {
+                if (job.state.active()) throw new Refusal("Job " + job.id + " is already running.");
+            }
+            case "cancel" -> {
+            }
+            default -> throw new Refusal("Unknown action '" + action + "'.");
+        }
+        return job;
+    }
+
+    /** Pause, resume or cancel of the named job. The robot finishes its current single move or transfer first. */
+    public void control(Actor actor, int robotId, int jobId, String action) {
+        Job job = checkControl(actor, robotId, jobId, action);
+        RobotApi robot = RobotApi.live(robotId);
+        switch (action) {
+            case "pause" -> set(job, State.PAUSED, Cause.NONE, "paused by the owner", true);
             // The load stays in the robot. The status shows it.
             case "cancel" -> set(job, State.CANCELLED, Cause.NONE, "cancelled by the owner", true);
             case "resume" -> {
-                if (job.state.active()) throw new Refusal("Job " + job.id + " is already running.");
                 if (job.state == State.RECOVERY) {
                     // The owner accepts the observed load as the truth. The totals can be inexact after this.
                     if (robot == null) throw new Refusal("Robot #" + robotId + " is not running. The runtime cannot observe its load.");
@@ -414,7 +433,6 @@ public class MindRuntime extends SavedData {
                 // A resume can complete the job: the owner accepted the observed load, and nothing is on board.
                 set(job, !job.keepStock() && job.carried == 0 && job.delivered >= job.quantity ? State.DONE : State.RUNNING, Cause.NONE, "", true);
             }
-            default -> throw new Refusal("Unknown action '" + action + "'.");
         }
         if (robot != null) robot.wake();
     }

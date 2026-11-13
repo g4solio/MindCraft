@@ -141,7 +141,7 @@ No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](
 ## Talk with Uno
 
 Uno proposes, you confirm. A proposal does not change the world and is not saved.
-Uno accepts one request at a time. A new request replaces the proposal before it: `/uno confirm` starts only the newest proposal.
+Uno accepts one request at a time. A new request replaces the proposal before it: `/uno confirm` confirms only the newest proposal.
 
 ```
 /uno ask Keep at least 64 pieces of coal in the furnace chest, taking them from the depot. Leave at least 32 pieces in the depot.
@@ -158,11 +158,26 @@ A report and a pause act immediately, without a proposal:
 
 - A request about one job gives the report of that job only. A report request that names no job gives the report on all your jobs, as `/uno report` does.
 - A pause stops the job at once, with the same request as the "Pause" button. The cargo stays on board. If the runtime refuses the pause, for example because the job is not running, Uno gives the reason.
-- Uno looks for the job only among your jobs:
+- Uno looks for the job only among your jobs. This holds for each action that names a job:
   - from the robot number, if the request gives one;
   - from a station name, if exactly one of your open jobs uses that station as source or as destination;
   - with no job named, if you have exactly one open job.
 - In each other case Uno says how many jobs fit, asks for the robot number and does nothing.
+
+A change, a resume and a cancellation are proposals, as a new job is. Nothing changes before you confirm:
+
+```
+/uno ask Leave only 16 in the depot
+/uno confirm
+```
+
+- A change gives a new quantity, a new reserve or both. The proposal shows the old value and the new value. A value that the request does not give stays as it is, and the proposal says so.
+- After the confirmation the robot uses the new values at its next step.
+- The proposal names the robot and the job. The proposal of a change also holds the revision of the job. If a button or a command changes the job before the confirmation, Uno refuses the confirmation and asks you to read the job again. If the robot has a different job, Uno refuses too.
+- The proposal to resume a job that needs a check (`RECOVERY`) says that the runtime accepts the load that it observes in the robot, and that the totals can be inexact.
+- The proposal to cancel a job says that the cargo stays on board.
+- Uno checks the request before the proposal. For example, a resume of a running job gives the reason and no proposal.
+- A new job for a robot with an open job stays refused, with the number of that job. Cancel that job first.
 
 ### The tablet
 
@@ -172,7 +187,8 @@ Use it with the right mouse button: it opens the screen of Uno at any distance.
 The screen shows your jobs, with state, observed stocks and cargo on board.
 You can change the quantity and the reserve and press "Apply". You can pause, resume or cancel.
 At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the "Confirm" button appears.
-Above the button the screen repeats the proposal in words: the button starts that proposal and no other.
+Above the button the screen repeats the proposal in words: the button confirms that proposal and no other.
+The number fields keep the values of the job until you confirm a change.
 The game does not pause while the screen is open.
 
 ### The projector
@@ -253,10 +269,10 @@ The server log says which provider is active: look for the line `Uno interprets 
 - The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
 - Anthropic gets the text of the request, the names of the stations and the numbers of the robots. An operator owns each station and each robot of the server: thus these are the names and numbers of all players.
 - The screen says "Written requests go to Claude" only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
-- A new job from Claude is only a proposal. It goes through the same validation as the commands and starts only after your confirmation.
+- A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
-- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. In this version Uno acts on a new job, a pause, a report and "none". For change, resume and cancel Uno says that it cannot do them from a written request yet, and changes nothing.
+- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
 Details and limits: D21 and D33.1 in [docs/DECISIONS.md](docs/DECISIONS.md).
@@ -275,14 +291,19 @@ A request that names two of your stations is a new job:
 
 It also reads the same request in Italian, the first language of this project.
 
-With one station or none, a word of the action decides. If a request has the words of both actions, it is a pause.
+With one station or none, a word of the action decides. If a request has the words of two actions, the higher row of the table decides.
 
 | Action | English words | Italian words | Examples |
 | --- | --- | --- | --- |
+| Resume | `resume`, `continue` | `riprendi`, `continua` | "Resume the furnace job", "Riprendi il lavoro in pausa" |
+| Cancel | `cancel` | `annulla`, `cancella` | "Cancel robot 3", "Annulla il lavoro del deposito" |
 | Pause | `pause` | `pausa`, `sospendi` | "Pause the furnace job", "Metti in pausa il robot 3" |
+| Change | A number after `quantity` or `level` (the new quantity), and after `leave` or `reserve` (the new reserve) | A number after `quantità` or `livello`, and after `lascia` or `riserva` | "Leave only 16 in the depot", "Set the quantity of robot 3 to 30", "Lascia solo 16 nel deposito" |
 | Report | `report`, `status`, `how is`, `how's`, `how are` | `rapporto`, `stato`, `come va`, `come vanno`, `come sta`, `come stanno` | "How is the furnace?", "Come va il robot 3?", "Report" |
 
-The job of a pause or of a report: "robot N", or the exact name of one of your stations, or nothing.
+The job of these actions: "robot N", or the exact name of one of your stations, or nothing.
+The number after "robot" names the job. It is never a new value of a change.
+A change takes the first number after its word. "Change the quantity and leave 16" gives 16 for both values: read the proposal before you confirm.
 A request without the words of an action and without two stations gets the reason why Uno cannot propose a job, as before.
 
 ## States of a job

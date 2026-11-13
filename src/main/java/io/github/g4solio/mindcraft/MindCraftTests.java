@@ -2956,6 +2956,7 @@ public class MindCraftTests {
 
     /**
      * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job goes to BLOCKED and to DONE.
+     * It is a provider with a model. It gives the answers of the provider of before, thus a failure of this test changes no answer.
      * It has its own batch: the provider of the server is a value of the whole server.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "notice_provider")
@@ -2963,14 +2964,11 @@ public class MindCraftTests {
         listen();
         Actor player = player("a_notice_provider");
         Rig rig = new Rig(helper, "a_notice_provider", 64, 0, player);
-        AtomicInteger calls = new AtomicInteger();
         Uno.Provider before = Uno.provider;
+        CountingModel model = new CountingModel(before);
         rig.begin()
             .thenExecute(() -> {
-                Uno.provider = (request, context) -> {
-                    calls.incrementAndGet();
-                    return before.answer(request, context);
-                };
+                Uno.provider = model;
                 rig.startJob(24, 0);
             })
             .thenWaitUntil(() -> rig.state(State.BLOCKED))
@@ -2982,7 +2980,7 @@ public class MindCraftTests {
             .thenExecute(() -> {
                 Uno.provider = before;
                 check(notices(player).size() == 2, notices(player).toString());
-                check(calls.get() == 0, "the provider got " + calls.get() + " calls");
+                check(model.calls.get() == 0, "the provider got " + model.calls.get() + " calls");
             })
             .thenSucceed();
     }

@@ -516,6 +516,7 @@ No test has a connected player. The tests replace the exit of the notices with o
 | Run 3: green 2 and 3, red 4 | The limit, and the notices with the templates of `OUT_OF_FUEL`, `RECOVERY` and `DONE`. The notice checks in four older tests | 53 of 56. `t04_destination_removed`, `t04_source_removed` and `t16_quantity_lowered_with_load` failed as expected: their notice gave the recorded reason, not the cause. Example: "… is blocked. Recorded reason: the source station has no inventory at 55, -59, 9." `t06_impediment_of_an_unknown_kind` passed: it has no cause |
 | Green | The templates of the other causes of `BLOCKED` | **56 of 56**. Server line: `All 56 required tests passed :)`. No event of a robot was dropped |
 | `stop`, `check`, `crash`, `check-crash` | The code of Green, with the checks of the diary in the restart test | Passed, each phase. `check`: the diary after the restart is `RUNNING`, and at the end `RUNNING, DONE`. `check-crash`: after the restart `RUNNING, DONE, RECOVERY`, at the end `RUNNING, DONE, RECOVERY, RUNNING, DONE`. After the four phases the data folder has no temporary file |
+| After the merge | The code of ticket #8, merged with tickets #2, #3, #5, #6, #7 and #11 of increment A. `a_notices_call_no_provider` uses `CountingModel` of ticket #11 | **65 of 65**. Server line: `All 65 required tests passed :)` |
 
 | Test | What it does | Observed result |
 | --- | --- | --- |
@@ -525,7 +526,7 @@ No test has a connected player. The tests replace the exit of the notices with o
 | `a_no_notice_for_a_resume_that_completes_the_job` | The destination accepts 4 of 24. The test empties the robot. The owner lowers the quantity to 4 and resumes | One notice: "… needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 20." After the resume the job is `DONE`, and no second notice comes. The entries: `RUNNING`, `WAITING DESTINATION_FULL`, `RECOVERY`, `DONE` |
 | `a_no_notice_for_the_ordinary_cycle` | A stock job. The destination has 10 and needs 24. The source has 40 and a reserve of 30. The robot brings 10 and waits at the reserve. The test adds 8. Then the owner pauses, resumes and cancels | The entries: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `RUNNING`, `SATISFIED`, `PAUSED`, `RUNNING`, `CANCELLED`. The destination has 24. No notice |
 | `a_no_notice_for_a_console_job` | A transport of the console, with fuel 0. Then fuel and a resume | The entries: `RUNNING`, `BLOCKED OUT_OF_FUEL`, `RUNNING`, `DONE`. No notice about the job, and no notice to the console |
-| `a_notices_call_no_provider` | A batch of its own. The provider of the server counts its calls. A job of a player goes to `BLOCKED` without fuel, then to `DONE` | Two notices. The provider got zero calls |
+| `a_notices_call_no_provider` | A batch of its own. The provider of the server counts its calls. After the merge it is `CountingModel` of ticket #11: a provider with a model. A job of a player goes to `BLOCKED` without fuel, then to `DONE` | Two notices. The provider got zero calls |
 | `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load`, `t06_impediment_of_an_unknown_kind` | The older tests, with one more check in the `BLOCKED` state | One notice each: "… is blocked: there is no inventory at 't04_destination'.", "… is blocked: there is no inventory at 't04src_source'.", "… is blocked: the quantity of the job is reached, and 54 stay on board.", "… is blocked. Recorded reason: landslide: the floor fell at 1 2 3." |
 | `t11_server_restart`, four phases | The restart test, with the diary | See the table of the runs above. Minecraft saved the diary with the world at the normal stop, and the runtime wrote it at the delivery before the halt |
 
@@ -547,6 +548,8 @@ Changes to the older tests:
 
 - `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load` and `t06_impediment_of_an_unknown_kind`: one more check, the notice of the `BLOCKED` state.
 - `t11_server_restart`: it checks the diary after the restart and at the end.
+
+The merge brought no change of the runtime (`MindRuntime.java`, `RobotApi.java`) and of the Lua modules. Thus the four restart phases were not repeated after it.
 
 ## Increment A — Limits on the model calls
 

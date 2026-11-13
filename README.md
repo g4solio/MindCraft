@@ -94,7 +94,11 @@ No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](
 3. Place a turtle. Give it fuel: put a fuel item in its inventory and run `refuel` in its terminal.
    Do not use the coal of the job as fuel.
 4. Register the two stations. A station is an inventory and the adjacent position where the turtle stops (the dock).
-   The path between the two docks must be free and straight along the axes.
+   The robot does not search a path. At each move it tries the x axis, then z, then y, and it makes the first free move that brings it nearer to the dock.
+   Thus a path works when each of its moves brings the robot nearer to the dock, in the two directions.
+   A straight path and a path with one corner are tested. A stair and more corners are not tested.
+   A path that needs a move away from the dock does not work, for example a way around a wall.
+   In an open space the robot goes along x first. It follows a corridor only where blocks close the other moves.
 
    ```
    /mindcraft station add depot <x y z of the chest> <x y z of the dock>

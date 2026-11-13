@@ -100,11 +100,17 @@ public class MindCraftTests {
 
         /** Only the positions and names. This constructor does not change the world. */
         Rig(GameTestHelper helper, String name, Actor actor, BlockPos origin) {
-            this.source = origin;
-            this.sourceDock = origin.east(1);
-            this.start = origin.east(2);
-            this.destDock = origin.east(4);
-            this.dest = origin.east(5);
+            this(helper, name, actor, origin, origin.east(1), origin.east(2), origin.east(4), origin.east(5));
+        }
+
+        /** A rig with other positions. This constructor does not change the world. */
+        Rig(GameTestHelper helper, String name, Actor actor, BlockPos source, BlockPos sourceDock, BlockPos start,
+            BlockPos destDock, BlockPos dest) {
+            this.source = source;
+            this.sourceDock = sourceDock;
+            this.start = start;
+            this.destDock = destDock;
+            this.dest = dest;
             this.helper = helper;
             this.level = helper.getLevel();
             this.runtime = MindRuntime.get(level.getServer());
@@ -176,6 +182,16 @@ public class MindCraftTests {
 
         void carried(int expected) {
             check(job().carried == expected && job().state.active(), "expected " + expected + " on board, but: " + describe());
+        }
+
+        /** The robot is at a position of the rig, and the job says that the load on board is the expected one. */
+        void at(BlockPos relative, int carried) {
+            RobotApi robot = robot();
+            check(robot != null, "the robot is not running");
+            BlockPos position = robot.turtle.getPosition();
+            check(position.equals(helper.absolutePos(relative)) && job().carried == carried,
+                "expected the robot at " + helper.absolutePos(relative).toShortString() + " with " + carried
+                    + " on board, but it is at " + position.toShortString() + ". " + describe());
         }
 
         Container chest(BlockPos relative) {
@@ -554,6 +570,45 @@ public class MindCraftTests {
                     check(expected.getMessage().contains("newer session"), expected.getMessage());
                 }
                 MindCraft.LOGGER.info("t12_second_session final status:\n{}", rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D28: a path with one corner. Stone walls leave one corridor between the docks.
+     * The robot starts between the corner and the destination dock. It goes over the corner to the source,
+     * then over the corner again to the destination.
+     * Toward the source, the first axis of the move step (x) is walled. Thus the step must try the next axis (z).
+     * <pre>
+     *   z \ x:  0         1      2   3   4   5        6
+     *   0       [source]  dock   .   .   .   corner
+     *   1                 #      #   #   #   turtle
+     *   2                 #      #   #   #   dock     [destination]
+     * </pre>
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_path_with_one_corner(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "corner", ADMIN, new BlockPos(0, 1, 0), new BlockPos(1, 1, 0), new BlockPos(5, 1, 1),
+            new BlockPos(5, 1, 2), new BlockPos(6, 1, 2));
+        BlockPos corner = new BlockPos(5, 1, 0);
+        List<BlockPos> walls = new ArrayList<>();
+        for (int x = 1; x <= 4; x++) {
+            walls.add(new BlockPos(x, 1, 1));
+            walls.add(new BlockPos(x, 1, 2));
+        }
+        walls.forEach(wall -> helper.setBlock(wall, Blocks.STONE));
+        rig.build(64, 1000);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            // Toward the source: nothing on board yet.
+            .thenWaitUntil(() -> rig.at(corner, 0))
+            // Toward the destination: the load of the source on board.
+            .thenWaitUntil(() -> rig.at(corner, 24))
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                rig.assertTransferred(40, 24);
+                rig.at(rig.destDock, 0);
+                walls.forEach(wall -> helper.assertBlockPresent(Blocks.STONE, wall));
             })
             .thenSucceed();
     }

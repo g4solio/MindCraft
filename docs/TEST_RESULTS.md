@@ -387,6 +387,8 @@ Rig: the ordinary rig of one robot. `a_change_by_words` has 30 coal in the sourc
 | Red 3 | The tests of the resume, the cancellation and the screen | 56 of 58. `a_resume_and_cancel_by_words` and `a_confirmation_of_older_values` failed as expected: "I cannot resume a job …", "I cannot cancel a job …". `a_change_through_the_view` passed at its first run: after Green 2 the screen already showed the text of each proposal. Thus no run shows it failing |
 | Green 3 | The code of ticket #4 | **58 of 58**. Server line: `All 58 required tests passed :)` |
 | `stop`, `check`, `crash`, `check-crash` | The code of Green 3. The runtime has the two new check functions | Passed, each phase. `check`: the record says `RUNNING` with 24 on board, then `DONE`, source 40, destination 24. `check-crash`: `RECOVERY` ("the world is older than the record of this job"), then `DONE` after `resume`, delivered 24, "1 recovery". After the four phases the data folder has no temporary file |
+| After the merge | The code of ticket #4, merged with tickets #8 and #11 of increment A. One conflict in `MindRuntime.control`: the pause of ticket #8 now writes its state in `control`, with the flag of a request of the owner, and the check stays in `checkControl` | **70 of 70**. Server line: `All 70 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash`, after the merge | The merged code | Passed, each phase, with the same results as above. After the four phases the data folder has no temporary file |
 
 | Test | What it does | Observed result |
 | --- | --- | --- |

@@ -15,3 +15,17 @@ The plan of the increments after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS
 - The test `gradlew runGameTestServer -Plive` calls the real Claude service with the key of the project owner. It costs money. Run it only with the consent of the project owner.
 - Never write an API key in a file, in a visible command or in a message.
 - Keep the repository tidy: no local paths, no personal data and no generated files in a commit.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are GitHub issues of `g4solio/MindCraft`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels, with their default names. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. The decision log is `docs/DECISIONS.md` and the vocabulary is in the brief. See `docs/agents/domain.md`.

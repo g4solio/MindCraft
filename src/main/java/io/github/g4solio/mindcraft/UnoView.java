@@ -37,7 +37,7 @@ final class UnoView {
         long places = runtime.places.stream().filter(place -> actor.id().equals(place.owner())).count();
         if (places > 0) widgets.add(text("Places of the base with a projector: " + places, "muted"));
         widgets.add(text("Uno › " + Uno.said(actor), "uno"));
-        provider(widgets, actor);
+        providerLines(widgets, actor);
 
         // "Confirm" has one meaning only: the proposal is in words next to the button, and the action names that proposal.
         // The last sentence of Uno can be about something else, for example a report.
@@ -52,7 +52,8 @@ final class UnoView {
 
         JsonArray buttons = new JsonArray();
         buttons.add(button("ask", "Send"));
-        if (proposal != null) buttons.add(button("confirm:" + proposal.number(), "Confirm"));
+        // The label names the proposal too (ticket #4).
+        if (proposal != null) buttons.add(button("confirm:" + proposal.number(), "Confirm #" + proposal.number()));
         buttons.add(button("report", "Report"));
         widgets.add(row(buttons));
 
@@ -67,7 +68,7 @@ final class UnoView {
      * The counter is on the screen of each player whose requests count: an operator, with a model on the server. Also at the limit.
      * The player must know whether the text of a request leaves the server.
      */
-    private static void provider(JsonArray widgets, Actor actor) {
+    private static void providerLines(JsonArray widgets, Actor actor) {
         Uno.Provider server = Uno.provider;
         Uno.Route route = Uno.route(actor, server);
         if (route == Uno.Route.MODEL || route == Uno.Route.AT_LIMIT) {
@@ -123,12 +124,11 @@ final class UnoView {
     /**
      * The actor opens a contact point: the use of the tablet or the click on a projector (D30). A new view after an action is not an opening.
      * Uno says the summary of what needed attention since the last opening of the actor. It calls no provider.
-     * With nothing to say, Uno keeps its sentence. Returns the view.
+     * With nothing to say, Uno keeps its sentence, unless that sentence is the summary of an earlier opening. Returns the view.
      */
     static String open(MindRuntime runtime, Actor actor, long now) {
-        long last = runtime.open(actor, now);
-        String summary = Notices.summary(runtime.diary(actor), runtime.forgotten(actor), last, now);
-        if (summary != null) Uno.say(actor, summary);
+        long since = runtime.recordOpening(actor);
+        Uno.sayAtOpening(actor, Notices.summary(runtime.diary(actor), runtime.forgotten(actor), since, now));
         return build(runtime, actor, now);
     }
 

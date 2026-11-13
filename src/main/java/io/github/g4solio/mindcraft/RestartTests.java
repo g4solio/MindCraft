@@ -19,7 +19,7 @@ import static io.github.g4solio.mindcraft.MindCraftTests.check;
  *   gradlew runGameTestServer -PrestartPhase=stop          start a job, then stop the server normally during the transport
  *   gradlew runGameTestServer -PrestartPhase=check         start the server on the saved world, expect a normal continuation
  *
- *   gradlew runGameTestServer -PrestartPhase=crash         start a job, save, deliver, then halt the process without a save
+ *   gradlew runGameTestServer -PrestartPhase=crash         start a job, save, deliver, open the screen, then halt the process without a save
  *   gradlew runGameTestServer -PrestartPhase=check-crash   start the server on the saved world, expect a recovery state
  * </pre>
  * Forge selects game tests by the namespace of their template. Thus this class has its own namespace and template.
@@ -62,6 +62,14 @@ public class RestartTests {
             sequence
                 .thenExecute(() -> check(rig.level.getServer().saveEverything(true, true, true), "the save failed"))
                 .thenWaitUntil(() -> rig.state(State.DONE))
+                .thenExecute(() -> {
+                    // Finding P1 of the code review: a second opening after the save of the world. Its summary has the delivery.
+                    // The write puts it on the disk, as the next transfer of any robot does. Thus the record holds an opening later than the world.
+                    UnoView.open(rig.runtime, OPERATOR, rig.level.getGameTime());
+                    String done = "\n<age>: " + MindCraftTests.subject(rig, rig.job()) + " is done: 24 delivered.";
+                    check(MindCraftTests.ageless(Uno.said(OPERATOR)).equals(MindCraftTests.SINCE + done), "the opening after the save: " + Uno.said(OPERATOR));
+                    rig.runtime.flush(rig.level.getServer());
+                })
                 .thenIdle(300)
                 .thenExecute(() -> {
                     MindCraft.LOGGER.info("t11_server_restart status at the halt, game time {}:\n{}", rig.level.getGameTime(), rig.describe());
@@ -116,13 +124,15 @@ public class RestartTests {
 
                 // Also D30: the summary works after a restart. The last opening of the operator is from the first run.
                 // Thus the summary has the events after it, and its first line is not the line of a first opening.
+                // After the crash that opening is later than the world, and its summary had the first delivery (finding P1 of the code review).
+                // The summary has the recovery that the load wrote at an earlier game time, and the delivery after it.
                 UnoView.open(rig.runtime, OPERATOR, rig.level.getGameTime());
                 MindCraft.LOGGER.info("t11_server_restart summary after the restart: {}", Uno.said(OPERATOR));
                 String done = "\n<age>: " + MindCraftTests.subject(rig, rig.job()) + " is done: 24 delivered.";
                 String recovery = "\n<age>: " + MindCraftTests.subject(rig, rig.job())
                     + " needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job.";
                 String summary = MindCraftTests.ageless(Uno.said(OPERATOR));
-                check(summary.equals(MindCraftTests.SINCE + (afterCrash ? done + recovery + done : done)), "the summary after the restart: " + Uno.said(OPERATOR));
+                check(summary.equals(MindCraftTests.SINCE + (afterCrash ? recovery + done : done)), "the summary after the restart: " + Uno.said(OPERATOR));
             })
             .thenSucceed();
     }

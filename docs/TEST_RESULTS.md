@@ -435,7 +435,7 @@ No automatic test stops the process during a write. The protection against such 
 | --- | --- | --- | --- |
 | Normal run | In the game, automatic | **43 of 43** | 92 transfers wrote the record through the new write. No write error in the log. After the run the data folder contains `mindcraft.dat` and no temporary file |
 | `stop`, `check`, `crash`, `check-crash` | In the game, automatic | Passed, each phase | The same results as before the change. `check`: the record says `RUNNING` with 24 on board, then `DONE`, source 40, destination 24. `check-crash`: the record written at the delivery loads, the job goes to `RECOVERY` ("the world is older than the record of this job"), then `DONE` after `resume`. After each phase the data folder contains no temporary file |
-| `stop`, then `check` with a failure of the write | In the game, automatic, with a condition built by hand | Passed | See below |
+| `stop`, then `check` with a failure of the write | Observed in one manual run. Not a test of the repository, and not one of the types above: a condition built by hand around an automatic phase | Passed | See below |
 
 The failure of the write, condition built by hand: after the `stop` phase, a directory with one file inside was put at the place of `mindcraft.dat.tmp`. Thus the runtime cannot write the temporary file. Then the `check` phase ran.
 
@@ -737,6 +737,76 @@ Changes to the older tests:
 
 - `t11_server_restart`: in the first run an operator opens the screen after the start of the job. At the end of the second run the operator opens again and the test checks the summary.
 - The function that names a job in a notice (`subject`) is now visible to the restart test.
+
+## Increment A — corrections of the code review
+
+The code review of the branch `increment-a` (spec #1), on 2026-11-13. It found five defects against the spec (P1, P2, P3, P4, P6), two documents that broke the standard of the repository (S1, S2), and code smells. See D29.3, D30, D31, D34 and D37.
+The tests of this section are in the game and automatic, unless a row says otherwise. No test called the real Claude service.
+The runs of this section are not numbered in the table "Runs".
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new and changed tests, with the code of `increment-a` before the corrections | 76 of 81. The five tests of the defects failed as expected. Server line: `5 required tests failed :(`. The rewritten `a_notices_call_no_provider` passed: it is a change of a test, not of the code |
+| Red, `crash` and `check-crash` | The changed restart test, with the code before the corrections | `crash` passed. `check-crash` failed as expected: "the summary after the restart: Since you last opened this screen: 0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." The `RECOVERY` of the load is missing |
+| Green | The corrections | **81 of 81**. Server line: `All 81 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash` | The code of Green | Passed, each phase. See below |
+| Final | The code of Green, and one more check in `a_diary_of_a_job`: a diary without the numbers, as before the corrections, gets its numbers at the load. The check was added with the code: it has no red run | **81 of 81**. Server line: `All 81 required tests passed :)` |
+
+| Test | Finding | What it does | Red run | Green run |
+| --- | --- | --- | --- | --- |
+| `a_summary_after_the_time_went_back` | P1 | Built artificially, in one tick. A job waits. A long wait at a moment later than the world. An opening at a moment later than that entry. `RECOVERY` at the time of the world, as the load of the record writes it. Then two openings at the time of the world | Failed. The opening after the "crash" kept the first summary: the `RECOVERY` was missing. The second opening showed the long wait again, "At an unknown time" | Passed. The opening after the "crash": "Since you last opened this screen:" and "0 s ago: … needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job." The second opening: "Tell me what you need." |
+| `a_summary_at_an_opening` | P2 | Changed: a second click on the projector at once, after the click with a summary | Failed: "a second opening kept the summary of the first: Since you last opened this screen: 0 s ago: … is blocked: the robot has no fuel." | Passed: "Tell me what you need." The provider got zero calls |
+| `a_resume_proposal_holds_the_state` | P3 | A transport with 24 on board. The owner pauses it. "Resume the job of a_resume_state_destination" through the fixed rules. Then the test empties the robot and the owner resumes with the button: `RECOVERY`. Then `/uno confirm` | Failed: "I resume job 52 on robot #20." The confirmation accepted the observed load | Passed. The proposal: "Proposal: resume job … (carry …). I have done nothing yet. …", without the sentence about a check. The confirmation: "I cannot resume the job: Job … changed: its state is RECOVERY now, not PAUSED. Read it again." The job stays `RECOVERY`, 0 recoveries, 24 on board in the record |
+| `a_change_through_the_view` | P4 | Changed: one more check of the label of the button | Failed: `{"action":"confirm:9","label":"Confirm"}` | Passed: the label is "Confirm #N" with the number of the action, for example `{"action":"confirm:8","label":"Confirm #8"}` |
+| `a_notice_for_a_resume_by_an_operator` | P6 | The rig of `a_no_notice_for_a_resume_that_completes_the_job`: the destination accepts 4, then the robot loses the rest. An operator lowers the quantity to 4 and resumes the job of the player | Failed: the player had only the notice of `RECOVERY` | Passed. Two notices to the player: "… needs a check: … the robot holds 0, the record says 20." and "… is done: 4 delivered." The operator got none |
+
+The four restart phases with the code of Green:
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed |
+| `check` | Passed. The diary after the restart is `RUNNING`, at the end `RUNNING, DONE`. Source 40, destination 24, robot 0. The summary: "Since you last opened this screen:" and "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." |
+| `crash` | The test halted the process at the game time 420, as expected. The opening after the delivery gave "Since you last opened this screen:" and the delivery |
+| `check-crash` | Passed. The record loads at the game time 83. The diary after the restart is `RUNNING, DONE, RECOVERY`, at the end `RUNNING, DONE, RECOVERY, RUNNING, DONE`. The summary: "Since you last opened this screen:", "2 s ago: … needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job." and "0 s ago: … is done: 24 delivered." |
+
+After the four phases the data folder has no temporary file.
+
+Conditions built artificially:
+
+- **`a_summary_after_the_time_went_back`:** the test gives the moments of the openings and of the check of the long wait as parameters. It writes the `RECOVERY` with the function that the load of the record calls (`MindRuntime.set`). It does not stop the server.
+- **The `crash` phase:** after the delivery, the operator opens the screen, and the test writes the record to the disk. In the game the next transfer of any robot writes the record. Thus the record on the disk holds an opening later than the saved world.
+- **`a_notices_call_no_provider`:** the long wait, the block and the `RECOVERY` occur in one step of the test, through the functions that call them in the game: `MindRuntime.checkWait`, the Lua function `impediment` and `MindRuntime.set`. The test moves the start of the wait back by 6000 ticks.
+
+Changes to the older tests:
+
+- `a_summary_at_an_opening`: a second click at once, and its check. The provider of the server is the counting provider only inside each opening and each action of the screen (finding S6).
+- `a_notices_call_no_provider`: rewritten (finding S6). Before, it changed the provider of the server for many ticks, without a `finally`: a failure left the counting provider on the server, and `a_screen_model_lines` failed too. Now each change of the provider is inside one step. The notices are a long wait, `BLOCKED` and `RECOVERY`. Before, they were `BLOCKED`, `DONE` and a long wait, from the robot and from the server tick.
+- `a_change_through_the_view`: the check of the label.
+- `a_diary_limit`: it also checks the number of the newest removed entry.
+- `a_summary_after_a_save_and_a_load`: the saved openings have the key "openingEntries".
+- `t11_server_restart`: in the `crash` phase a second opening after the delivery, and the write of the record. In `check-crash` the summary after the restart has the `RECOVERY` and the delivery after it, not the delivery of the first run: the second opening of the first run had it.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The refactoring of the smells changed no sentence. One place turns a target that is not valid into the sentence of Uno (S4). One function names a job, "job N on robot #R" (S5). The search result has no second robot number (S8). New names: `Notices.warn`, `UnoView.providerLines`, `RuleProvider.jobAction`, `Uno.Session.pending`, `MindRuntime.recordOpening`, the parameters `before` and `after` (S9). The confirmation of a change uses the job that `update` returns (S11) | `Uno.java`, `Notices.java`, `UnoView.java`, `MindRuntime.java` | The tests of D29 check the sentences exactly. They passed in the green run |
+| A request of an operator to pause or to cancel the job of a player gives no notice: the attention rule does not select `PAUSED` and `CANCELLED` | `Notices.selected` | No test builds it |
+| The type of the run with a failure of the write (ticket #7) is now "observed in one manual run" (finding S1). D34 describes the obstacle before and after ticket #5 (finding S2) | `TEST_RESULTS.md`, `DECISIONS.md` | |
+
+Smells of the review without a change. A change was not small, or did not make the code shorter:
+
+- S3, four switches from a cause to a sentence: the voices differ on purpose (D30). One switch with four voices is not shorter.
+- S7, actions as strings: an enum needs a change of the runtime, of the commands and of the actions of the screen.
+- S8, the 16 fields of a diary entry: the entry copies the job on purpose (D31). A shorter save and load needs a codec of its own.
+- S10, the many reasons of change of `MindRuntime`: a split into new files is out of the scope of these corrections.
+- S11, the search of the job in Uno: it holds the sentences of D29.2. A walk in the runtime adds a method and saves no line.
+
+Not covered:
+
+- The button "Confirm #N" in a client: its width with a number of two or three digits.
+- A real crash with a job of a player: the restart test has a job of the console. The summary of the operator shows its events.
+- A whole record of the format of increment A before the corrections, from a real world. Such a record exists only if somebody played the branch `increment-a` before the corrections. Its load gives numbers to the entries, in their order: `a_diary_of_a_job` checks this on a copy. It ignores the openings of that record, saved under the key "openings": the next opening of each player is a first opening. That part is a code examination.
 
 ## Manual test in the game
 

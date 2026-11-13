@@ -25,6 +25,7 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.GameTestSequence;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -1817,6 +1818,8 @@ public class MindCraftTests {
                 MindCraft.LOGGER.info("a_change_through_the_view: {}", view.get());
                 button[0] = action(view.get(), "confirm");
                 check(button[0].equals("confirm:" + Uno.proposal(player).number()), button[0]);
+                // The label names the number of the proposal too (ticket #4, finding P4 of the code review).
+                check(view.get().contains("{\"action\":\"" + button[0] + "\",\"label\":\"Confirm #" + Uno.proposal(player).number() + "\"}"), view.get());
                 check(view.get().contains("Waiting for your confirmation: change job " + rig.job().id + " on robot #" + rig.id
                     + " (carry minecraft:coal from '" + rig.from + "' to '" + rig.to + "'). Quantity to carry: 24, unchanged. Reserve to leave in '"
                     + rig.from + "': from 0 to 5."), view.get());
@@ -2543,6 +2546,14 @@ public class MindCraftTests {
         }
     }
 
+    /** The same, for an action without a result. */
+    private static void withServerProvider(Uno.Provider provider, Runnable action) {
+        withServerProvider(provider, () -> {
+            action.run();
+            return null;
+        });
+    }
+
     /**
      * T16: the owner lowers the quantity of a transport while the load is on board.
      * The robot delivers the new quantity only. The rest stays on board and the job says so. The owner decides.
@@ -3026,6 +3037,12 @@ public class MindCraftTests {
 
                 CompoundTag saved = rig.runtime.save(new CompoundTag());
                 check(MindRuntime.load(saved).diary(ADMIN).equals(rig.runtime.diary(ADMIN)), "the loaded diary is different");
+                // A diary of the format before the numbers of the entries: the load gives the numbers in the order of the diary.
+                CompoundTag unnumbered = saved.copy();
+                unnumbered.remove("nextEntry");
+                unnumbered.getList("diary", Tag.TAG_COMPOUND).forEach(entry -> ((CompoundTag) entry).remove("number"));
+                List<Entry> older = MindRuntime.load(unnumbered).diary(ADMIN);
+                for (int i = 0; i < older.size(); i++) check(older.get(i).number() == i, "the numbers of an older diary: " + older.get(i));
                 saved.remove("diary");
                 check(MindRuntime.load(saved).diary(ADMIN).isEmpty(), "a record of an older version loads with entries");
             })
@@ -3057,7 +3074,8 @@ public class MindCraftTests {
                 List<Entry> kept = rig.runtime.diary(player);
                 check(kept.size() == 200, "the owner has " + kept.size() + " entries");
                 check(kept.get(0).state() == State.PAUSED && kept.get(199).state() == State.RUNNING, kept.get(0) + " ... " + kept.get(199));
-                check(rig.runtime.forgotten(player).equals(new MindRuntime.Forgotten(21, now)), String.valueOf(rig.runtime.forgotten(player)));
+                MindRuntime.Forgotten removed = rig.runtime.forgotten(player);
+                check(removed.entries() == 21 && removed.until() == now && removed.newest() == kept.get(0).number() - 1, String.valueOf(removed));
                 check(states(rig.runtime, other, first.id).equals(List.of("RUNNING", "CANCELLED")), states(rig.runtime, other, first.id).toString());
                 check(rig.runtime.forgotten(other).entries() == 0, String.valueOf(rig.runtime.forgotten(other)));
 
@@ -3241,43 +3259,37 @@ public class MindCraftTests {
     }
 
     /**
-     * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job goes to BLOCKED and to DONE,
-     * and while a second job waits for 5 minutes.
-     * The test moves the start of that wait back by 6000 ticks: thus the check of the server tick finds a long wait without a wait of 5 minutes.
-     * It is a provider with a model. It gives the answers of the provider of before, thus a failure of this test changes no answer.
+     * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job of a player waits for 5 minutes,
+     * goes to BLOCKED and goes to RECOVERY. In one step, each change goes through the function that calls it in the game:
+     * the check of the long wait of the server tick, the impediment of a Lua module, and the state change of the runtime.
+     * The test changes the provider of the server only inside that step (withServerProvider), also when a check fails.
+     * The source is empty: the job waits. The test moves the start of the wait back by 6000 ticks: thus the check finds a long wait.
+     * It is a provider with a model. It gives the answers of the provider of before.
      * It has its own batch: the provider of the server is a value of the whole server.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "notice_provider")
     public static void a_notices_call_no_provider(GameTestHelper helper) {
         listen();
         Actor player = player("a_notice_provider");
-        Rig rig = new Rig(helper, "a_notice_provider", 64, 0, player);
-        Uno.Provider before = Uno.provider;
-        CountingModel model = new CountingModel(before);
+        Rig rig = new Rig(helper, "a_notice_provider", 0, 1000, player);
+        CountingModel model = new CountingModel(Uno.provider);
         rig.begin()
-            .thenExecute(() -> {
-                Uno.provider = model;
-                rig.startJob(24, 0);
-            })
-            .thenWaitUntil(() -> rig.state(State.BLOCKED))
-            .thenExecute(() -> {
-                rig.robot().turtle.setFuelLevel(1000);
-                rig.runtime.control(player, rig.id, "resume");
-            })
-            .thenWaitUntil(() -> rig.state(State.DONE))
-            .thenExecute(() -> {
-                // A second job: the source is empty, thus the job waits.
-                rig.chest(rig.source).clearContent();
-                rig.startJob(8, 0);
-            })
+            .thenExecute(() -> rig.startJob(8, 0))
             .thenWaitUntil(() -> rig.state(State.WAITING))
-            .thenExecute(() -> rig.job().waitingSince -= MindRuntime.LONG_WAIT)
-            .thenWaitUntil(() -> check(notices(player).size() == 3, notices(player).toString()))
             .thenExecute(() -> {
-                Uno.provider = before;
-                rig.runtime.control(player, rig.id, "cancel");
-                check(notices(player).get(2).equals(longWait(rig, rig.job()) + "nothing remains in '" + rig.from + "'."), notices(player).toString());
+                Job job = rig.job();
+                withServerProvider(model, () -> {
+                    job.waitingSince -= MindRuntime.LONG_WAIT;
+                    rig.runtime.checkWait(job, rig.level.getGameTime());
+                    impediment(rig, MindRuntime.NO_FUEL, "the robot cannot move and has no fuel item");
+                    rig.runtime.set(job, State.RECOVERY, "the robot holds 0, the record says 0");
+                });
+                check(notices(player).equals(List.of(longWait(rig, job) + "nothing remains in '" + rig.from + "'.",
+                    subject(rig, job) + " is blocked: the robot has no fuel.",
+                    subject(rig, job) + " needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 0.")),
+                    notices(player).toString());
                 check(model.calls.get() == 0, "the provider got " + model.calls.get() + " calls");
+                rig.runtime.control(player, rig.id, "cancel");
             })
             .thenSucceed();
     }
@@ -3459,9 +3471,11 @@ public class MindCraftTests {
      * D30, spec #1 "The summary": the use of the tablet and the click on a projector are an opening.
      * At an opening Uno says the sentences of the selected entries since the last opening of that player, the oldest first, each with its age.
      * The first opening in a world covers the whole diary of the player. The next answer of Uno replaces the summary.
-     * A second opening without a new event gives no summary: Uno keeps its sentence. A new view after an action of the screen is not an opening.
+     * A second opening without a new event gives no summary: Uno keeps its sentence, if that sentence is not a summary.
+     * A summary of an earlier opening becomes "Tell me what you need.": its ages are old (ticket #10, finding P2 of the code review).
+     * A new view after an action of the screen is not an opening.
      * The test calls the methods of the tablet and of the projector with a fake player of Forge: a server player without a client.
-     * The provider of the server counts its calls: the summary calls none (D33).
+     * During each opening and each action of the screen the provider of the server counts its calls: the summary calls none (D33).
      * It has its own batch: the provider of the server is a value of the whole server.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "summary_provider")
@@ -3473,17 +3487,15 @@ public class MindCraftTests {
         MinecraftServer server = rig.level.getServer();
         BlockPos relative = new BlockPos(3, 1, 0), projector = helper.absolutePos(relative);
         helper.setBlock(relative, MindCraft.PROJECTOR.get());
-        Runnable tablet = () -> MindCraft.TABLET.get().use(rig.level, fake, InteractionHand.MAIN_HAND);
-        Runnable click = () -> rig.level.getBlockState(projector).use(rig.level, fake, InteractionHand.MAIN_HAND,
-            new BlockHitResult(Vec3.atCenterOf(projector), Direction.UP, projector, false));
-        Uno.Provider before = Uno.provider;
-        CountingModel model = new CountingModel(before);
+        CountingModel model = new CountingModel(Uno.provider);
+        Runnable tablet = () -> withServerProvider(model, () -> MindCraft.TABLET.get().use(rig.level, fake, InteractionHand.MAIN_HAND));
+        Runnable click = () -> withServerProvider(model, () -> rig.level.getBlockState(projector).use(rig.level, fake, InteractionHand.MAIN_HAND,
+            new BlockHitResult(Vec3.atCenterOf(projector), Direction.UP, projector, false)));
         Job[] jobs = new Job[2];
         String[] report = new String[1];
         rig.begin()
             .thenExecute(() -> {
                 check(!player.admin(), "the fake player is an operator");
-                Uno.provider = model;
                 jobs[0] = rig.startJob(24, 0);
             })
             .thenWaitUntil(() -> rig.state(State.BLOCKED))
@@ -3502,7 +3514,7 @@ public class MindCraftTests {
                 MindCraft.LOGGER.info("a_summary_at_an_opening, the first opening: {}", Uno.said(player));
                 String voice = voice(UnoView.build(rig.runtime, player, rig.level.getGameTime()));
                 check(voice.equals("Uno › " + Uno.said(player)), "the view does not show the summary: " + voice);
-                UnoView.act(server, player, "report", "{}");
+                withServerProvider(model, () -> UnoView.act(server, player, "report", "{}"));
                 report[0] = Uno.said(player);
                 check(report[0].startsWith("Job " + jobs[0].id + ", robot #" + rig.id + ":"), "the report did not replace the summary: " + report[0]);
                 click.run();
@@ -3513,13 +3525,15 @@ public class MindCraftTests {
             .thenWaitUntil(() -> rig.state(State.BLOCKED))
             .thenExecute(() -> {
                 // The screen asks for a new view each second. That view is not an opening.
-                UnoView.act(server, player, "refresh", "{}");
-                UnoView.build(rig.runtime, player, rig.level.getGameTime());
+                withServerProvider(model, () -> UnoView.act(server, player, "refresh", "{}"));
+                withServerProvider(model, () -> UnoView.build(rig.runtime, player, rig.level.getGameTime()));
                 check(Uno.said(player).equals(report[0]), "a new view after an action gave a summary: " + Uno.said(player));
                 click.run();
                 String since = SINCE + "\n<age>: " + subject(rig, jobs[1]) + " is blocked: the robot has no fuel.";
                 check(ageless(Uno.said(player)).equals(since), "the opening with the projector: " + Uno.said(player));
-                Uno.provider = before;
+                // A second click at once: nothing is new. The summary of the click before does not stay with its old ages.
+                click.run();
+                check(Uno.said(player).equals("Tell me what you need."), "a second opening kept the summary of the first: " + Uno.said(player));
                 check(model.calls.get() == 0, "the provider got " + model.calls.get() + " calls");
                 rig.runtime.control(player, rig.id, "cancel");
             })
@@ -3615,9 +3629,9 @@ public class MindCraftTests {
     }
 
     /**
-     * Spec #1: the time of the last opening of each player is saved with the world. After a save and a load the summary is the same.
+     * Spec #1: the last opening of each player is saved with the world. After a save and a load the summary is the same.
      * One event before the first opening, one event after it. The summary of the loaded copy has only the event after the opening.
-     * A record of an older version has no time of an opening: its summary covers the whole diary.
+     * A record of an older version has no opening: its summary covers the whole diary.
      * The moment of the opening is a parameter: two days later.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
@@ -3643,7 +3657,7 @@ public class MindCraftTests {
                 String loaded = Uno.said(player);
                 UnoView.open(rig.runtime, player, later);
                 check(Uno.said(player).equals(SINCE + late) && loaded.equals(Uno.said(player)), "running: " + Uno.said(player) + " loaded: " + loaded);
-                saved.remove("openings");
+                saved.remove("openingEntries");
                 UnoView.open(MindRuntime.load(saved), player, later);
                 check(Uno.said(player).equals(FIRST + early + late), "a record of an older version: " + Uno.said(player));
                 rig.runtime.control(player, rig.id, "cancel");
@@ -3668,6 +3682,109 @@ public class MindCraftTests {
                 UnoView.open(rig.runtime, player, check + 2 * 60 * 20);
                 check(Uno.said(player).equals(FIRST + "\n2 min ago: " + longWait(rig, rig.job()) + "nothing remains in '" + rig.from + "'."), Uno.said(player));
                 rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    // --- Increment A: corrections of the code review -----------------------------------------------------------------
+
+    /**
+     * Finding P1 of the code review, story 40: the game time goes back after a crash (D08.1). The record of the runtime can hold
+     * an opening and diary entries that are later than the world. The summary must still show each event, and only one time.
+     * Built artificially, in one tick. The moments of the openings and of the check of the long wait are parameters:
+     * <ol>
+     * <li>A long wait at a moment later than the world: an entry that the record kept from before a crash.</li>
+     * <li>An opening at a moment later than that entry: an opening that the record kept from before a crash.</li>
+     * <li>RECOVERY at the time of the world, as the load of the record writes it.</li>
+     * <li>An opening at the time of the world. The summary has the RECOVERY. It does not have the long wait again.</li>
+     * <li>A second opening at the same moment. Nothing is new: the long wait does not come back.</li>
+     * </ol>
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_summary_after_the_time_went_back(GameTestHelper helper) {
+        Actor player = player("a_summary_back");
+        Rig rig = new Rig(helper, "a_summary_back", 0, 1000, player);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                long now = rig.level.getGameTime();
+                Job job = rig.job();
+                List<String> wrong = new ArrayList<>();
+                rig.runtime.checkWait(job, job.waitingSince + MindRuntime.LONG_WAIT);
+                UnoView.open(rig.runtime, player, now + 10_000);
+                String wait = FIRST + "\n<age>: " + longWait(rig, job) + "nothing remains in '" + rig.from + "'.";
+                if (!ageless(Uno.said(player)).equals(wait)) wrong.add("the opening before the crash: " + Uno.said(player));
+                rig.runtime.set(job, State.RECOVERY, "the world is older than the record of this job");
+                UnoView.open(rig.runtime, player, now);
+                String recovery = SINCE + "\n0 s ago: " + subject(rig, job)
+                    + " needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job.";
+                if (!Uno.said(player).equals(recovery)) wrong.add("the opening after the crash: " + Uno.said(player));
+                UnoView.open(rig.runtime, player, now);
+                if (!Uno.said(player).equals("Tell me what you need.")) wrong.add("the second opening after the crash: " + Uno.said(player));
+                check(wrong.isEmpty(), String.join("\n", wrong));
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Finding P3 of the code review, story 12: a resume proposal holds the state of the job. The job is PAUSED at the proposal:
+     * its text says nothing about a check. Then the owner resumes with the button, and the robot finds no load: RECOVERY.
+     * The confirmation of the old proposal must not accept the observed load. Its text did not say so.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_resume_proposal_holds_the_state(GameTestHelper helper) {
+        Actor player = player("a_resume_state");
+        Rig rig = new Rig(helper, "a_resume_state", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> rig.runtime.control(player, rig.id, "pause"));
+        sequence = ask(sequence, server, player, "Resume the job of " + rig.to, new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals("Proposal: resume job " + rig.job().id + " on robot #" + rig.id + " (carry minecraft:coal from '"
+                    + rig.from + "' to '" + rig.to + "'). I have done nothing yet. Confirm with /uno confirm."), answers.get(0));
+                rig.robot().turtle.getInventory().clearContent();
+                rig.runtime.control(player, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.RECOVERY))
+            .thenExecute(() -> {
+                String confirmed = Uno.confirm(server, player);
+                check(confirmed.equals("I cannot resume the job: Job " + rig.job().id + " changed: its state is RECOVERY now, not PAUSED. Read it again."),
+                    confirmed);
+                check(rig.job().state == State.RECOVERY && rig.job().recoveries == 0 && rig.job().carried == 24, rig.describe());
+                rig.runtime.control(player, rig.id, "cancel");
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Finding P6 of the code review, spec #1: only a pause, a resume and a cancellation by the owner give no notice.
+     * An operator resumes the job of a player, and the resume completes the job: the owner gets the notice of DONE. The operator gets none.
+     * The rig of a_no_notice_for_a_resume_that_completes_the_job: the destination accepts 4, then the robot loses the rest of its load.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_notice_for_a_resume_by_an_operator(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_notice_by_operator");
+        Actor operator = operator("a_notice_by_operator_op");
+        Rig rig = new Rig(helper, "a_notice_by_operator", 64, 1000, player);
+        almostFull(rig);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 4, rig.describe()))
+            .thenExecute(() -> rig.robot().turtle.getInventory().clearContent())
+            .thenWaitUntil(() -> rig.state(State.RECOVERY))
+            .thenExecute(() -> {
+                rig.runtime.update(operator, rig.id, rig.job().id, rig.job().revision, 4, 0);
+                rig.runtime.control(operator, rig.id, "resume");
+                rig.state(State.DONE);
+                String recovery = subject(rig, rig.job()) + " needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 20.";
+                check(notices(player).equals(List.of(recovery, subject(rig, rig.job()) + " is done: 4 delivered.")), notices(player).toString());
+                check(notices(operator).isEmpty(), "the operator got a notice: " + notices(operator));
             })
             .thenSucceed();
     }

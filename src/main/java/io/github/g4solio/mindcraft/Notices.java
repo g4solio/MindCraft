@@ -50,13 +50,23 @@ public final class Notices {
             && (entry.longWait() || entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
     }
 
+    /** How Uno names a job in a sentence: "job 3 on robot #7". */
+    static String job(int id, int robot) {
+        return "job " + id + " on robot #" + robot;
+    }
+
+    /** The text with a capital first letter, for the start of a sentence. */
+    static String capital(String text) {
+        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
+    }
+
     /** The sentence of a selected entry, from a fixed template for its state and its cause. It names the job, the robot and the cause. */
     static String sentence(Entry entry) {
-        String job = "Job " + entry.job() + " on robot #" + entry.robot() + " (" + MindRuntime.itemName(entry.item())
+        String subject = capital(job(entry.job(), entry.robot())) + " (" + MindRuntime.itemName(entry.item())
             + " from '" + entry.from() + "' to '" + entry.to() + "')";
-        if (entry.longWait()) return job + longWait(entry);
+        if (entry.longWait()) return subject + longWait(entry);
         return switch (entry.state()) {
-            case BLOCKED -> job + switch (entry.cause()) {
+            case BLOCKED -> subject + switch (entry.cause()) {
                 case OUT_OF_FUEL -> " is blocked: the robot has no fuel.";
                 case SOURCE_NO_INVENTORY -> " is blocked: there is no inventory at '" + entry.from() + "'.";
                 case DESTINATION_NO_INVENTORY -> " is blocked: there is no inventory at '" + entry.to() + "'.";
@@ -64,8 +74,8 @@ public final class Notices {
                 // A module error, an impediment of an unknown kind, or a record of an older version. The recorded text is all that Uno knows.
                 default -> " is blocked. Recorded reason: " + entry.reason() + ".";
             };
-            case RECOVERY -> job + " needs a check: I cannot say how it went. Recorded reason: " + entry.reason() + ".";
-            case DONE -> job + " is done: " + entry.delivered() + " delivered.";
+            case RECOVERY -> subject + " needs a check: I cannot say how it went. Recorded reason: " + entry.reason() + ".";
+            case DONE -> subject + " is done: " + entry.delivered() + " delivered.";
             default -> throw new IllegalArgumentException("No notice for the state " + entry.state());
         };
     }
@@ -87,8 +97,11 @@ public final class Notices {
         };
     }
 
-    /** The runtime calls this for each new entry of the diary. A job of the console has no player to warn. */
-    static void entry(MinecraftServer server, Entry entry) {
+    /**
+     * The runtime calls this for each new entry of the diary. It warns the owner if the attention rule selects the entry.
+     * A job of the console has no player to warn.
+     */
+    static void warn(MinecraftServer server, Entry entry) {
         if (!selected(entry) || entry.owner().equals(Util.NIL_UUID)) return;
         exit.send(server, entry.owner(), sentence(entry));
     }
@@ -97,22 +110,21 @@ public final class Notices {
      * The summary at an opening (D30): the sentences of the selected entries after the last opening, the oldest first, each with its age.
      * It shows the newest SUMMARY_SENTENCES, and says how many older ones it does not show.
      * If the runtime removed entries after the last opening, it says where the memory of Uno starts: those entries can be events too.
-     * "Last" is UNKNOWN at the first opening: then the summary covers the whole diary. Null if there is nothing to say.
+     * "Since" is the number of the first entry after the last opening, or UNKNOWN at the first opening: then the summary covers the whole diary.
+     * The number, not the game time, says which entry is after the opening: the game time goes back after a crash (D08.1).
+     * Null if there is nothing to say.
      * The entries are the diary that the actor reads. Thus the summary has the same check of the actor as the list of jobs.
      */
-    static String summary(List<Entry> diary, Forgotten forgotten, long last, long now) {
-        List<Entry> events = diary.stream().filter(entry -> entry.time() > last && selected(entry)).toList();
-        boolean gap = forgotten.entries() > 0 && forgotten.until() > last;
+    static String summary(List<Entry> diary, Forgotten forgotten, long since, long now) {
+        List<Entry> events = diary.stream().filter(entry -> entry.number() >= since && selected(entry)).toList();
+        boolean gap = forgotten.entries() > 0 && forgotten.newest() >= since;
         if (events.isEmpty() && !gap) return null;
         List<String> lines = new ArrayList<>();
-        lines.add(last == MindRuntime.UNKNOWN ? "From the start of my memory:" : "Since you last opened this screen:");
+        lines.add(since == MindRuntime.UNKNOWN ? "From the start of my memory:" : "Since you last opened this screen:");
         if (gap) lines.add("My memory starts " + age(now - forgotten.until()) + ". I do not remember older events.");
         int hidden = Math.max(0, events.size() - SUMMARY_SENTENCES);
         if (hidden > 0) lines.add("I do not show " + hidden + (hidden == 1 ? " older event." : " older events."));
-        for (Entry entry : events.subList(hidden, events.size())) {
-            String age = age(now - entry.time());
-            lines.add(Character.toUpperCase(age.charAt(0)) + age.substring(1) + ": " + sentence(entry));
-        }
+        for (Entry entry : events.subList(hidden, events.size())) lines.add(capital(age(now - entry.time())) + ": " + sentence(entry));
         return String.join("\n", lines);
     }
 

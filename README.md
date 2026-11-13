@@ -175,6 +175,7 @@ A change, a resume and a cancellation are proposals, as a new job is. Nothing ch
 - After the confirmation the robot uses the new values at its next step.
 - The proposal names the robot and the job. The proposal of a change also holds the revision of the job. If a button or a command changes the job before the confirmation, Uno refuses the confirmation and asks you to read the job again. If the robot has a different job, Uno refuses too.
 - The proposal to resume a job that needs a check (`RECOVERY`) says that the runtime accepts the load that it observes in the robot, and that the totals can be inexact.
+- The proposal to resume a job also holds the state of the job. If the state is different at the confirmation, for example `RECOVERY` after `PAUSED`, Uno refuses the confirmation and asks you to read the job again.
 - The proposal to cancel a job says that the cargo stays on board.
 - Uno checks the request before the proposal. For example, a resume of a running job gives the reason and no proposal.
 - A new job for a robot with an open job stays refused, with the number of that job. Cancel that job first.
@@ -186,7 +187,7 @@ Use it with the right mouse button: it opens the screen of Uno at any distance.
 
 The screen shows your jobs, with state, observed stocks and cargo on board.
 You can change the quantity and the reserve and press "Apply". You can pause, resume or cancel.
-At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the "Confirm" button appears.
+At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the button "Confirm #N" appears. N is the number of the proposal.
 Above the button the screen repeats the proposal in words: the button confirms that proposal and no other.
 The number fields keep the values of the job until you confirm a change.
 The game does not pause while the screen is open.
@@ -229,6 +230,7 @@ Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has waited 
 - A wait gives one notice only, also after a restart of the server. A job that works again and then waits again can give a new notice, after 5 new minutes.
 - Each other state ends the wait: `RUNNING`, `SATISFIED`, a pause, a block. A restart of the server does not end it. Game time does not pass while the server is stopped.
 - Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
+- A request of an operator for your job is not your request. If the resume of an operator completes your job, you get the notice of `DONE`.
 - A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
 - If you are not connected, there is no chat line. The summary at your next opening has the event.
 
@@ -246,20 +248,21 @@ Uno › Since you last opened this screen:
 - The events are the events of the notices, with the same sentences, also a long wait. The oldest comes first. Each line has its age.
 - The source is the diary. Thus the summary also has the events of your absence and the events before a server restart.
 - The summary is the sentence of Uno on the screen. The next answer of Uno replaces it.
-- If nothing needed your attention, Uno keeps its sentence. That sentence can be the summary of an earlier opening.
+- If nothing needed your attention, Uno keeps its sentence. If that sentence is the summary of an earlier opening, Uno says "Tell me what you need." instead: the ages of that summary are old.
 - The first opening in a world covers your whole diary. Its first line is "From the start of my memory:".
 - The summary shows the 10 newest events at most. It says how many older ones it does not show.
 - If the runtime removed entries of yours after your last opening, the summary says where the memory of Uno starts: "My memory starts 3 h ago. I do not remember older events."
 - The age is game time. It does not count the time while the server is stopped. The ages are those of the moment of the opening: they do not change while the screen is open.
+- After a crash the game time can go back. An event of the diary can then be later than the world: its age is "At an unknown time". The summary still shows each event one time.
 - The summary has only your events. An operator also gets the events of the jobs of the other players and of the console, as in the list of jobs.
 - The summary calls no model.
-- Minecraft saves the time of your last opening with the world.
+- Minecraft saves your last opening with the world: the place in the diary where it occurred.
 
 ### The diary
 
 The runtime writes a diary: each change of the state of a job, and each change of the cause of a wait or of a block.
 A repeated report of the same state and cause writes nothing. A long wait writes one more entry, with the cause at that moment.
-An entry has the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
+An entry has a number in the order of the diary, the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
 Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
 The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
 Only the owner and an operator read the entries of a job. The summary shows the events of the diary that give a notice. No screen and no command shows the whole diary.

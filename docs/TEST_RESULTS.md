@@ -63,8 +63,6 @@ x:  0          1      2        3    4      5
 | 29, 30 | 42 of 42, two times | None |
 | 31 | 42 of 43 | With the new test `t23_robots_of_an_earlier_session`, before its correction: it failed as expected |
 | 32, 33 | **43 of 43**, two times | None. Current code. Server line: `All 43 required tests passed :)` |
-| 34 | 40 of 44, expected | Increment A, ticket #2: the new and changed tests of the provider contract, with the old code. The four tests failed. See "Increment A — The provider answers with an action" |
-| 35 | **44 of 44** | None. The code of ticket #2. Server line: `All 44 required tests passed :)` |
 
 Lesson from run 2: the exit code is not sufficient. The log must contain the line `GAME TESTS COMPLETE`.
 Lesson from run 14: that line is not sufficient either. The number of tests and the line `Enabled Gametest Namespaces` say which tests ran.
@@ -310,9 +308,15 @@ Changes to the older tests:
 Ticket #2 of spec #1, on 2026-11-13. See D29.1.
 All tests of this section are in the game and automatic. They use the fixed rules, providers written in the tests, or the Claude provider with a false server in place of the API.
 No test called the real Claude service.
-Run 34 is the run of the new and changed tests with the old code. Run 35 is the run with the new code.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
 
-| Test | What it does | Run 34, old code | Run 35, new code |
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new and changed tests, with the old code of Uno and of the providers | 40 of 44. The four tests below failed as expected. The other 40 passed |
+| Green | The code of ticket #2 | **44 of 44**. Server line: `All 44 required tests passed :)` |
+| After the merge | The code of ticket #2, merged with tickets #6 and #7 of increment A | **45 of 45**. Server line: `All 45 required tests passed :)` |
+
+| Test | What it does | Red run, old code | Green run, new code |
 | --- | --- | --- | --- |
 | `s2_uno_reference_sentence` | The reference request of S2 in English and in Italian, and a transport, to the fixed rules. Then a request without a quantity | Failed: the answer was an order without an action | Passed. Each answer is the action `start` with the same order as in S2, and zero tokens. The request without a quantity gives the action `none` with the reason "the quantity is missing", and zero tokens |
 | `t18_provider_failures` | The cases of S2, and two more: an action outside the list, and a provider that throws an `IllegalArgumentException` | Failed: the exception gave "I cannot propose a job: a defect of the provider." | Passed. The exception gives "I cannot interpret the request now (a defect of the provider)." The action `dig` gives "I did not get a valid configuration". The fixed rules still give "I cannot propose a job: the quantity is missing." |
@@ -320,6 +324,8 @@ Run 34 is the run of the new and changed tests with the old code. Run 35 is the 
 | `t18_claude_provider` | Reads the request that went to the false API | Not reached | Passed. The schema has the seven actions and ten required fields. The system text names the seven actions. The context is the same as before: exactly the two stations of the player and its robot with the "free" flag |
 | `a_provider_answers_with_an_action` | A job waits for materials. A provider answers `change`, `pause`, `resume`, `cancel` and `report`. Then three answers with `none` | Failed: `change` gave "I did not get a valid configuration" | Passed. Each of the five actions gives its fixed sentence, for example "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing." No proposal. The job keeps its ID, the state `WAITING`, quantity 24, reserve 0 and its revision. A reason of 300 characters is cut to 200. `None` with a capital letter works. A `none` with a blank reason gives "I did not get a valid configuration" |
 | `s2_uno_request`, `s2_tablet_view`, `t22_confirm_only_the_shown_proposal`, `t22_t23_proposals_and_contact_points`, `t23_state_of_an_earlier_session` | The S2 flow, with the action `start` of the fixed rules or of providers of the tests | Passed | Passed. The same proposal, confirmation and job as before |
+
+Ticket #2 changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it.
 
 Code examination, not a test: `LiveTests.java` compiles with the new contract. Its check "the fixed rules cannot read this request" now reads the action `none`. Before, it waited for an exception.
 

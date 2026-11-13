@@ -481,6 +481,7 @@ The runs of this ticket are not numbered in the table "Runs": other tickets of i
 | --- | --- | --- |
 | Red | The new tests, with the old behaviour of Uno and of the screen. The provider interface already had the model flag, and Uno had a counter that always gave zero | 44 of 50. The five new tests failed as expected. `t23_state_of_an_earlier_session` failed too, as a consequence of an error of a new test: see below |
 | Green | The code of ticket #11 | **50 of 50**. Server line: `All 50 required tests passed :)` |
+| After the merge | The code of ticket #11, merged with tickets #2, #5, #6 and #7 of increment A | **54 of 54**. Server line: `All 54 required tests passed :)` |
 
 The error of the test in the red run: the first version of `a_screen_model_lines` made the Claude stand-in the provider of the server, and put the provider of before back only at its end. It failed before its end. Thus the stand-in stayed the provider of the server. `t23_state_of_an_earlier_session` runs in a later batch: its request through the screen went to the stand-in, and it got no proposal ("no proposal yet"). The test now changes the provider of the server only inside each step, and puts the provider of before back in a `finally`. The green run used this version.
 
@@ -493,7 +494,7 @@ The error of the test in the red run: the first version of `a_screen_model_lines
 | `a_screen_model_lines` | Its own: `a_server_provider` | Views with the fixed rules on the server, then with the Claude provider against a local stand-in. An operator, a player who is not an operator, and an operator at the limit. Each one writes through the screen | Failed: the view of the operator had the line about Claude and no counter | Passed. With the fixed rules: no counter and no line about a provider. With Claude: the operator sees "Written requests go to Claude, a model of Anthropic." and "Your model requests in this session: 0 of 100. Tokens: 0 in, 0 out.", then "1 of 100. Tokens: 1234 in, 56 out." after one request to the stand-in. The other player sees no counter and "Uno uses the fixed rules for you: only an operator uses Claude." The operator at the limit sees "100 of 100", no line about Claude, and the line about the limit. The requests of the other player and of the operator at the limit do not reach the stand-in |
 | `t18_claude_provider` | Normal | Changed: the requests through Uno use the code of the provider without its model flag | Passed | Passed |
 
-This ticket changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it.
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it. The merge brought the runtime and the Lua modules of ticket #5 without a change: ticket #5 ran the four phases on them.
 
 Changes to the older tests:
 

@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
@@ -17,6 +18,11 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -425,6 +431,37 @@ public class MindRuntime extends SavedData {
     }
 
     // --- Persistence -------------------------------------------------------------------------------------------
+
+    /**
+     * Writes the record to the disk. The ordinary save of the world and flush() both call this method.
+     * The record goes to a temporary file in the same folder. One move then puts that file in the place of the record.
+     * Thus a stop of the process during the write leaves the earlier record or the new one on the disk, never a part of one.
+     * A failure leaves the earlier record, writes an error in the server log, and keeps the record dirty: the next save tries again.
+     * The content is the same as in SavedData.save(File) of Minecraft 1.20.1.
+     * Limit: the runtime does not force the data to the disk before the move. A stop of the operating system can still lose the write.
+     */
+    @Override
+    public void save(File file) {
+        if (!isDirty()) return;
+        CompoundTag root = new CompoundTag();
+        root.put("data", save(new CompoundTag()));
+        NbtUtils.addCurrentDataVersion(root);
+        Path target = file.toPath();
+        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        try {
+            NbtIo.writeCompressed(root, temporary.toFile());
+            // On Windows the JDK uses MoveFileEx with MOVEFILE_REPLACE_EXISTING. On Linux it uses rename. Both replace the record.
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+            setDirty(false);
+        } catch (IOException e) {
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException cleanup) {
+                e.addSuppressed(cleanup);
+            }
+            MindCraft.LOGGER.error("MindCraft could not write its record to {}. The earlier record stays on the disk.", target, e);
+        }
+    }
 
     @Override
     public CompoundTag save(CompoundTag root) {

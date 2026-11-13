@@ -180,14 +180,19 @@ Uno uses Claude if the server process has the environment variable `ANTHROPIC_AP
 Set the variable outside the project. Do not write the key in a file of the repository.
 The server log says which provider is active: look for the line `Uno interprets requests with`.
 
-- Each written request to Uno is a paid call on the account of the key. The report, the confirmation and the jobs do not call the model.
-- Anthropic gets the text of the request, the names of your stations and the numbers of your robots. The screen says so with one line.
+- Only an operator uses Claude. In a single-player game you are an operator if the world allows commands. Uno reads the requests of each other player with the fixed rules (see below).
+- Each written request of an operator is a paid call on the account of the key. The report, the confirmation, the buttons and the jobs do not call the model.
+- Each operator has a limit of 100 requests to Claude in one server session. The console is one more actor with its own limit. In a single-player game a session ends when you close the world.
+- At the limit Uno says so one time. Then it reads your requests with the fixed rules until the server restarts. The buttons and the commands work as before.
+- The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
+- Anthropic gets the text of the request, the names of the stations and the numbers of the robots. An operator owns each station and each robot of the server: thus these are the names and numbers of all players.
+- The screen says "Written requests go to Claude" only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
 - The answer of Claude is only a proposal. It goes through the same validation as the commands and starts only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
 - Claude changes the request into one action: start, change, pause, resume, cancel, report or none. In this version Uno acts only on a new job and on "none". For the other actions Uno says that it cannot do them from a written request yet, and changes nothing.
 
-Details and limits: [D21](docs/DECISIONS.md).
+Details and limits: D21 and D33.1 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### What Uno understands without Claude
 

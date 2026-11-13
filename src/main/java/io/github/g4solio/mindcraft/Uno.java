@@ -53,10 +53,39 @@ public final class Uno {
      */
     public interface Provider {
         Answer answer(String request, String context) throws Exception;
+
+        /**
+         * True if the provider calls a language model, thus each request can cost money. Then only an operator uses it, and
+         * each actor has a limit of requests in one server session (D33). A provider with a model must say so here.
+         */
+        default boolean callsModel() {
+            return false;
+        }
     }
 
     /** The answer of a provider: the action as JSON, and the tokens that the answer used. */
     public record Answer(String json, long inputTokens, long outputTokens) {
+    }
+
+    /** The requests that Uno sent to a model for one actor in one server session, and the tokens of their answers. */
+    record Usage(int requests, long inputTokens, long outputTokens) {
+        static final Usage NONE = new Usage(0, 0, 0);
+
+        Usage plus(Usage other) {
+            return new Usage(requests + other.requests, inputTokens + other.inputTokens, outputTokens + other.outputTokens);
+        }
+    }
+
+    /** Where a written request of an actor goes (D33). */
+    enum Route {
+        /** The provider calls no model. No counter, no limit, no operator rule. */
+        NO_MODEL,
+        /** An operator below the limit: the request goes to the model and counts. */
+        MODEL,
+        /** An operator at the limit: the fixed rules read the request. */
+        AT_LIMIT,
+        /** A player who is not an operator: the fixed rules read the request. */
+        NOT_OPERATOR
     }
 
     /** The closed list of the actions of a provider (D29). */
@@ -65,6 +94,12 @@ public final class Uno {
     /** The provider of the /uno command and of the screen. A different provider can replace it. See MindCraft.chooseProvider. */
     static volatile Provider provider = new RuleProvider();
     static final long TIMEOUT_MS = 20_000;
+    /** The limit of the requests to a model for each actor in one server session (D33). An initial value, fixed in the code. */
+    static final int MODEL_REQUESTS = 100;
+    /** The fixed rules. They read the request of an actor who cannot use the model now. They have no limit. */
+    private static final Provider RULES = new RuleProvider();
+    private static final String LIMIT_REACHED = "You reached the limit of " + MODEL_REQUESTS + " model requests in this server session. "
+        + "Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. ";
     private static final int SILENT_TICKS = 300;
     /** The limit of the reason of a "none" action. A provider writes the reason, and the screen has little room. */
     private static final int MAX_REASON_LENGTH = 200;
@@ -84,6 +119,10 @@ public final class Uno {
         final Map<UUID, String> said = new ConcurrentHashMap<>();
         /** The players with a request that has no answer yet. */
         final Set<UUID> open = ConcurrentHashMap.newKeySet();
+        /** The requests to a model and their tokens, for each actor. The console is an actor too. */
+        final Map<UUID, Usage> usage = new ConcurrentHashMap<>();
+        /** The actors that Uno told that they reached the limit. Uno says it one time in a session. */
+        final Set<UUID> toldLimit = ConcurrentHashMap.newKeySet();
         int proposalCount;
     }
 
@@ -95,6 +134,7 @@ public final class Uno {
     /**
      * Each server start calls this. See MindCraft.aboutToStart.
      * A world that opens later in the same Java process gets no message, no proposal and no open request of the world before it.
+     * The counters of the model requests start again.
      */
     static void newSession() {
         session = new Session();
@@ -117,6 +157,23 @@ public final class Uno {
         return proposal(actor) != null;
     }
 
+    /** The counter of the actor in this server session. */
+    static Usage usage(Actor actor) {
+        return session.usage.getOrDefault(actor.id(), Usage.NONE);
+    }
+
+    /** Where a written request of this actor to this provider goes now. */
+    static Route route(Actor actor, Provider provider) {
+        return route(session, actor, provider);
+    }
+
+    /** Only an operator uses a provider with a model, and only below the limit of the session. */
+    private static Route route(Session mine, Actor actor, Provider provider) {
+        if (!provider.callsModel()) return Route.NO_MODEL;
+        if (!actor.admin()) return Route.NOT_OPERATOR;
+        return mine.usage.getOrDefault(actor.id(), Usage.NONE).requests() < MODEL_REQUESTS ? Route.MODEL : Route.AT_LIMIT;
+    }
+
     /** A request to the provider of the server, with the ordinary time limit. */
     public static void ask(MinecraftServer server, Actor actor, String request, Consumer<String> reply) {
         ask(server, actor, request, provider, TIMEOUT_MS, reply);
@@ -126,6 +183,9 @@ public final class Uno {
      * The provider runs on a different thread. The server and the jobs in progress do not wait for it.
      * One request at a time for each player: a provider can cost money for each request.
      * A request that Uno accepts removes the proposal of the player. Thus a confirmation is always about the newest request.
+     * <p>
+     * A provider with a model serves only an operator, and only below the limit of the session (D33).
+     * In each other case the fixed rules read the request.
      */
     public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
         Session mine = session;
@@ -135,10 +195,16 @@ public final class Uno {
             return;
         }
         mine.proposals.remove(actor.id());
+        Route route = route(mine, actor, provider);
+        Provider chosen = route == Route.MODEL || route == Route.NO_MODEL ? provider : RULES;
+        // A request counts when Uno sends it. A failure and the time limit add no tokens.
+        if (route == Route.MODEL) mine.usage.merge(actor.id(), new Usage(1, 0, 0), Usage::plus);
+        // Uno says one time that the limit is reached. The screen tells a player who is not an operator why the fixed rules answer.
+        String limit = route == Route.AT_LIMIT && mine.toldLimit.add(actor.id()) ? LIMIT_REACHED : "";
         CompletableFuture
             .supplyAsync(() -> {
                 try {
-                    return provider.answer(request, context);
+                    return chosen.answer(request, context);
                 } catch (Exception e) {
                     throw new CompletionException(e);
                 }
@@ -149,7 +215,10 @@ public final class Uno {
                 // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
                 if (server.isStopped() || mine != session) return;
                 mine.open.remove(actor.id());
-                reply.accept(error == null ? act(mine, MindRuntime.get(server), actor, answer) : failure(error));
+                if (error == null && route == Route.MODEL) {
+                    mine.usage.merge(actor.id(), new Usage(0, answer.inputTokens(), answer.outputTokens()), Usage::plus);
+                }
+                reply.accept(limit + (error == null ? act(mine, MindRuntime.get(server), actor, answer) : failure(error)));
             }));
     }
 

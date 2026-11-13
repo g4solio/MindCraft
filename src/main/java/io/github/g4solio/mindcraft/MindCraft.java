@@ -93,6 +93,7 @@ public class MindCraft {
      * No computer of the new server runs at this moment.
      * <p>
      * Uno asks Claude only if the server has an API key in its environment. Without a key Uno uses the fixed rules.
+     * Also with a key, only an operator uses Claude, with a limit of requests in each server session (D33).
      * A game test server always uses the fixed rules. Thus the checks give the same result on each computer and cost nothing.
      */
     static void aboutToStart(ServerAboutToStartEvent event) {
@@ -102,7 +103,10 @@ public class MindCraft {
         String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
         boolean claude = key != null && !key.isBlank() && !(event.getServer() instanceof GameTestServer);
         Uno.provider = claude ? ClaudeProvider.fromEnv() : new Uno.RuleProvider();
-        LOGGER.info("Uno interprets requests with {}.", claude ? "Claude (" + ClaudeProvider.MODEL + ")" : "the fixed rules, without a language model");
+        LOGGER.info("Uno interprets requests with {}.", claude
+            ? "Claude (" + ClaudeProvider.MODEL + ") for the operators, at most " + Uno.MODEL_REQUESTS + " requests for each of them in this session. "
+                + "The fixed rules read the requests of the other players"
+            : "the fixed rules, without a language model");
     }
 
     /**

@@ -60,6 +60,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -991,6 +993,10 @@ public class MindCraftTests {
         api.start();
         Uno.Provider claude = new ClaudeProvider(AnthropicOkHttpClient.builder().apiKey("not-a-key")
             .baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build());
+        // Only an operator uses a provider with a model (D33). The player of this test is not an operator: an operator owns
+        // each station of the server, and the check of the context below needs the stations of one player only.
+        // Thus the requests through Uno use the code of the provider without its model flag. The limits have their own tests.
+        Uno.Provider claudeCode = claude::answer;
 
         String request = "Carry eight pieces of coal to the destination";
         String none = modelAction("none", "You did not give the source.");
@@ -1052,7 +1058,7 @@ public class MindCraftTests {
                     if (test.status() < 0) api.stop(0);
                     status.set(test.status());
                     body.set(test.body().get());
-                    Uno.ask(server, player, request, claude, 15_000, answers::add);
+                    Uno.ask(server, player, request, claudeCode, 15_000, answers::add);
                 })
                 .thenWaitUntil(() -> check(answers.size() > index, "Uno did not answer yet"))
                 .thenExecute(() -> {
@@ -1492,6 +1498,316 @@ public class MindCraftTests {
                 check(wrong.isEmpty(), wrong.toString());
             })
             .thenSucceed();
+    }
+
+    // --- Increment A: limits on the model calls (D33) ----------------------------------------------------------------
+
+    /** The answer of the fixed rules to the request "x": it has no quantity. */
+    private static final String RULES_X = "I cannot propose a job: the quantity is missing.";
+    /** The answer of Uno to the action "none" of a CountingModel made with {@link CountingModel#none}. */
+    private static final String MODEL_X = "I cannot propose a job: the model read it.";
+
+    static Actor operator(String name) {
+        return new Actor(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)), true);
+    }
+
+    /**
+     * A provider of the tests that counts as a provider with a model. Thus the operator rule and the session limit apply to it.
+     * It calls no model and costs nothing. It counts its calls, and gives the answer of the provider inside it.
+     */
+    static final class CountingModel implements Uno.Provider {
+        final AtomicInteger calls = new AtomicInteger();
+        private final Uno.Provider inner;
+
+        CountingModel(Uno.Provider inner) {
+            this.inner = inner;
+        }
+
+        /** A model that answers "none" with the reason "the model read it", and reports these tokens. */
+        static CountingModel none(long inputTokens, long outputTokens) {
+            return new CountingModel((request, context) ->
+                new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", inputTokens, outputTokens));
+        }
+
+        @Override
+        public Uno.Answer answer(String request, String context) throws Exception {
+            calls.incrementAndGet();
+            return inner.answer(request, context);
+        }
+
+        @Override
+        public boolean callsModel() {
+            return true;
+        }
+    }
+
+    /** Sends the request "x" the given number of times. Each request leaves after the answer to the one before it. */
+    private static void askTimes(MinecraftServer server, Actor actor, Uno.Provider provider, int times, List<String> answers) {
+        if (times <= 0) return;
+        Uno.ask(server, actor, "x", provider, 5000, answer -> {
+            answers.add(answer);
+            askTimes(server, actor, provider, times - 1, answers);
+        });
+    }
+
+    /** The counter of the actor in this server session: the requests to a model, the input tokens and the output tokens. */
+    private static void usage(Actor actor, int requests, long inputTokens, long outputTokens) {
+        Uno.Usage usage = Uno.usage(actor);
+        check(usage.equals(new Uno.Usage(requests, inputTokens, outputTokens)), "expected " + requests + " requests, "
+            + inputTokens + " input tokens and " + outputTokens + " output tokens, but: " + usage);
+    }
+
+    /**
+     * Uno counts, for each actor in one server session, the requests that it sent to a model, and their tokens.
+     * A request counts when Uno sends it: before its answer. A failure and the time limit count with zero tokens.
+     * A request that finds an open request is not sent, thus it does not count. The fixed rules do not count.
+     * The console is an actor too, with a counter of its own.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_model_requests_count(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("a_count"), other = operator("a_count_other");
+        CountingModel model = CountingModel.none(120, 30);
+        CountDownLatch held = new CountDownLatch(1);
+        CountingModel slow = new CountingModel((request, context) -> {
+            held.await(10, TimeUnit.SECONDS);
+            return new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", 5, 5);
+        });
+        CountingModel broken = new CountingModel((request, context) -> {
+            throw new IOException("model offline");
+        });
+        AtomicReference<Boolean> lateReturned = new AtomicReference<>(false);
+        CountingModel late = new CountingModel((request, context) -> {
+            Thread.sleep(2000);
+            lateReturned.set(true);
+            return new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", 999, 999);
+        });
+        List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
+        Uno.Usage[] console = new Uno.Usage[1];
+
+        GameTestSequence sequence = ask(helper.startSequence(), server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals(MODEL_X), answers.toString());
+                usage(operator, 1, 120, 30);
+                // The provider of this request waits for the test. Thus the request is open when the second one arrives.
+                Uno.ask(server, operator, "x", slow, 15_000, answers::add);
+                Uno.ask(server, operator, "x", model, 5000, busy::add);
+                check(busy.equals(List.of("I am still working on your previous request.")), "a second request did not wait: " + busy);
+                check(model.calls.get() == 1, "the refused request went to the model");
+                // The open request counts already, with zero tokens until its answer.
+                usage(operator, 2, 120, 30);
+                held.countDown();
+            })
+            .thenWaitUntil(() -> check(answers.size() == 2, "Uno did not answer yet"))
+            .thenExecute(() -> usage(operator, 2, 125, 35));
+        sequence = ask(sequence, server, operator, "x", broken, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(2).startsWith("I cannot interpret the request now (model offline)"), answers.get(2));
+                usage(operator, 3, 125, 35);
+            });
+        sequence = ask(sequence, server, operator, "x", late, 300, answers)
+            .thenExecute(() -> {
+                check(answers.get(3).contains("TimeoutException"), answers.get(3));
+                usage(operator, 4, 125, 35);
+            })
+            // The provider answers after the time limit, with tokens. Uno does not use that answer.
+            .thenWaitUntil(() -> check(lateReturned.get(), "the late provider did not return yet"))
+            .thenIdle(5)
+            .thenExecute(() -> usage(operator, 4, 125, 35));
+        // The fixed rules call no model. Thus they do not count.
+        sequence = ask(sequence, server, operator, "x", new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(4).equals(RULES_X), answers.get(4));
+                usage(operator, 4, 125, 35);
+                usage(other, 0, 0, 0);
+                check(slow.calls.get() == 1 && broken.calls.get() == 1 && late.calls.get() == 1, "a provider got a wrong number of calls");
+                console[0] = Uno.usage(ADMIN);
+            });
+        sequence = ask(sequence, server, ADMIN, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(5).equals(MODEL_X), answers.get(5));
+                usage(ADMIN, console[0].requests() + 1, console[0].inputTokens() + 120, console[0].outputTokens() + 30);
+                usage(operator, 4, 125, 35);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * The limit is 100 requests to a model for each actor in one server session. The request after the limit goes to the
+     * fixed rules. Its answer says one time that the limit is reached. Each actor has a limit of its own.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_model_limit(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("a_limit"), other = operator("a_limit_other");
+        CountingModel model = CountingModel.none(10, 2);
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = helper.startSequence()
+            .thenExecute(() -> askTimes(server, operator, model, 100, answers))
+            .thenWaitUntil(() -> check(answers.size() == 100, "answers so far: " + answers.size()))
+            .thenExecute(() -> {
+                check(answers.stream().allMatch(MODEL_X::equals), "an answer below the limit is not the answer of the model: " + answers);
+                check(model.calls.get() == 100, "calls: " + model.calls.get());
+                usage(operator, 100, 1000, 200);
+            });
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                String said = answers.get(100);
+                MindCraft.LOGGER.info("a_model_limit, the request after the limit: {}", said);
+                check(model.calls.get() == 100, "the request after the limit went to the model");
+                check(said.startsWith("You reached the limit of 100 model requests in this server session.") && said.endsWith(" " + RULES_X), said);
+                usage(operator, 100, 1000, 200);
+            });
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(101).equals(RULES_X), "the second answer after the limit: " + answers.get(101));
+                check(model.calls.get() == 100, "a request after the limit went to the model");
+            });
+        sequence = ask(sequence, server, other, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(102).equals(MODEL_X) && model.calls.get() == 101, "the limit of one operator stopped a different operator");
+                usage(other, 1, 10, 2);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Only an operator uses a provider that calls a model. Each other player gets the fixed rules, and has no counter.
+     * A provider of the tests without a model still serves each player: the rule is only for a provider with a model.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_model_only_for_operators(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor guest = player("a_guest");
+        CountingModel model = CountingModel.none(10, 2);
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = ask(helper.startSequence(), server, guest, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals(RULES_X), answers.get(0));
+                check(model.calls.get() == 0, "the request of a player who is not an operator went to the model");
+                usage(guest, 0, 0, 0);
+            });
+        sequence = ask(sequence, server, guest, "x", (request, context) -> answer("{\"action\":\"none\",\"reason\":\"the test read it\"}"), 5000, answers)
+            .thenExecute(() -> check(answers.get(1).equals("I cannot propose a job: the test read it."), answers.get(1)));
+        sequence.thenSucceed();
+    }
+
+    /**
+     * A new server session starts the counters again: an operator at the limit uses the model again.
+     * The test calls the function that each server start calls. It does not start a second server.
+     * It has its own batch: a new session also removes the proposals and the counters of the tests that run at the same time.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "a_model_session")
+    public static void a_new_session_restarts_the_counters(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("a_session");
+        CountingModel model = CountingModel.none(10, 2);
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = helper.startSequence()
+            .thenExecute(() -> askTimes(server, operator, model, 100, answers))
+            .thenWaitUntil(() -> check(answers.size() == 100, "answers so far: " + answers.size()));
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(100).startsWith("You reached the limit") && model.calls.get() == 100, "the limit is not reached: " + answers.get(100));
+                Uno.newSession();
+                usage(operator, 0, 0, 0);
+            });
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(101).equals(MODEL_X) && model.calls.get() == 101, "the new session did not use the model: " + answers.get(101));
+                usage(operator, 1, 10, 2);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * The screen and the provider of the server. With Claude on the server, the screen of each player says where the written
+     * requests of that player go. The counter is on the screen of an operator, also at the limit. It is not on the screen of a
+     * player who is not an operator. With the fixed rules on the server, the screen has no counter and no line about a provider.
+     * A local stand-in is in the place of the API: no request reaches the real service.
+     * It has its own batch, because it changes the provider of the server. It changes it only inside a step, and puts the
+     * provider of before back at the end of that step, also when a check fails. A screen reads the provider of the server
+     * when it builds a view and when it sends a request.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "a_server_provider")
+    public static void a_screen_model_lines(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        MindRuntime runtime = MindRuntime.get(server);
+        Actor operator = operator("a_screen"), guest = player("a_screen_guest"), spent = operator("a_screen_spent");
+        AtomicInteger calls = new AtomicInteger();
+        HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        api.createContext("/", exchange -> {
+            calls.incrementAndGet();
+            exchange.getRequestBody().readAllBytes();
+            byte[] bytes = claudeMessage("end_turn", modelAction("none", "You did not give the source."), 1234, 56).getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        api.start();
+        Uno.Provider claude = new ClaudeProvider(AnthropicOkHttpClient.builder().apiKey("not-a-key")
+            .baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build());
+        // A view and a request through the screen with Claude as the provider of the server.
+        Function<Actor, String> view = actor -> withServerProvider(claude, () -> UnoView.build(runtime, actor, helper.getLevel().getGameTime()));
+        BiConsumer<Actor, String> write = (actor, request) -> withServerProvider(claude, () -> {
+            UnoView.act(server, actor, "ask", "{\"request\":\"" + request + "\"}");
+            return null;
+        });
+        String claudeLine = "Written requests go to Claude, a model of Anthropic.", rulesLine = "Uno uses the fixed rules for you";
+        List<String> answers = new CopyOnWriteArrayList<>();
+        helper.startSequence()
+            .thenExecute(() -> {
+                for (Actor actor : List.of(operator, guest)) {
+                    String rules = UnoView.build(runtime, actor, helper.getLevel().getGameTime());
+                    check(!rules.contains("model requests") && !rules.contains("Claude") && !rules.contains("fixed rules"),
+                        "the fixed rules are on the server, but the view has a counter or a line about a provider: " + rules);
+                }
+                String mine = view.apply(operator);
+                check(mine.contains(claudeLine) && mine.contains("Your model requests in this session: 0 of 100. Tokens: 0 in, 0 out.")
+                    && !mine.contains(rulesLine), "the view of an operator: " + mine);
+                String theirs = view.apply(guest);
+                check(!theirs.contains(claudeLine) && !theirs.contains("model requests")
+                    && theirs.contains(rulesLine + ": only an operator uses Claude."), "the view of a player who is not an operator: " + theirs);
+                write.accept(operator, "x");
+            })
+            .thenWaitUntil(() -> check(view.apply(operator).contains("You did not give the source."), "Claude did not answer yet"))
+            .thenExecute(() -> {
+                String mine = view.apply(operator);
+                check(calls.get() == 1 && mine.contains("Your model requests in this session: 1 of 100. Tokens: 1234 in, 56 out."), mine);
+                write.accept(guest, "x");
+            })
+            .thenWaitUntil(() -> check(view.apply(guest).contains(RULES_X), view.apply(guest)))
+            .thenExecute(() -> {
+                check(calls.get() == 1, "the request of a player who is not an operator went to Claude");
+                // The counter belongs to the actor, not to the provider: a model of the test brings this operator to the limit.
+                askTimes(server, spent, CountingModel.none(10, 2), 100, answers);
+            })
+            .thenWaitUntil(() -> check(answers.size() == 100, "answers so far: " + answers.size()))
+            .thenExecute(() -> {
+                String atLimit = view.apply(spent);
+                check(atLimit.contains("Your model requests in this session: 100 of 100. Tokens: 1000 in, 200 out.") && !atLimit.contains(claudeLine)
+                    && atLimit.contains(rulesLine + ": you reached the limit of model requests in this session."), "the view at the limit: " + atLimit);
+                write.accept(spent, "x");
+            })
+            .thenWaitUntil(() -> check(view.apply(spent).contains(RULES_X), view.apply(spent)))
+            .thenExecute(() -> {
+                String atLimit = view.apply(spent);
+                check(calls.get() == 1 && atLimit.contains("You reached the limit of 100 model requests in this server session."), atLimit);
+                api.stop(0);
+            })
+            .thenSucceed();
+    }
+
+    /** Runs the action with this provider of the server, then puts the provider of before back, also after a failed check. */
+    private static <T> T withServerProvider(Uno.Provider provider, Supplier<T> action) {
+        Uno.Provider before = Uno.provider;
+        Uno.provider = provider;
+        try {
+            return action.get();
+        } finally {
+            Uno.provider = before;
+        }
     }
 
     /**

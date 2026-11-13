@@ -417,6 +417,51 @@ Runs of this ticket. They are not numbered in the table "Runs": other tickets of
 - Not tested: a stair (a path that also changes y), more than one corner, a corridor without walls. In an open space the robot goes along x first, and it does not follow a corridor.
 - Out of scope: a path that needs a move away from the target. The README says which paths work.
 
+## Increment A — Limits on the model calls
+
+Ticket #11 of spec #1, on 2026-11-13. See D33.1.
+All tests of this section are in the game and automatic. They use providers written in the tests. One test uses the Claude provider with a local stand-in in place of the API.
+No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new tests, with the old behaviour of Uno and of the screen. The provider interface already had the model flag, and Uno had a counter that always gave zero | 44 of 50. The five new tests failed as expected. `t23_state_of_an_earlier_session` failed too, as a consequence of an error of a new test: see below |
+| Green | The code of ticket #11 | **50 of 50**. Server line: `All 50 required tests passed :)` |
+
+The error of the test in the red run: the first version of `a_screen_model_lines` made the Claude stand-in the provider of the server, and put the provider of before back only at its end. It failed before its end. Thus the stand-in stayed the provider of the server. `t23_state_of_an_earlier_session` runs in a later batch: its request through the screen went to the stand-in, and it got no proposal ("no proposal yet"). The test now changes the provider of the server only inside each step, and puts the provider of before back in a `finally`. The green run used this version.
+
+| Test | Batch | What it does | Red run, old code | Green run, new code |
+| --- | --- | --- | --- | --- |
+| `a_model_requests_count` | Normal | An operator sends requests to a provider of the test with a model: an answer with 120 and 30 tokens, a request held open while a second one arrives, an exception, a time limit of 300 ms. Then a request to the fixed rules, and one request of the console | Failed: "expected 1 requests, 120 input tokens and 30 output tokens, but: Usage[requests=0, inputTokens=0, outputTokens=0]" | Passed. The open request counts before its answer. The second request gets "I am still working on your previous request.", does not reach the provider and does not count. The exception and the time limit count with zero tokens. The late provider returns 999 and 999 tokens after the time limit: the counter does not change. The fixed rules do not count. A different operator has zero. The console gets a counter of its own |
+| `a_model_limit` | Normal | An operator sends 100 requests to the provider of the test, then three more requests: two of the same operator, one of a different operator | Failed: "the request after the limit went to the model" | Passed. 100 calls, counter 100 requests, 1000 and 200 tokens. Request 101 does not reach the provider. Its answer: "You reached the limit of 100 model requests in this server session. Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." Request 102 gets only the answer of the fixed rules. The different operator still reaches the provider |
+| `a_model_only_for_operators` | Normal | A player who is not an operator sends a request to the provider of the test with a model, then to a provider of the test without a model | Failed: the answer came from the provider with a model | Passed. The provider with a model gets no call. The answer is the answer of the fixed rules. No counter. The provider without a model answers as before |
+| `a_new_session_restarts_the_counters` | Its own: `a_model_session` | An operator reaches the limit. Then the function that each server start calls | Failed: request 101 still went to the model | Passed. After the new session the counter is zero, and the next request goes to the model |
+| `a_screen_model_lines` | Its own: `a_server_provider` | Views with the fixed rules on the server, then with the Claude provider against a local stand-in. An operator, a player who is not an operator, and an operator at the limit. Each one writes through the screen | Failed: the view of the operator had the line about Claude and no counter | Passed. With the fixed rules: no counter and no line about a provider. With Claude: the operator sees "Written requests go to Claude, a model of Anthropic." and "Your model requests in this session: 0 of 100. Tokens: 0 in, 0 out.", then "1 of 100. Tokens: 1234 in, 56 out." after one request to the stand-in. The other player sees no counter and "Uno uses the fixed rules for you: only an operator uses Claude." The operator at the limit sees "100 of 100", no line about Claude, and the line about the limit. The requests of the other player and of the operator at the limit do not reach the stand-in |
+| `t18_claude_provider` | Normal | Changed: the requests through Uno use the code of the provider without its model flag | Passed | Passed |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it.
+
+Changes to the older tests:
+
+- `t18_claude_provider`: its player is not an operator. With the rule of this ticket, its requests through Uno would go to the fixed rules. An operator owns each station of the server, and the exact check of the context needs the stations of one player. Thus the requests through Uno use `claude::answer`: the code of the provider, without its model flag. The direct call of the provider did not change.
+- `t18_claude_live` (`LiveTests.java`): its player is an operator now. At the end it checks the counter: four requests, and more than zero tokens in and out. It compiles. It was not run: a run costs money and needs the consent of the project owner.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The report, the confirmation and the buttons of a job do not call `Uno.ask`. Only the "ask" action of the screen and `/uno ask` do | `UnoView.act`, `MindCraft.registerCommands` | A test with a provider that counts its calls. It belongs to tickets #8 and #10 |
+| At the time limit, `orTimeout` completes the request with an exception. The thread of the provider continues, and Uno does not read its answer | `Uno.ask` | The tokens that the real service bills for such a request. The counter shows zero for them |
+| The actor of a command source has the operator flag of the source. A command block has the permission level 2 | `MindCraft.actor(CommandSourceStack)`. The level of a command block is general knowledge, not read in the sources | That `/uno ask` from a command block counts as a request of an operator. Not tried |
+
+Not covered:
+
+- The counter with the tokens of the real service.
+- The screen in a client: the counter, the lines about the provider, and their length on the screen.
+- A real client with permission level 0, and a single-player world without commands. The tests build the actors.
+- The limit of the console: one test counts one request of the console. The limit itself is tested with an operator.
+
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.

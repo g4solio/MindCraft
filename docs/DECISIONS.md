@@ -409,6 +409,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
 - **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is not verified with the real service. See D29.1.
 - **Decided on 2026-11-13, not implemented:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). By default only an operator will use Claude, with a session limit and a counter on the screen (D33).
+- **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
 
 ## D22 — License: MIT
 
@@ -646,7 +647,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D33 — The model and its cost
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
+**Status:** decided by the project owner on 2026-11-13. The limits on the calls of increment A are implemented: see D33.1. The rest is not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
 
 The model. Increment B.
 
@@ -677,6 +678,28 @@ Limits on the calls. Increment A.
 - **Reason:** `/uno ask` needs no permission, and has no counter and no limit other than one request at a time (code examination). A command block that repeats the command as a player can make one request after the other. This is deduced from the code. It was not tried.
 - **Cost:** a fixed session limit can stop a long session. It becomes a setting when multiplayer opens.
 - **Not decided:** the number of the session limit.
+
+### D33.1 — Limits on the model calls in increment A
+
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with providers written in the tests and with a local stand-in in place of the API. Not verified with the real Claude service or in a client. Increment A, ticket #11. The choices of the spec are decided by the project owner (spec #1, 2026-11-13). The limit of 100 is an initial value of the spec: **proposed**, to review after the play session. Two points are choices of the implementation: **proposed**, see below.
+
+- **Counter:** for each actor in one server session, Uno counts the requests that it sent to a model, the input tokens and the output tokens. The console is an actor too. The counters are in memory and are not saved. A new server session starts them again.
+- **When a request counts:** when Uno sends it, before the answer. The tokens arrive with the answer. A request that fails or reaches the time limit counts with zero tokens. A request that finds an open request of the same player is not sent, thus it does not count.
+- **Limit:** 100 requests to a model for each actor in one server session. The number is fixed in the code (`Uno.MODEL_REQUESTS`).
+- **At the limit:** the fixed rules read each later request of that actor until the session ends. The first answer after the limit starts with "You reached the limit of 100 model requests in this server session." The later answers do not repeat it. The fixed rules have no limit.
+- **Operators only:** a provider with a model serves only an operator. "Operator" is the `admin` flag that the server already puts in the actor: permission level 2, or the console. Each other player gets the fixed rules, without a counter and without the sentence about the limit.
+- **Screen:** with a model on the server, an operator sees "Your model requests in this session: N of 100. Tokens: X in, Y out.", also at the limit. A player who is not an operator sees no counter. With Claude on the server, the line "Written requests go to Claude, a model of Anthropic." appears only when the requests of this player go to Claude. Otherwise one line says "Uno uses the fixed rules for you", with the reason: only an operator uses Claude, or the limit. With the fixed rules on the server the screen has none of these lines.
+- **Unchanged:** one request at a time for each player. The report, the confirmation and the buttons do not call `Uno.ask`, thus they call no provider (code examination). The test of this with a provider that counts its calls belongs to the notices and the summary (tickets #8 and #10).
+- **Proposed, which provider has a model:** the provider says so (`Uno.Provider.callsModel`). The default is no. The Claude provider says yes. Reason: the providers written in the older tests serve players who are not operators. Cost: a new provider with a model that forgets to say so has no limit and no operator rule.
+- **Proposed, the request after the limit:** the limit sentence comes before the answer of the fixed rules to the same request. Thus the player gets an answer, not only a refusal.
+- **Evidence:** automatic in-game tests `a_model_requests_count`, `a_model_limit`, `a_model_only_for_operators`, `a_new_session_restarts_the_counters` and `a_screen_model_lines`. The five failed before the implementation and passed after it: normal run 50 of 50. See "Increment A — Limits on the model calls" in [TEST_RESULTS.md](TEST_RESULTS.md).
+- **Not verified:** the counter with the tokens of the real service. The test `t18_claude_live` now uses an operator and checks the counter after its four requests. It compiles. It was not run: a run costs money and needs the consent of the project owner. The screen in a client.
+- **Counterexample:** an operator owns each station and each robot (D11). Thus the context that goes to Claude holds the station names and the robot numbers of each player of the server, not only of the operator. With one player these are the data of D21.
+- **Counterexample:** the limit counts requests, not tokens or money. The estimate of D33 holds only for its token numbers. The counter shows the tokens, not a price.
+- **Counterexample:** the limit is for each session, not for each day. A restart of the server starts the counters again. In a single-player game each opening of the world is a new session.
+- **Counterexample:** the server builds the actor from the command source. A command block has the permission level 2, thus `/uno ask` from a command block counts as a request of an operator: the console, or the player of `execute as`. Only an operator can write a command block. This is deduced from the code and from the permission level of a command block. It was not tried.
+- **Counterexample:** a request that reaches the time limit can still reach the service and cost tokens. The counter shows zero tokens for it. Thus the counter of the tokens can be lower than the real use. The counter of the requests is not.
+- **Still open (D33):** a spending limit that the server operator can set. The gate of D33 stays.
 
 ## D34 — Waits, blocks and a load on board
 

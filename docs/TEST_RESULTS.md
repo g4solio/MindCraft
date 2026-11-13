@@ -26,6 +26,7 @@ x:  0          1      2        3    4      5
 ```
 
 - One normal turtle, without upgrades. Two single chests. A straight and free path.
+- One test has a different rig, with a corner: see "Increment A — a path with one corner".
 - The source contains 64 items of coal, unless a test says otherwise. The basic request is 24 items.
 - **Declared simplification:** the fuel is a number set on the turtle (1000). The turtle does not burn the coal of the job.
 - The console (an administrator actor) enrolls the turtle, except in T19.
@@ -310,10 +311,39 @@ No test ran in this discussion. The facts below come from code examinations. The
 | --- | --- | --- |
 | `can_push = true`. The comment of the option says that turtles "push entities out of the way instead of stopping if there is space to do so" | `computercraft-server.toml` in the world of the test server | That a robot pushes a player in a corridor. Not tried |
 | The move command contains the message "Cannot leave loaded world" | The text constants of `TurtleMoveCommand` in the CC: Tweaked jar | The behaviour of a robot of this mod at the edge of a loaded area |
-| The move step tries x, then z, then y. It accepts each move that brings the robot nearer to the target | `transport.lua`, the first function `step` | That a path with a corner works. No test has one |
+| The move step tries x, then z, then y. It accepts each move that brings the robot nearer to the target | `transport.lua`, the first function `step` | That a path with a corner works. No test had one. A later test has one: see "Increment A — a path with one corner" |
 | Forge has `ForgeChunkManager.forceChunk`. The restart test keeps its chunk loaded with `setChunkForced` | The Forge 47.4.28 jar, `RestartTests.java` | `/forceload` in a client |
 | The public API of CC: Tweaked has `IComputerAccess.mount`, `mountWritable`, `ComputerCraftAPI.createSaveDirMount` and `ITurtleUpgrade` | The CC: Tweaked 1.121.0 jar | That a shared directory or a turtle upgrade works in this mod |
 | `/uno ask` has no permission requirement, no counter, and no limit other than one request at a time for each player | `MindCraft.java`, `Uno.java` | The rate of requests that a command block can make |
+
+## Increment A — a path with one corner
+
+Ticket #6. Test `a_path_with_one_corner`. Type: in the game, automatic. It verifies the fact of D28 about the corner.
+
+Rig of this test. Each object is at y = 1. `#` is a stone wall. The walls leave one corridor, with one corner.
+
+```
+z \ x:  0          1      2   3   4   5        6
+0       [source]   dock   .   .   .   corner
+1                  #      #   #   #   turtle
+2                  #      #   #   #   dock     [destination]
+```
+
+- The robot starts between the corner and the destination dock. The request is 24 coal of 64. The fuel is 1000, as in the other rig.
+- Toward the source, the first axis of the move step (x) is walled. The step must try z. Toward the destination, the order x, then z fits the corridor.
+- The test checks that the robot is at the corner with 0 on board (toward the source), then at the corner with 24 on board (toward the destination).
+- At the end: `DONE`, 40 in the source, 24 in the destination, 0 in the robot, the robot on the destination dock, the walls still in place.
+
+Runs of this ticket. They are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The move step changed by hand for this run only: it tries only the first axis that differs. The change was not kept | 43 of 44. `a_path_with_one_corner` failed as expected: "expected the robot at 27, -59, 16 with 0 on board, but it is at 27, -59, 17". The first position is the corner, the second is the start. Job `BLOCKED`, "in front: minecraft:stone", "Movement obstructed". The other 43 tests passed: their paths are straight |
+| Green | The move step of `transport.lua`, unchanged | **44 of 44**. Server line: `All 44 required tests passed :)` |
+
+- No correction of the move step was necessary. No Lua module changed. Thus the four restart phases were not repeated.
+- Not tested: a stair (a path that also changes y), more than one corner, a corridor without walls. In an open space the robot goes along x first, and it does not follow a corridor.
+- Out of scope: a path that needs a move away from the target. The README says which paths work.
 
 ## Manual test in the game
 
@@ -346,7 +376,7 @@ Third manual test, on the projector and its hologram:
 | T11: unload and reload of a chunk during the transport | It needs a player or forced chunk loading |
 | T11: sudden stop on a normal server | The test server has no idle time in the tick. A normal server can write chunks to disk at different moments |
 | T05: a player on the path | It needs a client. The configuration says that a turtle pushes an entity if there is space (`can_push = true`). Not tried |
-| A path with one corner or a stair | The rig is straight. The move step should permit it (code examination). Planned for increment A (D27) |
+| A stair (a path that also changes y), or more than one corner | The rigs have none. The move step should permit them when each move brings the robot nearer to the target (code examination). The path with one corner is tested: `a_path_with_one_corner` |
 | `/forceload` by a player in a client, and a robot that works while the player is far | It needs a person at the game. Planned for the next play session (D28) |
 | Two robots in one corridor that is one block wide | Outside the rig. From the code, each robot is an obstacle for the other |
 | T08: delayed confirmation | Not applicable: the runtime and the turtle are in the same process, without network messages |
@@ -375,7 +405,7 @@ Third manual test, on the projector and its hologram:
 - The guarantees apply to the actions that go through `mindcraft.take` and `mindcraft.give`. A different Lua program can use `turtle.suck` and `turtle.drop`.
 - An external actor that changes a chest between two visits is not detected. The state shows the last observation and its age.
 - After `RECOVERY` and `resume` the totals of the job can be inexact. The state says so.
-- The path must be straight along the axes. There is no path finding.
+- There is no path finding. A path works only when each of its moves brings the robot nearer to the target dock. A straight path and a path with one corner are tested.
 - Outside loaded areas the robot does not work and the job stays `RUNNING`. The state shows the robot as not loaded.
 - A chest has no owner. There is no integration with the protections of the server.
 - Uno answers only in English, also to a request in another language.

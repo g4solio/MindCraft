@@ -125,6 +125,8 @@ public class MindCraft {
 
     private static void tick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        // D30: a job that waits for 5 minutes gets one notice. The check reads the game time, thus a stopped server counts no time.
+        MindRuntime.get(event.getServer()).checkWaits(event.getServer().overworld().getGameTime());
         REBOOTS.entrySet().removeIf(reboot -> {
             int id = reboot.getKey();
             if (RobotApi.boots(id) >= reboot.getValue()[0] || Util.getMillis() > reboot.getValue()[1]) return true;

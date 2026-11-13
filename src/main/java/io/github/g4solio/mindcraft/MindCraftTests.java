@@ -453,10 +453,11 @@ public class MindCraftTests {
      * T05: an obstacle on the path. The robot does not remove it. An obstacle can end by itself, thus it is a wait (D34).
      * After 10 attempts at 1 second the job waits with the cause "path obstructed". The robot keeps its load.
      * During the wait the robot tries one move every 5 seconds. When the obstacle goes away, the job continues by itself:
-     * the owner gives no resume.
+     * the owner gives no resume. Also D30: a check 5 minutes after the start of the wait gives one notice of a long wait.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t05_obstacle(GameTestHelper helper) {
+        listen();
         Actor player = player("t05");
         Rig rig = new Rig(helper, "t05", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
@@ -503,6 +504,12 @@ public class MindCraftTests {
                 check(rig.job().cause == Cause.PATH_OBSTRUCTED && rig.robot().turtle.getPosition().equals(stop[0]), rig.describe());
                 check(time[2] >= 80 && time[2] <= 150, "during the wait the longest time without a call of the robot was "
                     + time[2] + " ticks: expected one attempt every 5 seconds");
+                // D30: each attempt reported the same wait again, and the time of the wait did not start again.
+                // 5 minutes after the start of the wait, one notice. The test gives the moment of the check as a parameter.
+                List<String> states = states(rig.runtime, player, rig.job().id);
+                check(states.equals(List.of("RUNNING", "WAITING PATH_OBSTRUCTED")), states.toString());
+                rig.runtime.checkWait(rig.job(), entries(rig.runtime, player, rig.job().id).get(1).time() + MindRuntime.LONG_WAIT);
+                check(notices(player).equals(List.of(longWait(rig, rig.job()) + "the path of the robot is obstructed.")), notices(player).toString());
                 helper.setBlock(obstacle, Blocks.AIR);
             })
             .thenWaitUntil(() -> check(rig.job().state != State.WAITING, rig.describe()))
@@ -2952,10 +2959,11 @@ public class MindCraftTests {
         return runtime.diary(actor).stream().filter(entry -> entry.job() == jobId).toList();
     }
 
-    /** The state and the cause of each entry of one job, the oldest first. */
+    /** The state and the cause of each entry of one job, the oldest first. A long wait is "LONG_WAIT" and its cause. */
     static List<String> states(MindRuntime runtime, Actor actor, int jobId) {
         return entries(runtime, actor, jobId).stream()
-            .map(entry -> entry.state() + (entry.cause() == Cause.NONE ? "" : " " + entry.cause())).toList();
+            .map(entry -> (entry.longWait() ? "LONG_WAIT" : entry.state().name()) + (entry.cause() == Cause.NONE ? "" : " " + entry.cause()))
+            .toList();
     }
 
     /**
@@ -3233,7 +3241,9 @@ public class MindCraftTests {
     }
 
     /**
-     * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job goes to BLOCKED and to DONE.
+     * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job goes to BLOCKED and to DONE,
+     * and while a second job waits for 5 minutes.
+     * The test moves the start of that wait back by 6000 ticks: thus the check of the server tick finds a long wait without a wait of 5 minutes.
      * It is a provider with a model. It gives the answers of the provider of before, thus a failure of this test changes no answer.
      * It has its own batch: the provider of the server is a value of the whole server.
      */
@@ -3256,9 +3266,159 @@ public class MindCraftTests {
             })
             .thenWaitUntil(() -> rig.state(State.DONE))
             .thenExecute(() -> {
+                // A second job: the source is empty, thus the job waits.
+                rig.chest(rig.source).clearContent();
+                rig.startJob(8, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> rig.job().waitingSince -= MindRuntime.LONG_WAIT)
+            .thenWaitUntil(() -> check(notices(player).size() == 3, notices(player).toString()))
+            .thenExecute(() -> {
                 Uno.provider = before;
-                check(notices(player).size() == 2, notices(player).toString());
+                rig.runtime.control(player, rig.id, "cancel");
+                check(notices(player).get(2).equals(longWait(rig, rig.job()) + "nothing remains in '" + rig.from + "'."), notices(player).toString());
                 check(model.calls.get() == 0, "the provider got " + model.calls.get() + " calls");
+            })
+            .thenSucceed();
+    }
+
+    // --- Increment A: a notice for a long wait ------------------------------------------------------------------------
+
+    /** How the notice of a long wait of a job of a rig starts. */
+    private static String longWait(Rig rig, Job job) {
+        return subject(rig, job) + " has waited for 5 minutes: ";
+    }
+
+    /**
+     * D30: a job that stays WAITING for 6000 ticks of game time without an interruption gets one "long wait" entry and one notice.
+     * A change of the cause does not start the time again. The entry and the notice name the cause at that moment.
+     * A later check gives no second notice, also after a save and a load. A new wait can give a new notice, after 5 new minutes.
+     * The test gives the moment of the check as a parameter. It does not wait 5 minutes.
+     * The source is empty: the job waits for materials. Then the robot is full: the cause changes.
+     * Then the robot takes 12 of 24, delivers them, and waits again for materials.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_long_wait(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_long_wait");
+        Rig rig = new Rig(helper, "a_long_wait", 0, 1000, player);
+        long[] since = new long[2];
+        List<String> expected = new ArrayList<>();
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                since[0] = entries(rig.runtime, player, rig.job().id).get(1).time();
+                Container inventory = rig.robot().turtle.getInventory();
+                for (int slot = 0; slot < inventory.getContainerSize(); slot++) inventory.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+                rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 12));
+            })
+            .thenWaitUntil(() -> check(rig.job().cause == Cause.ROBOT_FULL, rig.describe()))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                List<String> waits = List.of("RUNNING", "WAITING SOURCE_AT_RESERVE", "WAITING ROBOT_FULL");
+                check(states(rig.runtime, player, job.id).equals(waits), states(rig.runtime, player, job.id).toString());
+                CompoundTag beforeNotice = rig.runtime.save(new CompoundTag());
+                rig.runtime.checkWait(job, since[0] + 5999);
+                check(notices(player).isEmpty(), notices(player).toString());
+                // The cause changed after the start of the wait. The time of the wait did not start again.
+                rig.runtime.checkWait(job, since[0] + 6000);
+                expected.add(longWait(rig, job) + "the robot is full.");
+                check(notices(player).equals(expected), notices(player).toString());
+                List<String> withLongWait = new ArrayList<>(waits);
+                withLongWait.add("LONG_WAIT ROBOT_FULL");
+                check(states(rig.runtime, player, job.id).equals(withLongWait), states(rig.runtime, player, job.id).toString());
+                Entry entry = entries(rig.runtime, player, job.id).get(3);
+                check(entry.time() == since[0] + 6000 && entry.state() == State.WAITING && !entry.requested() && entry.owner().equals(player.id())
+                    && entry.delivered() == 0 && entry.carried() == 0, entry.toString());
+                // A later check gives no second entry and no second notice.
+                rig.runtime.checkWait(job, since[0] + 7200);
+                check(notices(player).equals(expected), notices(player).toString());
+                check(states(rig.runtime, player, job.id).equals(withLongWait), states(rig.runtime, player, job.id).toString());
+
+                // After a save and a load the long wait stays written: a later check writes no second entry.
+                // A copy of the record sends no notice. Its diary shows whether it would send one: each notice comes from an entry.
+                MindRuntime copy = MindRuntime.load(rig.runtime.save(new CompoundTag()));
+                copy.checkWait(copy.jobs.get(rig.id), since[0] + 12000);
+                check(states(copy, player, job.id).equals(withLongWait), "after a load: " + states(copy, player, job.id));
+                // The record before the check: after a load the wait keeps its start, and the check writes the long wait.
+                MindRuntime earlier = MindRuntime.load(beforeNotice);
+                earlier.checkWait(earlier.jobs.get(rig.id), since[0] + 5999);
+                check(states(earlier, player, job.id).equals(waits), "before 6000 ticks: " + states(earlier, player, job.id));
+                earlier.checkWait(earlier.jobs.get(rig.id), since[0] + 6000);
+                check(states(earlier, player, job.id).equals(withLongWait), "after 6000 ticks: " + states(earlier, player, job.id));
+                // A record of an older version has no start of the wait. The time starts at the first check after the load.
+                beforeNotice.getCompound("jobs").getCompound(String.valueOf(rig.id)).remove("waitingSince");
+                MindRuntime older = MindRuntime.load(beforeNotice);
+                older.checkWait(older.jobs.get(rig.id), since[0] + 6000);
+                older.checkWait(older.jobs.get(rig.id), since[0] + 11999);
+                check(states(older, player, job.id).equals(waits), "an older record: " + states(older, player, job.id));
+                older.checkWait(older.jobs.get(rig.id), since[0] + 12000);
+                check(states(older, player, job.id).equals(withLongWait), "an older record: " + states(older, player, job.id));
+
+                rig.robot().turtle.getInventory().setItem(0, ItemStack.EMPTY);
+            })
+            // The robot takes 12, delivers them, and waits again: a new wait.
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 12, rig.describe()))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                List<String> states = states(rig.runtime, player, job.id);
+                check(states.equals(List.of("RUNNING", "WAITING SOURCE_AT_RESERVE", "WAITING ROBOT_FULL", "LONG_WAIT ROBOT_FULL",
+                    "RUNNING", "WAITING SOURCE_AT_RESERVE")), states.toString());
+                since[1] = entries(rig.runtime, player, job.id).get(5).time();
+                rig.runtime.checkWait(job, since[1] + 5999);
+                check(notices(player).equals(expected), notices(player).toString());
+                rig.runtime.checkWait(job, since[1] + 6000);
+                expected.add(longWait(rig, job) + "nothing remains in '" + rig.from + "'.");
+                check(notices(player).equals(expected), notices(player).toString());
+                rig.runtime.control(player, rig.id, "cancel");
+                check(notices(player).equals(expected), notices(player).toString());
+                List<Notice> about = noticesAbout(job.id, rig.id);
+                check(about.size() == 2 && about.stream().allMatch(notice -> notice.owner().equals(player.id())), about.toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D30: the ordinary cycle of a stock job is silent, also when its waits together last more than 5 minutes.
+     * The time of a wait starts again at each new wait. The destination has 10 and needs 24. The source has 40 and a reserve of 30:
+     * the robot brings 10, then waits. The test adds 8: the job is SATISFIED. Then the test empties the destination:
+     * the robot brings 4 and waits again.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_no_long_wait_for_the_stock_cycle(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_long_wait_stock");
+        Rig rig = new Rig(helper, "a_long_wait_stock", 40, 1000, player);
+        rig.chest(rig.dest).setItem(0, new ItemStack(Items.COAL, 10));
+        long[] since = new long[1];
+        rig.begin()
+            .thenExecute(() -> rig.runtime.start(player, rig.order(MindRuntime.KEEP_STOCK, 24, 30)))
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.coal(rig.dest) == 20, rig.describe()))
+            .thenExecute(() -> {
+                since[0] = entries(rig.runtime, player, rig.job().id).get(1).time();
+                rig.chest(rig.source).setItem(1, new ItemStack(Items.COAL, 8));
+            })
+            .thenWaitUntil(() -> rig.state(State.SATISFIED))
+            .thenExecute(() -> {
+                // The job does not wait now.
+                rig.runtime.checkWait(rig.job(), since[0] + 6000);
+                rig.chest(rig.dest).clearContent();
+            })
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.coal(rig.dest) == 4, rig.describe()))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                List<String> cycle = List.of("RUNNING", "WAITING SOURCE_AT_RESERVE", "RUNNING", "SATISFIED", "RUNNING", "WAITING SOURCE_AT_RESERVE");
+                check(states(rig.runtime, player, job.id).equals(cycle), states(rig.runtime, player, job.id).toString());
+                long second = entries(rig.runtime, player, job.id).get(5).time();
+                // 6000 ticks after the start of the first wait, and 5999 after the start of this one.
+                rig.runtime.checkWait(job, since[0] + 6000);
+                rig.runtime.checkWait(job, second + 5999);
+                rig.runtime.control(player, rig.id, "cancel");
+                List<String> states = states(rig.runtime, player, job.id);
+                check(states.equals(List.of("RUNNING", "WAITING SOURCE_AT_RESERVE", "RUNNING", "SATISFIED", "RUNNING", "WAITING SOURCE_AT_RESERVE",
+                    "CANCELLED")), states.toString());
+                check(notices(player).isEmpty(), notices(player).toString());
             })
             .thenSucceed();
     }
@@ -3486,6 +3646,27 @@ public class MindCraftTests {
                 saved.remove("openings");
                 UnoView.open(MindRuntime.load(saved), player, later);
                 check(Uno.said(player).equals(FIRST + early + late), "a record of an older version: " + Uno.said(player));
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Tickets #9 and #10: the attention rule selects a long wait. Thus it is in the summary, with the sentence of its notice.
+     * The source is empty: the job waits. The check of the long wait and the opening are later moments: parameters.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_summary_has_the_long_wait(GameTestHelper helper) {
+        Actor player = player("a_summary_wait");
+        Rig rig = new Rig(helper, "a_summary_wait", 0, 1000, player);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                long check = rig.job().waitingSince + MindRuntime.LONG_WAIT;
+                rig.runtime.checkWait(rig.job(), check);
+                UnoView.open(rig.runtime, player, check + 2 * 60 * 20);
+                check(Uno.said(player).equals(FIRST + "\n2 min ago: " + longWait(rig, rig.job()) + "nothing remains in '" + rig.from + "'."), Uno.said(player));
                 rig.runtime.control(player, rig.id, "cancel");
             })
             .thenSucceed();

@@ -679,7 +679,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D30 — Initiative: Uno warns
 
-**Status:** decided by the project owner on 2026-11-13. Increment A. The numbers are initial values, **proposed**. Implemented in part: the notices for `BLOCKED`, `RECOVERY` and `DONE` are **verified** with automatic in-game tests on 2026-11-13 (ticket #8). See "Notices, as built" below. The summary at an opening is **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #10). See "Summary, as built" below. The notice for a long wait is not implemented.
+**Status:** decided by the project owner on 2026-11-13. Increment A. The numbers are initial values, **proposed**. Implemented: the notices for `BLOCKED`, `RECOVERY` and `DONE` are **verified** with automatic in-game tests on 2026-11-13 (ticket #8). See "Notices, as built" below. The notice for a long wait is **verified** with automatic in-game tests on 2026-11-13 (ticket #9). See "Long wait, as built" below. The summary at an opening is **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #10). See "Summary, as built" below. Not verified: a client, a real player, and the chat.
 
 - **Decision:** Uno speaks first only to warn. It proposes no remedy. It starts no action by itself, except the wait of D34.
 - **Attention rule:**
@@ -717,11 +717,36 @@ Notices, as built (ticket #8). The choices of detail are **proposed**: the proje
 - **Not verified:** a real line in the chat of a client. No test has a connected player. The code of the game exit is examined only. It is a step of the checklist of the play session.
 - **Counterexample:** the load of the record can find a `RECOVERY` at the server start ("the world is older than the record"). Its notice leaves before a player can be connected. Thus it gives no chat line. Only the summary can show it.
 
+Long wait, as built (ticket #9). The choices of detail are **proposed**: the project owner did not confirm them one by one. The length of 6000 ticks (5 minutes) is the initial value of spec #1, **proposed**.
+
+| Long wait with the cause | Sentence of the notice |
+| --- | --- |
+| `SOURCE_AT_RESERVE`, reserve 0 | "Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has waited for 5 minutes: nothing remains in 'depot'." |
+| `SOURCE_AT_RESERVE`, a reserve above 0 | "… has waited for 5 minutes: 'depot' has no item above the reserve of 16." |
+| `SOURCE_KEEPS` | "… has waited for 5 minutes: 'depot' has the items, but it releases none." |
+| `ROBOT_FULL` | "… has waited for 5 minutes: the robot is full." |
+| `DESTINATION_FULL` | "… has waited for 5 minutes: 'furnace' is full, and 12 stay on board." |
+| `SOURCE_UNLOADED`, `DESTINATION_UNLOADED` | "… has waited for 5 minutes: the area of 'depot' is not loaded." The station of the cause |
+| `PATH_OBSTRUCTED` | "… has waited for 5 minutes: the path of the robot is obstructed." |
+| `NONE` | "… has waited for 5 minutes. Recorded reason: …" A record of an older version |
+
+- **The start of a wait:** the game time when the job goes to `WAITING` from a different state. The runtime records it in `MindRuntime.set`, the one function that sets the state. A change of the cause keeps it. A repeated report of the same wait keeps it. Each other state clears it: `RUNNING`, `SATISFIED`, a pause, a block, `RECOVERY`, the end.
+- **The check:** `MindRuntime.checkWait(job, now)`. The server tick calls it for each job, at each tick, with the game time of the overworld. A test gives a later moment as the parameter `now`.
+- **The entry:** after 6000 ticks or more, one diary entry of the kind "long wait". It has the time of the check, the state `WAITING`, the cause and the quantities at that moment. It is never "requested". The attention rule selects it. Thus its notice leaves through the one exit, in the tick of the check.
+- **One for each wait:** the job records that its current wait has its long wait. The record of the job saves this flag and the start of the wait. Thus a save and a load, or a restart, give no second entry. The next wait starts with a new time and without the flag.
+- **A restart is not an interruption:** the game time does not pass while the server is stopped. After a restart the wait keeps its recorded start.
+- **A record of an older version:** a job that waits has no recorded start. The time of its wait starts at the first check after the load. The same applies to a start after the current game time: a world older than the record.
+- **No remedy:** the sentence names the cause. It does not say what the owner must do.
+- **Evidence:** tests `a_long_wait`, `a_no_long_wait_for_the_stock_cycle`, and the long-wait checks in `t05_obstacle` and `a_notices_call_no_provider`. The tests give the moment of the check as a parameter. `a_notices_call_no_provider` moves the start of a wait back by 6000 ticks: the check of the server tick then finds the long wait, and the provider gets no call. See "Increment A — a notice for a long wait" in `TEST_RESULTS.md`.
+- **Not verified:** a wait of 5 real minutes, and its line in the chat of a client. A long wait across a real restart: the restart phases build no wait. The templates of `SOURCE_KEEPS`, `DESTINATION_FULL`, the two unloaded areas, `SOURCE_AT_RESERVE` with a reserve, and `NONE`: no test builds them. They come from a code examination.
+- **Counterexample:** a stock job whose source is often empty can give one notice for each wait of 5 minutes or more. Each such wait is a new wait. The rule stops only the notices of the short waits of the ordinary cycle.
+- **Counterexample:** a robot behind an obstacle that does not go away waits without an end. It gives one notice, after 5 minutes. Then the hologram and the report show the wait, but no second notice comes.
+
 Summary, as built (ticket #10). The rules of spec #1, section "The summary", are decided by the project owner (2026-11-13). The limit of 10 sentences is an initial value of the spec: **proposed**, to review after the play session. The choices of detail marked "proposed" are choices of the implementation: the project owner did not confirm them.
 
 - **Opening:** the use of the tablet and the click on a projector call `Net.open`. It calls `UnoView.open`, then sends the view. The view that the screen asks for each second, and the view after a button, go through `Net.sendView`: they are not an opening.
 - **Last opening:** `MindRuntime.open(actor, now)` records the game time of the overworld for the actor and returns the time of the opening before it. The record of each player is in `mindcraft.dat`. A record of an older version loads without openings: the next opening of each player is a first opening.
-- **Events:** the entries of the diary that the actor reads (`MindRuntime.diary`), newer than the last opening, that the attention rule selects (`Notices.selected`). Each line is the sentence of the notice (`Notices.sentence`). Thus a new kind of selected entry, for example the long wait of ticket #9, joins the summary without a change of the summary.
+- **Events:** the entries of the diary that the actor reads (`MindRuntime.diary`), newer than the last opening, that the attention rule selects (`Notices.selected`). Each line is the sentence of the notice (`Notices.sentence`). Thus the long wait of ticket #9 joins the summary without a change of the summary (`a_summary_has_the_long_wait`).
 - **Check of the actor:** the diary that the actor reads. It is the check of the list of jobs (`Actor.owns`). An operator also gets the events of the jobs of the other players and of the console.
 - **Sentence of Uno:** the summary goes through `Uno.say`, as each answer. With no line to say, `Uno.say` is not called: Uno keeps its sentence.
 - **No provider:** the code of the summary has no reference to a provider. A test with a provider that counts its calls confirms it.
@@ -739,7 +764,7 @@ Summary, as built (ticket #10). The rules of spec #1, section "The summary", are
 - **Proposed, removed entries without a selected entry:** the summary has the first line and the line about the memory. Reason: the removed entries can be events that needed attention. The spec says "With no selected entry, Uno keeps its sentence". This choice reads that rule as "with nothing to say".
 - **Proposed, the boundary:** an event is in the summary if its game time is later than the game time of the last opening. An event in the same tick as an opening, after it, is not in the next summary. The owner had the screen open in that tick, thus connected: the notice of that event reached the chat. An operator does not get the notices of other owners: such an event of another owner is lost for the summary of the operator.
 - **Proposed, a kept summary:** at an opening without an event, Uno keeps its sentence also when that sentence is the summary of an earlier opening. Then the screen shows that summary again, with the ages of its moment, until the next answer of Uno. The spec asks that the second opening shows no summary: it builds none.
-- **Evidence:** tests `a_summary_at_an_opening`, `a_summary_shows_the_10_newest`, `a_summary_says_where_the_memory_starts`, `a_t19_summary_of_another_player` and `a_summary_after_a_save_and_a_load`. The four restart phases check the summary of an operator after the restart. See "Increment A — the summary at an opening" in `TEST_RESULTS.md`.
+- **Evidence:** tests `a_summary_at_an_opening`, `a_summary_shows_the_10_newest`, `a_summary_says_where_the_memory_starts`, `a_t19_summary_of_another_player`, `a_summary_after_a_save_and_a_load` and, after the merge with ticket #9, `a_summary_has_the_long_wait`. The four restart phases check the summary of an operator after the restart. See "Increment A — the summary at an opening" in `TEST_RESULTS.md`.
 - **Not verified:** the summary on the screen of a client: the length of 12 lines, and a line break in the text of Uno. The tests call the methods of the tablet and of the projector with a fake player of Forge, without a client. It is a step of the checklist of the play session.
 - **Counterexample:** the ages do not change while the screen is open. After 10 minutes, "2 min ago" is wrong by 10 minutes.
 - **Counterexample:** a player who opens the screen often sees only the events since the last opening. The other events are only in the diary, and no screen shows it.
@@ -761,6 +786,7 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 - **The start of a job** writes its first entry, `RUNNING`. Thus the history of a job begins with its start.
 - **Content of an entry:** the game time of the overworld, the owner, the job ID, the robot, the two station names, the item, the state, the cause, the recorded reason, a "requested" flag, and the quantities at that moment: quantity, reserve, delivered, on board.
 - **The recorded reason** is not in the list of spec #1. The sentence of a `BLOCKED` without a cause and of a `RECOVERY` needs it.
+- **The second kind of entry (ticket #9):** a long wait. A flag "long wait" marks it. It has the state `WAITING` and the cause at that moment. See "Long wait, as built" in D30. A record without the flag loads its entries as changes.
 - **"Requested"** says that a request of an actor made the change: the start, a pause, a resume or a cancellation. The other changes come from what the runtime observed. The attention rule of D30 reads it.
 - **Limit:** above 200 entries of one owner, the runtime removes the oldest entries of that owner only. For each owner it records how many entries it removed, and the game time of the newest removed one. The summary (ticket #10, D30) says from this where the memory of Uno starts.
 - **Read:** `MindRuntime.diary(actor)` and `MindRuntime.forgotten(actor)` give only the data of the owners that the actor owns: the owner, an operator and the console (D37). In this ticket no screen and no command shows the diary. Since ticket #10 the summary at an opening shows the selected entries.
@@ -878,7 +904,8 @@ Increment A, as built (ticket #5). The choices of detail are **proposed**: the p
 - **Versions:** `transport@3` and `keep_stock@3`.
 - **Evidence:** tests `t05_obstacle`, `t05_pause_and_cancel_during_the_wait`, `t05_obstacle_keep_stock`, `t06_no_fuel`, `t06_impediment_of_an_unknown_kind`, `t04_destination_removed`, `t04_source_removed`, and the three `t16_quantity_*` tests with a load above the quantity. The four phases of the restart test. See `TEST_RESULTS.md`, "Increment A — waits and blocks".
 - **Observed, not built on purpose:** in `t12_second_session` the second turtle now waits without an end, behind the first turtle that lost its authority. This is the counterexample above, with one robot that does not move any more.
-- **Not verified:** a player on the path (`can_push`), and "Cannot leave loaded world". No test builds them. A wait of 5 minutes and its notice: ticket #8.
+- **Not verified:** a player on the path (`can_push`), and "Cannot leave loaded world". No test builds them.
+- **A wait of 5 minutes and its notice:** ticket #9. See "Long wait, as built" in D30. `t05_obstacle` checks the notice of a long wait with the cause `PATH_OBSTRUCTED`.
 
 ## D35 — The second behaviour and the first composition
 
@@ -932,6 +959,7 @@ Increment A, as built (ticket #5). The choices of detail are **proposed**: the p
 - **One player only:** the mod is for one player now. The README says so.
 - **Invariant, from increment A on:** each new kind of data (the diary, the notices, the proposals of a change, the library) has an owner, goes through the same check of the actor, and has a test of the T19 kind.
 - **The invariant for the diary and the notices (ticket #8), verified with automatic in-game tests:** each entry has the owner of its job. A read of the diary goes through the check of the actor: a different player reads no entry of the owner (`a_diary_of_a_job`). The limit removes only entries of the same owner (`a_diary_limit`). A notice goes to the owner of the job only: the operator who resumed the job gets none (`a_notices_for_blocked_recovery_and_done`).
+- **The long wait (ticket #9), verified with automatic in-game tests:** its entry has the owner of the job. Its notices go to the owner only (`a_long_wait`).
 - **The invariant for the summary and the last opening (ticket #10), verified with automatic in-game tests:** a last opening belongs to the player who opened. The summary reads the diary through the check of the actor. A different player gets no event of the owner, and that opening does not change the summary of the owner (`a_t19_summary_of_another_player`).
 
 Gates before a second player:

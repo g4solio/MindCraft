@@ -156,6 +156,10 @@ public class MindRuntime extends SavedData {
         public int recoveries;
         /** Game time of the last call from the robot. Not saved. */
         public long lastContact = UNKNOWN;
+        /** Game time of the start of the current wait. UNKNOWN when the job does not wait. A change of the cause keeps it (D30). */
+        public long waitingSince = UNKNOWN;
+        /** The current wait has its long-wait entry in the diary. One for each uninterrupted wait (D30). */
+        public boolean longWait;
 
         public boolean keepStock() {
             return module.equals(KEEP_STOCK);
@@ -178,10 +182,15 @@ public class MindRuntime extends SavedData {
      * The quantities are the values of the job at that moment.
      * "Requested" says that a request of an actor made the change: a start, a pause, a resume or a cancellation.
      * The other changes come from what the runtime observed.
+     * "Long wait" marks the other kind of entry: the job is WAITING for LONG_WAIT ticks without an interruption (D30).
+     * Its state is WAITING, and its cause is the cause at that moment.
      */
     public record Entry(long time, UUID owner, int job, int robot, String from, String to, Item item, State state, Cause cause,
-                        String reason, boolean requested, int quantity, int reserve, int delivered, int carried) {
+                        String reason, boolean requested, int quantity, int reserve, int delivered, int carried, boolean longWait) {
     }
+
+    /** The ticks of game time in WAITING, without an interruption, that make a long wait (D30): 5 minutes. An initial value. */
+    static final int LONG_WAIT = 6000;
 
     /** What the runtime removed from a diary: the number of entries, and the game time of the newest of them. UNKNOWN if none. */
     public record Forgotten(int entries, long until) {
@@ -330,7 +339,7 @@ public class MindRuntime extends SavedData {
         job.reserve = order.reserve();
         jobs.put(order.robot(), job);
         // The first entry of the job: it is RUNNING from now on.
-        write(job, true);
+        write(job, true, false, now());
         setDirty();
         robot.wake();
         return job;
@@ -514,26 +523,66 @@ public class MindRuntime extends SavedData {
         set(job, state, cause, reason, false);
     }
 
-    /** As above. "Requested": a request of an actor makes the change, not an observation of the runtime. Such a change gives no notice. */
+    /**
+     * As above. "Requested": a request of an actor makes the change, not an observation of the runtime. Such a change gives no notice.
+     * A wait starts when the job goes to WAITING from a different state. A change of the cause does not start it again. Each other state ends it.
+     */
     private void set(Job job, State state, Cause cause, String reason, boolean requested) {
         boolean changed = job.state != state || job.cause != cause;
+        if (state != State.WAITING) {
+            job.waitingSince = UNKNOWN;
+            job.longWait = false;
+        } else if (job.state != State.WAITING) {
+            job.waitingSince = now();
+            job.longWait = false;
+        }
         job.state = state;
         job.reason = reason;
         job.cause = cause;
-        if (changed) write(job, requested);
+        if (changed) write(job, requested, false, now());
         setDirty();
     }
 
+    /** The game time of the overworld. 0 in a copy that load() made outside the server. */
+    private long now() {
+        return server == null ? 0 : server.overworld().getGameTime();
+    }
+
     /**
-     * Writes the job as it is now in the diary. Above the limit, the oldest entries of the same owner go.
+     * Writes the job as it is now in the diary, at the given game time. Above the limit, the oldest entries of the same owner go.
      * Then the attention rule reads the entry: it can give a notice (D30). A copy that load() made outside the server gives none.
      */
-    private void write(Job job, boolean requested) {
-        Entry entry = new Entry(server == null ? 0 : server.overworld().getGameTime(), job.owner, job.id, job.robot, job.from, job.to,
-            job.item, job.state, job.cause, job.reason, requested, job.quantity, job.reserve, job.delivered, job.carried);
+    private void write(Job job, boolean requested, boolean longWait, long time) {
+        Entry entry = new Entry(time, job.owner, job.id, job.robot, job.from, job.to, job.item, job.state, job.cause, job.reason,
+            requested, job.quantity, job.reserve, job.delivered, job.carried, longWait);
         diary.add(entry);
         forget(job.owner);
         if (server != null) Notices.entry(server, entry);
+    }
+
+    /**
+     * The check of a long wait (D30). A job that is WAITING for LONG_WAIT ticks or more, without an interruption, gets one
+     * "long wait" entry, with the cause at this moment. Thus it gets one notice. A later check of the same wait writes nothing.
+     * "now" is the game time of the check. The server tick gives the current game time. A test gives a later moment.
+     */
+    void checkWait(Job job, long now) {
+        if (job.state != State.WAITING || job.longWait) return;
+        if (job.waitingSince == UNKNOWN || job.waitingSince > now) {
+            // A record of an older version has no start of the wait. In a world older than the record the start is in the future.
+            // In both cases the time of the wait starts now.
+            job.waitingSince = now;
+            setDirty();
+            return;
+        }
+        if (now - job.waitingSince < LONG_WAIT) return;
+        job.longWait = true;
+        write(job, false, true, now);
+        setDirty();
+    }
+
+    /** The check of a long wait for each job. The server tick calls it with the current game time. */
+    void checkWaits(long now) {
+        for (Job job : jobs.values()) checkWait(job, now);
     }
 
     /** Removes the oldest entries of the owner above the limit, and records what it removed. The entries of other owners stay. */
@@ -676,6 +725,8 @@ public class MindRuntime extends SavedData {
             t.putString("lastOp", j.lastOp);
             t.putLong("lastOpAt", j.lastOpAt);
             t.putInt("recoveries", j.recoveries);
+            t.putLong("waitingSince", j.waitingSince);
+            t.putBoolean("longWait", j.longWait);
             jobTags.put(robotId.toString(), t);
         });
         root.put("jobs", jobTags);
@@ -697,6 +748,7 @@ public class MindRuntime extends SavedData {
             t.putInt("reserve", e.reserve());
             t.putInt("delivered", e.delivered());
             t.putInt("carried", e.carried());
+            t.putBoolean("longWait", e.longWait());
             diaryTags.add(t);
         }
         root.put("diary", diaryTags);
@@ -760,6 +812,9 @@ public class MindRuntime extends SavedData {
             j.lastOp = t.getString("lastOp");
             j.lastOpAt = t.getLong("lastOpAt");
             j.recoveries = t.getInt("recoveries");
+            // A record of an older version has no start of the wait. The first check starts the time (see checkWait).
+            j.waitingSince = t.contains("waitingSince") ? t.getLong("waitingSince") : UNKNOWN;
+            j.longWait = t.getBoolean("longWait");
             j.robot = Integer.parseInt(robotId);
             rt.jobs.put(j.robot, j);
         }
@@ -769,7 +824,7 @@ public class MindRuntime extends SavedData {
             rt.diary.add(new Entry(t.getLong("time"), t.getUUID("owner"), t.getInt("job"), t.getInt("robot"), t.getString("from"),
                 t.getString("to"), ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(t.getString("item"))),
                 State.valueOf(t.getString("state")), Cause.valueOf(t.getString("cause")), t.getString("reason"), t.getBoolean("requested"),
-                t.getInt("quantity"), t.getInt("reserve"), t.getInt("delivered"), t.getInt("carried")));
+                t.getInt("quantity"), t.getInt("reserve"), t.getInt("delivered"), t.getInt("carried"), t.getBoolean("longWait")));
         }
         CompoundTag forgottenTags = root.getCompound("forgotten");
         for (String owner : forgottenTags.getAllKeys()) {

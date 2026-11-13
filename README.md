@@ -218,11 +218,19 @@ Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24
 - The line comes from a fixed template for the state and the cause. It names the job, the robot and the cause.
 - Uno only warns. It proposes no remedy and starts no action.
 - A notice calls no model. It works without a key, and when the model service is down.
-- `RUNNING`, `WAITING` and `SATISFIED` give no notice.
+- `RUNNING`, `WAITING` and `SATISFIED` give no notice. Thus the ordinary cycle of a stock job is silent.
+- A long wait gives one notice: the job stays `WAITING` for 5 minutes of game time without an interruption. For example:
+
+```
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has waited for 5 minutes: the path of the robot is obstructed.
+```
+
+- The notice names the cause at that moment. A change of the cause during the wait does not start the 5 minutes again.
+- A wait gives one notice only, also after a restart of the server. A job that works again and then waits again can give a new notice, after 5 new minutes.
+- Each other state ends the wait: `RUNNING`, `SATISFIED`, a pause, a block. A restart of the server does not end it. Game time does not pass while the server is stopped.
 - Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
 - A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
 - If you are not connected, there is no chat line. The summary at your next opening has the event.
-- In this version there is no notice after a long wait.
 
 ### The summary
 
@@ -235,7 +243,7 @@ Uno › Since you last opened this screen:
 2 min ago: Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24 delivered.
 ```
 
-- The events are the events of the notices, with the same sentences. The oldest comes first. Each line has its age.
+- The events are the events of the notices, with the same sentences, also a long wait. The oldest comes first. Each line has its age.
 - The source is the diary. Thus the summary also has the events of your absence and the events before a server restart.
 - The summary is the sentence of Uno on the screen. The next answer of Uno replaces it.
 - If nothing needed your attention, Uno keeps its sentence. That sentence can be the summary of an earlier opening.
@@ -250,7 +258,7 @@ Uno › Since you last opened this screen:
 ### The diary
 
 The runtime writes a diary: each change of the state of a job, and each change of the cause of a wait or of a block.
-A repeated report of the same state and cause writes nothing.
+A repeated report of the same state and cause writes nothing. A long wait writes one more entry, with the cause at that moment.
 An entry has the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
 Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
 The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
@@ -320,7 +328,7 @@ A request without the words of an action and without two stations gets the reaso
 | `CANCELLED` | The owner cancelled. The cargo stays on board | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
-A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. See "Notices".
+A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. A `WAITING` of 5 minutes without an interruption gives one notice too. See "Notices".
 Uno takes the sentence of its report from the cause. The screen and the `status` command also show the recorded reason with the position.
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.

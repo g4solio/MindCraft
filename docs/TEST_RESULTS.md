@@ -541,7 +541,7 @@ Changes to the older tests:
 | **Deduced from a code examination** | The hologram shows the attention colour during the wait: `MindRuntime.mood` gives `ATTENTION` for each `WAITING`. `s2_projector` tests the colour with a wait for materials, not with an obstacle. The mod uses only `dan200.computercraft.api`: the new Lua functions are in `RobotApi`, with the same imports as before |
 | **Not verified** | A player on the path (`can_push = true`). A robot at the edge of a loaded area ("Cannot leave loaded world" is also an obstacle). Two robots that face each other. The screen in a client during the wait |
 
-Known limit: a robot waits without an end behind an obstacle that does not go away. The report and the hologram show the wait. The notice after a long wait is ticket #8.
+Known limit: a robot waits without an end behind an obstacle that does not go away. The report and the hologram show the wait. The notice after a long wait is ticket #9: see "Increment A — a notice for a long wait".
 
 ## Increment A — the job diary and the notices
 
@@ -591,6 +591,56 @@ Changes to the older tests:
 - `t11_server_restart`: it checks the diary after the restart and at the end.
 
 The merge brought no change of the runtime (`MindRuntime.java`, `RobotApi.java`) and of the Lua modules. Thus the four restart phases were not repeated after it.
+
+## Increment A — a notice for a long wait
+
+Ticket #9 of spec #1, on 2026-11-13. See D30.
+All tests of this section are in the game and automatic. No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+No test has a connected player. The tests read the notices through the exit of the notices, as in ticket #8.
+No test waits 5 minutes. The tests give the moment of the check as a parameter: `MindRuntime.checkWait(job, now)`.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new tests, with a check of the long wait that does nothing | 64 of 67. `a_long_wait` failed as expected: no notice 6000 ticks after the start of the wait. `a_notices_call_no_provider` failed as expected: two notices, not three, at the time limit of the test. `a_screen_model_lines` failed as a consequence: the failed test did not give back the provider of the server, thus the view showed a counter. `a_no_long_wait_for_the_stock_cycle` passed: without a long wait it cannot fail. It guards against a notice that must not come |
+| Green | The long wait: the start of the wait in `MindRuntime.set`, the check, the entry, the templates, and the check in the server tick. One more check in `t05_obstacle`, added with this code: it has no red run | **67 of 67**. Server line: `All 67 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash` | The code of Green. The server tick now reads the record of the runtime at each tick, also before the first robot calls | Passed, each phase. `check`: the diary after the restart is `RUNNING`, and at the end `RUNNING, DONE`. `check-crash`: after the restart `RUNNING, DONE, RECOVERY`, at the end `RUNNING, DONE, RECOVERY, RUNNING, DONE`. After the four phases the data folder has no temporary file |
+| After the merge | The code of ticket #9, merged with tickets #2, #3, #4, #5, #6, #7, #8 and #11 of increment A | **72 of 72**. Server line: `All 72 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash`, after the merge | The merged code. Ticket #4 also changed `MindRuntime.java` | Passed, each phase, with the same results. After the four phases the data folder has no temporary file |
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `a_long_wait` | A transport of 24 for a player. The source is empty: the job waits. Then the test fills the robot with cobblestone and puts 12 coal in the source: the cause changes. Checks 5999 and 6000 ticks after the start of the wait, then 7200. Checks on copies of the record. Then the test frees one slot: the robot delivers 12 and waits again. Checks 5999 and 6000 ticks after the start of the new wait. Then the owner cancels | The entries before the check: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `WAITING ROBOT_FULL`. At 5999 ticks: no entry, no notice. At 6000 ticks: one long-wait entry with the cause `ROBOT_FULL`, the time of the check, 0 delivered and 0 on board, not requested. One notice: "Job N on robot #R (minecraft:coal from 'a_long_wait_source' to 'a_long_wait_destination') has waited for 5 minutes: the robot is full." At 7200 ticks: no second entry, no second notice. A copy of the record after the notice: a check at 12000 ticks writes no entry. A copy of the record before the notice: nothing at 5999 ticks, the long wait at 6000. A copy without the start of the wait, as a record of an older version: the check at 6000 starts the time, nothing at 11999, the long wait at 12000. The new wait: `RUNNING`, `WAITING SOURCE_AT_RESERVE`. Nothing at 5999 ticks. At 6000 ticks a second notice: "… has waited for 5 minutes: nothing remains in 'a_long_wait_source'." The cancellation gives no notice. Both notices go to the owner only |
+| `a_no_long_wait_for_the_stock_cycle` | A stock job. The destination has 10 and needs 24. The source has 40 and a reserve of 30. The robot brings 10 and waits. The test adds 8: `SATISFIED`. A check 6000 ticks after the start of the first wait. Then the test empties the destination: the robot brings 4 and waits again. A check 6000 ticks after the start of the first wait, and one 5999 ticks after the start of the second. Then the owner cancels | The entries: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `RUNNING`, `SATISFIED`, `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `CANCELLED`. No long wait. No notice |
+| `t05_obstacle` | One more check during the wait for a free path, after the window of 15 seconds: the robot tried again during the window. A check 6000 ticks after the start of the wait | The entries: `RUNNING`, `WAITING PATH_OBSTRUCTED`: the attempts wrote no entry and did not start the time again. One notice: "… has waited for 5 minutes: the path of the robot is obstructed." |
+| `a_notices_call_no_provider` | After `DONE`, the test empties the source and starts a second job: it waits. The test moves the start of the wait back by 6000 ticks. The check of the server tick runs with the real game time | The third notice comes from the check of the server tick: "… has waited for 5 minutes: nothing remains in 'a_notice_provider_source'." The provider got zero calls |
+
+Conditions built artificially:
+
+- **The moment of the check:** a parameter of the check. The long-wait entry gets that moment as its time. Thus in `a_long_wait` the time of the long-wait entry is later than the times of the entries after it.
+- **The start moved back:** in `a_notices_call_no_provider` the test changes the start of the wait in the record of the job. Thus the server tick finds a long wait without a wait of 5 minutes.
+- **A record of an older version:** the test removes the start of the wait from the saved data.
+- **The copies of the record:** a copy that `load` makes in a test has no server. It sends no notice. Its diary shows whether it would send one: each notice comes from an entry.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The server tick calls the check for each job at each tick, with the game time of the overworld | `MindCraft.tick` | That a wait of 5 real minutes gives a chat line |
+| Only `MindRuntime.set` starts and ends a wait. A change of the cause keeps the start. Each other state clears it | `MindRuntime.java` | |
+| The templates of `SOURCE_KEEPS`, `DESTINATION_FULL`, `SOURCE_UNLOADED`, `DESTINATION_UNLOADED`, `SOURCE_AT_RESERVE` with a reserve, and `NONE` | `Notices.java` | Their text in a run. No test builds these long waits |
+| The code of the long wait has no reference to Uno or to a provider | `MindRuntime.checkWait`, `Notices.java` | |
+
+Not covered:
+
+- A wait of 5 real minutes, and its line in the chat of a client. They are for the checklist of the play session.
+- A long wait across a real restart of the server. The restart phases build no wait. The save and the load in `a_long_wait` keep the start and the flag.
+
+Changes to the older tests:
+
+- `t05_obstacle`: one more check, the notice of a long wait.
+- `a_notices_call_no_provider`: a second job that waits, and its notice. The test expects three notices.
+- The helper `states` of the tests writes a long-wait entry as `LONG_WAIT` and its cause.
 
 ## Increment A — Limits on the model calls
 

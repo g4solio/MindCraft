@@ -149,6 +149,21 @@ Uno accepts one request at a time. A new request replaces the proposal before it
 /uno report
 ```
 
+A report and a pause act immediately, without a proposal:
+
+```
+/uno ask How is the furnace?
+/uno ask Pause robot 3
+```
+
+- A request about one job gives the report of that job only. A report request that names no job gives the report on all your jobs, as `/uno report` does.
+- A pause stops the job at once, with the same request as the "Pause" button. The cargo stays on board. If the runtime refuses the pause, for example because the job is not running, Uno gives the reason.
+- Uno looks for the job only among your jobs:
+  - from the robot number, if the request gives one;
+  - from a station name, if exactly one of your open jobs uses that station as source or as destination;
+  - with no job named, if you have exactly one open job.
+- In each other case Uno says how many jobs fit, asks for the robot number and does nothing.
+
 ### The tablet
 
 The tablet is an item that you carry. It is in the "Tools & Utilities" tab of the creative inventory, or use `/give @s mindcraft:tablet`.
@@ -182,16 +197,19 @@ The server log says which provider is active: look for the line `Uno interprets 
 
 - Each written request to Uno is a paid call on the account of the key. The report, the confirmation and the jobs do not call the model.
 - Anthropic gets the text of the request, the names of your stations and the numbers of your robots. The screen says so with one line.
-- The answer of Claude is only a proposal. It goes through the same validation as the commands and starts only after your confirmation.
+- A new job from Claude is only a proposal. It goes through the same validation as the commands and starts only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
-- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. In this version Uno acts only on a new job and on "none". For the other actions Uno says that it cannot do them from a written request yet, and changes nothing.
+- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. In this version Uno acts on a new job, a pause, a report and "none". For change, resume and cancel Uno says that it cannot do them from a written request yet, and changes nothing.
+- A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
 Details and limits: [D21](docs/DECISIONS.md).
 
 ### What Uno understands without Claude
 
-Without a key Uno knows only these elements:
+Without a key Uno knows only these elements.
+
+A request that names two of your stations is a new job:
 
 - The exact names of two of your stations. The source is the one after "from".
 - A quantity, and a reserve after "leave" or "reserve".
@@ -200,6 +218,16 @@ Without a key Uno knows only these elements:
 - "robot N" if you have more than one free robot.
 
 It also reads the same request in Italian, the first language of this project.
+
+With one station or none, a word of the action decides. If a request has the words of both actions, it is a pause.
+
+| Action | English words | Italian words | Examples |
+| --- | --- | --- | --- |
+| Pause | `pause` | `pausa`, `sospendi` | "Pause the furnace job", "Metti in pausa il robot 3" |
+| Report | `report`, `status`, `how is`, `how's`, `how are` | `rapporto`, `stato`, `come va`, `come vanno`, `come sta`, `come stanno` | "How is the furnace?", "Come va il robot 3?", "Report" |
+
+The job of a pause or of a report: "robot N", or the exact name of one of your stations, or nothing.
+A request without the words of an action and without two stations gets the reason why Uno cannot propose a job, as before.
 
 ## States of a job
 

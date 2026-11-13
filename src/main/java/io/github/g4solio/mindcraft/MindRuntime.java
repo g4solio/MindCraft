@@ -24,6 +24,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -127,6 +129,8 @@ public class MindRuntime extends SavedData {
     public static class Job {
         public int id;
         public UUID owner;
+        /** The robot of the job: its key in the record. Not saved: the load takes it from the key. */
+        public int robot = UNKNOWN;
         public String module = TRANSPORT;
         public String from, to;
         public Item item;
@@ -168,18 +172,42 @@ public class MindRuntime extends SavedData {
         }
     }
 
+    /**
+     * One line of the diary: a change of the state of a job, or of the cause of a wait or of a block (D31).
+     * The entry carries what its sentence needs, because the record of the job can be gone: a new job replaces it on the robot.
+     * The quantities are the values of the job at that moment.
+     * "Requested" says that a request of an actor made the change: a start, a pause, a resume or a cancellation.
+     * The other changes come from what the runtime observed.
+     */
+    public record Entry(long time, UUID owner, int job, int robot, String from, String to, Item item, State state, Cause cause,
+                        String reason, boolean requested, int quantity, int reserve, int delivered, int carried) {
+    }
+
+    /** What the runtime removed from a diary: the number of entries, and the game time of the newest of them. UNKNOWN if none. */
+    public record Forgotten(int entries, long until) {
+    }
+
     public final List<Place> places = new ArrayList<>();
     public final Map<String, Station> stations = new TreeMap<>();
     /** Computer ID to owner. */
     public final Map<Integer, UUID> robots = new TreeMap<>();
     /** Computer ID to the current or last job. A robot has one job at most. */
     public final Map<Integer, Job> jobs = new TreeMap<>();
+    /** The diary of all owners, the oldest entry first (D31). It keeps the entries of a job after a new job replaced it. */
+    private final List<Entry> diary = new ArrayList<>();
+    /** The entries for each owner at most (D31). An initial value, to review after the play session. */
+    static final int DIARY_LIMIT = 200;
+    /** Owner to what the runtime removed from the diary of that owner. */
+    private final Map<UUID, Forgotten> forgotten = new HashMap<>();
     private int nextJobId = 1;
     /** True after the comparison of the record with the age of the world. Not saved. */
     private boolean ageChecked;
+    /** The server of this record, for the game time of the diary. Not saved. Null in a copy that load() made outside the server. */
+    private MinecraftServer server;
 
     public static MindRuntime get(MinecraftServer server) {
         MindRuntime runtime = server.overworld().getDataStorage().computeIfAbsent(MindRuntime::load, MindRuntime::new, MindCraft.MOD_ID);
+        runtime.server = server;
         if (!runtime.ageChecked) {
             runtime.ageChecked = true;
             long now = server.overworld().getGameTime();
@@ -291,6 +319,7 @@ public class MindRuntime extends SavedData {
         Job job = new Job();
         job.id = nextJobId++;
         job.owner = actor.id();
+        job.robot = order.robot();
         job.module = order.module();
         job.from = order.from();
         job.to = order.to();
@@ -298,6 +327,8 @@ public class MindRuntime extends SavedData {
         job.quantity = order.quantity();
         job.reserve = order.reserve();
         jobs.put(order.robot(), job);
+        // The first entry of the job: it is RUNNING from now on.
+        write(job, true);
         setDirty();
         robot.wake();
         return job;
@@ -378,9 +409,9 @@ public class MindRuntime extends SavedData {
         Job job = checkControl(actor, robotId, jobId, action);
         RobotApi robot = RobotApi.live(robotId);
         switch (action) {
-            case "pause" -> set(job, State.PAUSED, "paused by the owner");
+            case "pause" -> set(job, State.PAUSED, Cause.NONE, "paused by the owner", true);
             // The load stays in the robot. The status shows it.
-            case "cancel" -> set(job, State.CANCELLED, "cancelled by the owner");
+            case "cancel" -> set(job, State.CANCELLED, Cause.NONE, "cancelled by the owner", true);
             case "resume" -> {
                 if (job.state == State.RECOVERY) {
                     // The owner accepts the observed load as the truth. The totals can be inexact after this.
@@ -397,10 +428,28 @@ public class MindRuntime extends SavedData {
                     job.lastOpAt = Math.min(job.lastOpAt, robot.now());
                     job.recoveries++;
                 }
-                set(job, !job.keepStock() && job.carried == 0 && job.delivered >= job.quantity ? State.DONE : State.RUNNING, "");
+                // A resume can complete the job: the owner accepted the observed load, and nothing is on board.
+                set(job, !job.keepStock() && job.carried == 0 && job.delivered >= job.quantity ? State.DONE : State.RUNNING, Cause.NONE, "", true);
             }
         }
         if (robot != null) robot.wake();
+    }
+
+    /** The diary entries that the actor owns, the oldest first. Only the owner and an operator read an entry, as for a job. */
+    public List<Entry> diary(Actor actor) {
+        return diary.stream().filter(entry -> actor.owns(entry.owner())).toList();
+    }
+
+    /** What the runtime removed from the diaries that the actor owns. */
+    public Forgotten forgotten(Actor actor) {
+        int entries = 0;
+        long until = UNKNOWN;
+        for (Map.Entry<UUID, Forgotten> owner : forgotten.entrySet()) {
+            if (!actor.owns(owner.getKey())) continue;
+            entries += owner.getValue().entries();
+            until = Math.max(until, owner.getValue().until());
+        }
+        return new Forgotten(entries, until);
     }
 
     /** The status of a robot and its job, for a request of a player. Only the owner and an operator read it. */
@@ -444,12 +493,48 @@ public class MindRuntime extends SavedData {
         set(job, state, Cause.NONE, reason);
     }
 
-    /** The one place where the state of a job changes. The cause belongs to the state: a new state without a cause has NONE. */
+    /**
+     * The one place where the state of a job changes. The cause belongs to the state: a new state without a cause has NONE.
+     * A change of the state or of the cause writes an entry in the diary. The same state with the same cause writes none:
+     * a robot that tries again reports the same state again, and only the reason can be new.
+     */
     void set(Job job, State state, Cause cause, String reason) {
+        set(job, state, cause, reason, false);
+    }
+
+    /** As above. "Requested": a request of an actor makes the change, not an observation of the runtime. Such a change gives no notice. */
+    private void set(Job job, State state, Cause cause, String reason, boolean requested) {
+        boolean changed = job.state != state || job.cause != cause;
         job.state = state;
         job.reason = reason;
         job.cause = cause;
+        if (changed) write(job, requested);
         setDirty();
+    }
+
+    /**
+     * Writes the job as it is now in the diary. Above the limit, the oldest entries of the same owner go.
+     * Then the attention rule reads the entry: it can give a notice (D30). A copy that load() made outside the server gives none.
+     */
+    private void write(Job job, boolean requested) {
+        Entry entry = new Entry(server == null ? 0 : server.overworld().getGameTime(), job.owner, job.id, job.robot, job.from, job.to,
+            job.item, job.state, job.cause, job.reason, requested, job.quantity, job.reserve, job.delivered, job.carried);
+        diary.add(entry);
+        forget(job.owner);
+        if (server != null) Notices.entry(server, entry);
+    }
+
+    /** Removes the oldest entries of the owner above the limit, and records what it removed. The entries of other owners stay. */
+    private void forget(UUID owner) {
+        int count = (int) diary.stream().filter(entry -> entry.owner().equals(owner)).count();
+        for (Iterator<Entry> entries = diary.iterator(); count > DIARY_LIMIT && entries.hasNext(); ) {
+            Entry old = entries.next();
+            if (!old.owner().equals(owner)) continue;
+            entries.remove();
+            count--;
+            Forgotten before = forgotten.getOrDefault(owner, new Forgotten(0, UNKNOWN));
+            forgotten.put(owner, new Forgotten(before.entries() + 1, Math.max(before.until(), old.time())));
+        }
     }
 
     /** The job waits for a condition that can change without the owner. The cause is what the runtime observed. */
@@ -582,6 +667,35 @@ public class MindRuntime extends SavedData {
             jobTags.put(robotId.toString(), t);
         });
         root.put("jobs", jobTags);
+        ListTag diaryTags = new ListTag();
+        for (Entry e : diary) {
+            CompoundTag t = new CompoundTag();
+            t.putLong("time", e.time());
+            t.putUUID("owner", e.owner());
+            t.putInt("job", e.job());
+            t.putInt("robot", e.robot());
+            t.putString("from", e.from());
+            t.putString("to", e.to());
+            t.putString("item", itemName(e.item()));
+            t.putString("state", e.state().name());
+            t.putString("cause", e.cause().name());
+            t.putString("reason", e.reason());
+            t.putBoolean("requested", e.requested());
+            t.putInt("quantity", e.quantity());
+            t.putInt("reserve", e.reserve());
+            t.putInt("delivered", e.delivered());
+            t.putInt("carried", e.carried());
+            diaryTags.add(t);
+        }
+        root.put("diary", diaryTags);
+        CompoundTag forgottenTags = new CompoundTag();
+        forgotten.forEach((owner, f) -> {
+            CompoundTag t = new CompoundTag();
+            t.putInt("entries", f.entries());
+            t.putLong("until", f.until());
+            forgottenTags.put(owner.toString(), t);
+        });
+        root.put("forgotten", forgottenTags);
         return root;
     }
 
@@ -631,7 +745,21 @@ public class MindRuntime extends SavedData {
             j.lastOp = t.getString("lastOp");
             j.lastOpAt = t.getLong("lastOpAt");
             j.recoveries = t.getInt("recoveries");
-            rt.jobs.put(Integer.valueOf(robotId), j);
+            j.robot = Integer.parseInt(robotId);
+            rt.jobs.put(j.robot, j);
+        }
+        // A record of an older version has no diary: it loads with an empty one.
+        for (Tag tag : root.getList("diary", Tag.TAG_COMPOUND)) {
+            CompoundTag t = (CompoundTag) tag;
+            rt.diary.add(new Entry(t.getLong("time"), t.getUUID("owner"), t.getInt("job"), t.getInt("robot"), t.getString("from"),
+                t.getString("to"), ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(t.getString("item"))),
+                State.valueOf(t.getString("state")), Cause.valueOf(t.getString("cause")), t.getString("reason"), t.getBoolean("requested"),
+                t.getInt("quantity"), t.getInt("reserve"), t.getInt("delivered"), t.getInt("carried")));
+        }
+        CompoundTag forgottenTags = root.getCompound("forgotten");
+        for (String owner : forgottenTags.getAllKeys()) {
+            CompoundTag t = forgottenTags.getCompound(owner);
+            rt.forgotten.put(UUID.fromString(owner), new Forgotten(t.getInt("entries"), t.getLong("until")));
         }
         return rt;
     }

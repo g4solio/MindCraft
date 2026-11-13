@@ -410,6 +410,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
 - **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is not verified with the real service. See D29.1.
 - **Decided on 2026-11-13, not implemented:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). By default only an operator will use Claude, with a session limit and a counter on the screen (D33).
+- **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
 
 ## D22 — License: MIT
 
@@ -677,7 +678,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D30 — Initiative: Uno warns
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A. The numbers are initial values, **proposed**.
+**Status:** decided by the project owner on 2026-11-13. Increment A. The numbers are initial values, **proposed**. Implemented in part: the notices for `BLOCKED`, `RECOVERY` and `DONE` are **verified** with automatic in-game tests on 2026-11-13 (ticket #8). See "Notices, as built" below. The notice for a long wait and the summary are not implemented.
 
 - **Decision:** Uno speaks first only to warn. It proposes no remedy. It starts no action by itself, except the wait of D34.
 - **Attention rule:**
@@ -694,16 +695,52 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Counterexample:** a `keep_stock` job changes often between `RUNNING`, `WAITING` and `SATISFIED`. A notice for each change is not acceptable. This is the reason for the rule.
 - **Counterexample:** after B, Uno has two voices. The notices are flatter than the answers.
 
+Notices, as built (ticket #8). The choices of detail are **proposed**: the project owner did not confirm them one by one.
+
+| Entry of the diary | Sentence of the notice |
+| --- | --- |
+| `BLOCKED`, `OUT_OF_FUEL` | "Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel." |
+| `BLOCKED`, `SOURCE_NO_INVENTORY` or `DESTINATION_NO_INVENTORY` | "… is blocked: there is no inventory at 'depot'." The station of the cause |
+| `BLOCKED`, `LOAD_ABOVE_QUANTITY` | "… is blocked: the quantity of the job is reached, and 54 stay on board." |
+| `BLOCKED`, `NONE` | "… is blocked. Recorded reason: …" |
+| `RECOVERY` | "… needs a check: I cannot say how it went. Recorded reason: …" |
+| `DONE` | "… is done: 24 delivered." |
+
+- **Attention rule:** an entry of the diary (D31) with the state `BLOCKED`, `RECOVERY` or `DONE`, that the runtime observed. An entry that a request of an actor made is not selected: a start, a pause, a resume or a cancellation. This holds also when the resume of a `RECOVERY` completes the job, and when an operator gives the request.
+- **No remedy:** the sentences do not say "give fuel" or "resume". The report still says it, as before.
+- **`RECOVERY`** has no cause (D25). The sentence gives the recorded reason. The runtime writes it without coordinates: "the robot holds N, the record says M", or "the world is older than the record of this job".
+- **One exit:** `Notices.exit` gets the server, the owner and the text. In the game it sends the system message "Uno › …" to the owner, if the owner is connected. If not, nothing is sent and nothing waits: the diary keeps the event for the summary.
+- **Moment:** the notice leaves in the tick of the change, from `MindRuntime.set`, the one function that sets the state of a job.
+- **Console:** a job of the console has no player to warn. It gives no notice. Its diary entries exist.
+- **Evidence:** tests `a_notices_for_blocked_recovery_and_done`, `a_no_notice_for_a_resume_that_completes_the_job`, `a_no_notice_for_the_ordinary_cycle`, `a_no_notice_for_a_console_job`, `a_notices_call_no_provider`, and the notice checks in `t04_destination_removed`, `t04_source_removed`, `t06_impediment_of_an_unknown_kind` and `t16_quantity_lowered_with_load`. A test replaces the exit with one that records each notice. See "Increment A — the job diary and the notices" in `TEST_RESULTS.md`.
+- **Not verified:** a real line in the chat of a client. No test has a connected player. The code of the game exit is examined only. It is a step of the checklist of the play session.
+- **Counterexample:** the load of the record can find a `RECOVERY` at the server start ("the world is older than the record"). Its notice leaves before a player can be connected. Thus it gives no chat line. Only the summary can show it.
+
 ## D31 — Memory: the job diary
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented and **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #8). See "Diary, as built" below. The size limit is an initial value of spec #1, **proposed**.
 
 - **Problem:** the record keeps one job for each robot: the last. A new job replaces the job before it (`MindRuntime.start`). Uno has no history. The summary of D30 has no source.
 - **Decision:** the runtime writes a diary: each change of the state of a job, with the time, the cause and the quantities. Minecraft saves the diary with the world. The diary has a size limit. When old entries are removed, Uno says where its memory starts.
 - **Reason:** it is a verifiable memory in the sense of the brief (2.4). Each line comes from the runtime.
 - **Deferred:** permanent decisions, for example a reserve that belongs to a station. The context of the conversation for the model.
 - **Cost:** the owner must write a complete sentence for each change. Uno does not know the sentence before it.
-- **Not decided:** the size limit.
+- **Size limit:** 200 entries for each owner. It is the initial value of spec #1, to review after the play session.
+
+Diary, as built (ticket #8). The choices of detail are **proposed**: the project owner did not confirm them one by one.
+
+- **Where:** `MindRuntime.set`, the one function that sets the state of a job. It compares the new state and cause with the old ones. A change writes one entry. The same state with the same cause writes none: a robot that tries again reports the same state, and only the reason can change.
+- **The start of a job** writes its first entry, `RUNNING`. Thus the history of a job begins with its start.
+- **Content of an entry:** the game time of the overworld, the owner, the job ID, the robot, the two station names, the item, the state, the cause, the recorded reason, a "requested" flag, and the quantities at that moment: quantity, reserve, delivered, on board.
+- **The recorded reason** is not in the list of spec #1. The sentence of a `BLOCKED` without a cause and of a `RECOVERY` needs it.
+- **"Requested"** says that a request of an actor made the change: the start, a pause, a resume or a cancellation. The other changes come from what the runtime observed. The attention rule of D30 reads it.
+- **Limit:** above 200 entries of one owner, the runtime removes the oldest entries of that owner only. For each owner it records how many entries it removed, and the game time of the newest removed one. The summary of a later part can say from this where the memory of Uno starts.
+- **Read:** `MindRuntime.diary(actor)` and `MindRuntime.forgotten(actor)` give only the data of the owners that the actor owns: the owner, an operator and the console (D37). In this ticket no screen and no command shows the diary.
+- **Saved:** the diary and the removed counts are in `mindcraft.dat`, with the jobs. A record of an older version has no diary: it loads with an empty one.
+- **Evidence:** tests `a_diary_of_a_job` and `a_diary_limit`. The four restart phases check the diary after a real stop and after a halt of the process. See "Increment A — the job diary and the notices" in `TEST_RESULTS.md`.
+- **Cost:** each write of the record contains the whole diary, also the write after each transfer (D08.1). No measurement.
+- **Counterexample:** a stock job writes two entries or more for each refill (spec #1). Then the memory of a busy job is short.
+- **Limit:** a copy of the record that `load` makes outside the server writes its entries with the time 0 and sends no notice. Only the tests make such copies.
 
 ## D32 — The model speaks, the server checks
 
@@ -724,7 +761,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D33 — The model and its cost
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
+**Status:** decided by the project owner on 2026-11-13. The limits on the calls of increment A are implemented: see D33.1. The rest is not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
 
 The model. Increment B.
 
@@ -755,6 +792,28 @@ Limits on the calls. Increment A.
 - **Reason:** `/uno ask` needs no permission, and has no counter and no limit other than one request at a time (code examination). A command block that repeats the command as a player can make one request after the other. This is deduced from the code. It was not tried.
 - **Cost:** a fixed session limit can stop a long session. It becomes a setting when multiplayer opens.
 - **Not decided:** the number of the session limit.
+
+### D33.1 — Limits on the model calls in increment A
+
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with providers written in the tests and with a local stand-in in place of the API. Not verified with the real Claude service or in a client. Increment A, ticket #11. The choices of the spec are decided by the project owner (spec #1, 2026-11-13). The limit of 100 is an initial value of the spec: **proposed**, to review after the play session. Two points are choices of the implementation: **proposed**, see below.
+
+- **Counter:** for each actor in one server session, Uno counts the requests that it sent to a model, the input tokens and the output tokens. The console is an actor too. The counters are in memory and are not saved. A new server session starts them again.
+- **When a request counts:** when Uno sends it, before the answer. The tokens arrive with the answer. A request that fails or reaches the time limit counts with zero tokens. A request that finds an open request of the same player is not sent, thus it does not count.
+- **Limit:** 100 requests to a model for each actor in one server session. The number is fixed in the code (`Uno.MODEL_REQUESTS`).
+- **At the limit:** the fixed rules read each later request of that actor until the session ends. The first answer after the limit starts with "You reached the limit of 100 model requests in this server session." The later answers do not repeat it. The fixed rules have no limit.
+- **Operators only:** a provider with a model serves only an operator. "Operator" is the `admin` flag that the server already puts in the actor: permission level 2, or the console. Each other player gets the fixed rules, without a counter and without the sentence about the limit.
+- **Screen:** with a model on the server, an operator sees "Your model requests in this session: N of 100. Tokens: X in, Y out.", also at the limit. A player who is not an operator sees no counter. With Claude on the server, the line "Written requests go to Claude, a model of Anthropic." appears only when the requests of this player go to Claude. Otherwise one line says "Uno uses the fixed rules for you", with the reason: only an operator uses Claude, or the limit. With the fixed rules on the server the screen has none of these lines.
+- **Unchanged:** one request at a time for each player. The report, the confirmation and the buttons do not call `Uno.ask`, thus they call no provider (code examination). The test of this with a provider that counts its calls belongs to the notices and the summary (tickets #8 and #10).
+- **Proposed, which provider has a model:** the provider says so (`Uno.Provider.callsModel`). The default is no. The Claude provider says yes. Reason: the providers written in the older tests serve players who are not operators. Cost: a new provider with a model that forgets to say so has no limit and no operator rule.
+- **Proposed, the request after the limit:** the limit sentence comes before the answer of the fixed rules to the same request. Thus the player gets an answer, not only a refusal.
+- **Evidence:** automatic in-game tests `a_model_requests_count`, `a_model_limit`, `a_model_only_for_operators`, `a_new_session_restarts_the_counters` and `a_screen_model_lines`. The five failed before the implementation and passed after it: normal run 50 of 50, and 58 of 58 after the merge with tickets #2, #3, #5, #6 and #7 of increment A. See "Increment A — Limits on the model calls" in [TEST_RESULTS.md](TEST_RESULTS.md).
+- **Not verified:** the counter with the tokens of the real service. The test `t18_claude_live` now uses an operator and checks the counter after its four requests. It compiles. It was not run: a run costs money and needs the consent of the project owner. The screen in a client.
+- **Counterexample:** an operator owns each station and each robot (D11). Thus the context that goes to Claude holds the station names and the robot numbers of each player of the server, not only of the operator. With one player these are the data of D21.
+- **Counterexample:** the limit counts requests, not tokens or money. The estimate of D33 holds only for its token numbers. The counter shows the tokens, not a price.
+- **Counterexample:** the limit is for each session, not for each day. A restart of the server starts the counters again. In a single-player game each opening of the world is a new session.
+- **Counterexample:** the server builds the actor from the command source. A command block has the permission level 2, thus `/uno ask` from a command block counts as a request of an operator: the console, or the player of `execute as`. Only an operator can write a command block. This is deduced from the code and from the permission level of a command block. It was not tried.
+- **Counterexample:** a request that reaches the time limit can still reach the service and cost tokens. The counter shows zero tokens for it. Thus the counter of the tokens can be lower than the real use. The counter of the requests is not.
+- **Still open (D33):** a spending limit that the server operator can set. The gate of D33 stays.
 
 ## D34 — Waits, blocks and a load on board
 
@@ -844,6 +903,7 @@ Increment A, as built (ticket #5). The choices of detail are **proposed**: the p
 - **Gate for two robots:** before two robots use the same station, a reserve must belong to the station (deferred in D31). A round on one robot does not need it: its duties are in sequence.
 - **One player only:** the mod is for one player now. The README says so.
 - **Invariant, from increment A on:** each new kind of data (the diary, the notices, the proposals of a change, the library) has an owner, goes through the same check of the actor, and has a test of the T19 kind.
+- **The invariant for the diary and the notices (ticket #8), verified with automatic in-game tests:** each entry has the owner of its job. A read of the diary goes through the check of the actor: a different player reads no entry of the owner (`a_diary_of_a_job`). The limit removes only entries of the same owner (`a_diary_limit`). A notice goes to the owner of the job only: the operator who resumed the job gets none (`a_notices_for_blocked_recovery_and_done`).
 
 Gates before a second player:
 

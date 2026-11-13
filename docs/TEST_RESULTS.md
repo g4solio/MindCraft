@@ -541,6 +541,102 @@ Changes to the older tests:
 
 Known limit: a robot waits without an end behind an obstacle that does not go away. The report and the hologram show the wait. The notice after a long wait is ticket #8.
 
+## Increment A — the job diary and the notices
+
+Ticket #8 of spec #1, on 2026-11-13. See D30 and D31.
+All tests of this section are in the game and automatic. No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+No test has a connected player. The tests replace the exit of the notices with one that records the owner and the text of each notice, then sends the notice as before.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red 1 | The test of the diary, with a diary that stays empty | 49 of 50. `a_diary_of_a_job` failed as expected: the diary of the job was empty |
+| Run 2: green 1, red 2 and 3 | The diary, without the limit and without notices. The tests of the limit and of the notices | 52 of 56. `a_diary_of_a_job` passed. `a_diary_limit` failed as expected: "the owner has 221 entries". `a_notices_for_blocked_recovery_and_done`, `a_no_notice_for_a_resume_that_completes_the_job` and `a_notices_call_no_provider` failed as expected: no notice. `a_no_notice_for_the_ordinary_cycle` and `a_no_notice_for_a_console_job` passed: without notices they cannot fail. They guard against a notice that must not come |
+| Run 3: green 2 and 3, red 4 | The limit, and the notices with the templates of `OUT_OF_FUEL`, `RECOVERY` and `DONE`. The notice checks in four older tests | 53 of 56. `t04_destination_removed`, `t04_source_removed` and `t16_quantity_lowered_with_load` failed as expected: their notice gave the recorded reason, not the cause. Example: "… is blocked. Recorded reason: the source station has no inventory at 55, -59, 9." `t06_impediment_of_an_unknown_kind` passed: it has no cause |
+| Green | The templates of the other causes of `BLOCKED` | **56 of 56**. Server line: `All 56 required tests passed :)`. No event of a robot was dropped |
+| `stop`, `check`, `crash`, `check-crash` | The code of Green, with the checks of the diary in the restart test | Passed, each phase. `check`: the diary after the restart is `RUNNING`, and at the end `RUNNING, DONE`. `check-crash`: after the restart `RUNNING, DONE, RECOVERY`, at the end `RUNNING, DONE, RECOVERY, RUNNING, DONE`. After the four phases the data folder has no temporary file |
+| After the merge | The code of ticket #8, merged with tickets #2, #3, #5, #6, #7 and #11 of increment A. `a_notices_call_no_provider` uses `CountingModel` of ticket #11 | **65 of 65**. Server line: `All 65 required tests passed :)` |
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `a_diary_of_a_job` | A transport of a player. The source is empty: the job waits. 7 seconds later the test fills the robot with cobblestone and puts 24 coal in the source: the robot is full. Then the test frees one slot. After `DONE` it starts a second job on the robot | The entries of the first job: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `WAITING ROBOT_FULL`, `RUNNING`, `DONE`. The robot tried two times or more during the first wait: one entry. Each entry has the owner, the job, the robot, the two stations, coal, quantity 24 and reserve 0. Delivered and on board: 0 and 0 three times, then 0 and 24, then 24 and 0. The times grow, from the start to the end. The reason of the third entry: "the robot inventory is full". After the second job the five entries of the first job stay, and the second job has its entry `RUNNING`. A different player reads no entry of the owner. The console reads the same entries. A save and a load give the same diary. Without the diary in the saved data, the load gives an empty diary |
+| `a_diary_limit` | An operator starts a job in its own name and cancels it. Then the player starts a job and gives 110 pauses and 110 resumes in one tick | The player has 200 entries: the oldest is a `PAUSED`, the newest a `RUNNING`. The runtime records 21 removed entries, with the game time of that tick. The two older entries of the operator stay: `RUNNING`, `CANCELLED`. Nothing of the operator is removed. A save and a load give the same 200 entries and the same record of the removal |
+| `a_notices_for_blocked_recovery_and_done` | A transport of a player, with fuel 0. Then the test gives fuel and an operator resumes. After the pickup the test empties the robot. The owner resumes, pauses and resumes. After `DONE` the owner starts a second job and cancels it | Three notices to the owner, in this order: "Job N on robot #R (minecraft:coal from 'a_notice_source' to 'a_notice_destination') is blocked: the robot has no fuel.", "… needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24.", "… is done: 24 delivered." 3 seconds in `BLOCKED` give no second notice. The resume of the operator, the three requests of the owner, the second job and its cancellation give none. The operator gets none. The notices about the two jobs go to the owner only |
+| `a_no_notice_for_a_resume_that_completes_the_job` | The destination accepts 4 of 24. The test empties the robot. The owner lowers the quantity to 4 and resumes | One notice: "… needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 20." After the resume the job is `DONE`, and no second notice comes. The entries: `RUNNING`, `WAITING DESTINATION_FULL`, `RECOVERY`, `DONE` |
+| `a_no_notice_for_the_ordinary_cycle` | A stock job. The destination has 10 and needs 24. The source has 40 and a reserve of 30. The robot brings 10 and waits at the reserve. The test adds 8. Then the owner pauses, resumes and cancels | The entries: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `RUNNING`, `SATISFIED`, `PAUSED`, `RUNNING`, `CANCELLED`. The destination has 24. No notice |
+| `a_no_notice_for_a_console_job` | A transport of the console, with fuel 0. Then fuel and a resume | The entries: `RUNNING`, `BLOCKED OUT_OF_FUEL`, `RUNNING`, `DONE`. No notice about the job, and no notice to the console |
+| `a_notices_call_no_provider` | A batch of its own. The provider of the server counts its calls. After the merge it is `CountingModel` of ticket #11: a provider with a model. A job of a player goes to `BLOCKED` without fuel, then to `DONE` | Two notices. The provider got zero calls |
+| `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load`, `t06_impediment_of_an_unknown_kind` | The older tests, with one more check in the `BLOCKED` state | One notice each: "… is blocked: there is no inventory at 't04_destination'.", "… is blocked: there is no inventory at 't04src_source'.", "… is blocked: the quantity of the job is reached, and 54 stay on board.", "… is blocked. Recorded reason: landslide: the floor fell at 1 2 3." |
+| `t11_server_restart`, four phases | The restart test, with the diary | See the table of the runs above. Minecraft saved the diary with the world at the normal stop, and the runtime wrote it at the delivery before the halt |
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| In the game the exit calls `PlayerList.getPlayer(owner)`. If the owner is connected, it calls `ServerPlayer.sendSystemMessage` with "Uno › " and the text. If not, it sends nothing | `Notices.CHAT` | That a client shows the line. No test has a connected player |
+| Only `MindRuntime.set` and the load of the record assign the state and the cause of a job. Thus each change of the state goes through the diary | `MindRuntime.java`, `RobotApi.java` | |
+| The code of the notices has no reference to Uno or to a provider | `Notices.java` | |
+
+Not covered:
+
+- A notice in the chat of a client. It is a step of the checklist of the play session.
+- A notice to an owner who is connected in a different dimension.
+- A `RECOVERY` that the load of the record finds at the server start, for a job of a player. Its notice leaves before a player can be connected. The phase `check-crash` writes such an entry, but its job belongs to the console.
+
+Changes to the older tests:
+
+- `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load` and `t06_impediment_of_an_unknown_kind`: one more check, the notice of the `BLOCKED` state.
+- `t11_server_restart`: it checks the diary after the restart and at the end.
+
+The merge brought no change of the runtime (`MindRuntime.java`, `RobotApi.java`) and of the Lua modules. Thus the four restart phases were not repeated after it.
+
+## Increment A — Limits on the model calls
+
+Ticket #11 of spec #1, on 2026-11-13. See D33.1.
+All tests of this section are in the game and automatic. They use providers written in the tests. One test uses the Claude provider with a local stand-in in place of the API.
+No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new tests, with the old behaviour of Uno and of the screen. The provider interface already had the model flag, and Uno had a counter that always gave zero | 44 of 50. The five new tests failed as expected. `t23_state_of_an_earlier_session` failed too, as a consequence of an error of a new test: see below |
+| Green | The code of ticket #11 | **50 of 50**. Server line: `All 50 required tests passed :)` |
+| After the merge | The code of ticket #11, merged with tickets #2, #5, #6 and #7 of increment A | **54 of 54**. Server line: `All 54 required tests passed :)` |
+| After the second merge | The same, merged also with ticket #3 | **58 of 58**. Server line: `All 58 required tests passed :)` |
+
+The error of the test in the red run: the first version of `a_screen_model_lines` made the Claude stand-in the provider of the server, and put the provider of before back only at its end. It failed before its end. Thus the stand-in stayed the provider of the server. `t23_state_of_an_earlier_session` runs in a later batch: its request through the screen went to the stand-in, and it got no proposal ("no proposal yet"). The test now changes the provider of the server only inside each step, and puts the provider of before back in a `finally`. The green run used this version.
+
+| Test | Batch | What it does | Red run, old code | Green run, new code |
+| --- | --- | --- | --- | --- |
+| `a_model_requests_count` | Normal | An operator sends requests to a provider of the test with a model: an answer with 120 and 30 tokens, a request held open while a second one arrives, an exception, a time limit of 300 ms. Then a request to the fixed rules, and one request of the console | Failed: "expected 1 requests, 120 input tokens and 30 output tokens, but: Usage[requests=0, inputTokens=0, outputTokens=0]" | Passed. The open request counts before its answer. The second request gets "I am still working on your previous request.", does not reach the provider and does not count. The exception and the time limit count with zero tokens. The late provider returns 999 and 999 tokens after the time limit: the counter does not change. The fixed rules do not count. A different operator has zero. The console gets a counter of its own |
+| `a_model_limit` | Normal | An operator sends 100 requests to the provider of the test, then three more requests: two of the same operator, one of a different operator | Failed: "the request after the limit went to the model" | Passed. 100 calls, counter 100 requests, 1000 and 200 tokens. Request 101 does not reach the provider. Its answer: "You reached the limit of 100 model requests in this server session. Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." Request 102 gets only the answer of the fixed rules. The different operator still reaches the provider |
+| `a_model_only_for_operators` | Normal | A player who is not an operator sends a request to the provider of the test with a model, then to a provider of the test without a model | Failed: the answer came from the provider with a model | Passed. The provider with a model gets no call. The answer is the answer of the fixed rules. No counter. The provider without a model answers as before |
+| `a_new_session_restarts_the_counters` | Its own: `a_model_session` | An operator reaches the limit. Then the function that each server start calls | Failed: request 101 still went to the model | Passed. After the new session the counter is zero, and the next request goes to the model |
+| `a_screen_model_lines` | Its own: `a_server_provider` | Views with the fixed rules on the server, then with the Claude provider against a local stand-in. An operator, a player who is not an operator, and an operator at the limit. Each one writes through the screen | Failed: the view of the operator had the line about Claude and no counter | Passed. With the fixed rules: no counter and no line about a provider. With Claude: the operator sees "Written requests go to Claude, a model of Anthropic." and "Your model requests in this session: 0 of 100. Tokens: 0 in, 0 out.", then "1 of 100. Tokens: 1234 in, 56 out." after one request to the stand-in. The other player sees no counter and "Uno uses the fixed rules for you: only an operator uses Claude." The operator at the limit sees "100 of 100", no line about Claude, and the line about the limit. The requests of the other player and of the operator at the limit do not reach the stand-in |
+| `t18_claude_provider` | Normal | Changed: the requests through Uno use the code of the provider without its model flag | Passed | Passed |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it. The merges brought the runtime and the Lua modules of ticket #5 without a change: ticket #5 ran the four phases on them. Ticket #3 changed no runtime and no Lua module.
+
+Changes to the older tests:
+
+- `t18_claude_provider`: its player is not an operator. With the rule of this ticket, its requests through Uno would go to the fixed rules. An operator owns each station of the server, and the exact check of the context needs the stations of one player. Thus the requests through Uno use `claude::answer`: the code of the provider, without its model flag. The direct call of the provider did not change.
+- `t18_claude_live` (`LiveTests.java`): its player is an operator now. At the end it checks the counter: four requests, and more than zero tokens in and out. It compiles. It was not run: a run costs money and needs the consent of the project owner.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The report, the confirmation and the buttons of a job do not call `Uno.ask`. Only the "ask" action of the screen and `/uno ask` do | `UnoView.act`, `MindCraft.registerCommands` | A test with a provider that counts its calls. It belongs to tickets #8 and #10 |
+| At the time limit, `orTimeout` completes the request with an exception. The thread of the provider continues, and Uno does not read its answer | `Uno.ask` | The tokens that the real service bills for such a request. The counter shows zero for them |
+| The actor of a command source has the operator flag of the source. A command block has the permission level 2 | `MindCraft.actor(CommandSourceStack)`. The level of a command block is general knowledge, not read in the sources | That `/uno ask` from a command block counts as a request of an operator. Not tried |
+
+Not covered:
+
+- The counter with the tokens of the real service.
+- The screen in a client: the counter, the lines about the provider, and their length on the screen.
+- A real client with permission level 0, and a single-player world without commands. The tests build the actors.
+- The limit of the console: one test counts one request of the console. The limit itself is tested with an operator.
+
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.

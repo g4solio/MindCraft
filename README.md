@@ -205,21 +205,53 @@ Above the block there is a hologram. Its colour shows a general state of your jo
 | Green | At least one job in progress |
 | Amber | At least one job that waits, is blocked or needs a check |
 
+### Notices
+
+Uno writes one line in your chat when one of your jobs goes to `BLOCKED`, `RECOVERY` or `DONE`. For example:
+
+```
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel.
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24.
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24 delivered.
+```
+
+- The line comes from a fixed template for the state and the cause. It names the job, the robot and the cause.
+- Uno only warns. It proposes no remedy and starts no action.
+- A notice calls no model. It works without a key, and when the model service is down.
+- `RUNNING`, `WAITING` and `SATISFIED` give no notice.
+- Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
+- A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
+- In this version there is no notice after a long wait, and no summary when you open the screen.
+
+### The diary
+
+The runtime writes a diary: each change of the state of a job, and each change of the cause of a wait or of a block.
+A repeated report of the same state and cause writes nothing.
+An entry has the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
+Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
+The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
+Only the owner and an operator read the entries of a job. In this version no screen and no command shows the diary.
+
 ### Uno with Claude
 
 Uno uses Claude if the server process has the environment variable `ANTHROPIC_API_KEY`. In a single-player game the server is the game itself.
 Set the variable outside the project. Do not write the key in a file of the repository.
 The server log says which provider is active: look for the line `Uno interprets requests with`.
 
-- Each written request to Uno is a paid call on the account of the key. The report, the confirmation and the jobs do not call the model.
-- Anthropic gets the text of the request, the names of your stations and the numbers of your robots. The screen says so with one line.
+- Only an operator uses Claude. In a single-player game you are an operator if the world allows commands. Uno reads the requests of each other player with the fixed rules (see below).
+- Each written request of an operator is a paid call on the account of the key. The buttons, the confirmation, `/uno report` and the jobs do not call the model.
+- Each operator has a limit of 100 requests to Claude in one server session. The console is one more actor with its own limit. In a single-player game a session ends when you close the world.
+- At the limit Uno says so one time. Then it reads your requests with the fixed rules until the server restarts. The buttons and the commands work as before.
+- The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
+- Anthropic gets the text of the request, the names of the stations and the numbers of the robots. An operator owns each station and each robot of the server: thus these are the names and numbers of all players.
+- The screen says "Written requests go to Claude" only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
 - A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
 - Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
-Details and limits: [D21](docs/DECISIONS.md).
+Details and limits: D21 and D33.1 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### What Uno understands without Claude
 
@@ -264,6 +296,7 @@ A request without the words of an action and without two stations gets the reaso
 | `CANCELLED` | The owner cancelled. The cargo stays on board | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
+A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. See "Notices".
 Uno takes the sentence of its report from the cause. The screen and the `status` command also show the recorded reason with the position.
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.

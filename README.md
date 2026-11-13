@@ -5,25 +5,27 @@
 MindCraft is an addon of [CC: Tweaked](https://tweaked.cc) for Minecraft 1.20.1 with Forge.
 The player works together with **Uno**, an intelligence that acts in the world through turtles.
 
-Status: increments S0, S1 and S2 of the [brief](docs/MINDCRAFT_CLAUDE_BRIEF.md). S3 did not start. This is an early version, not a release.
-The plan after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md).
+Status: increments S0, S1 and S2 of the [brief](docs/MINDCRAFT_CLAUDE_BRIEF.md), and increment A of the plan after S2. S3 did not start. This is an early version, not a release.
+The plan after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md). The automatic tests of increment A pass. The exit of increment A also needs a play session of the project owner: see [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md).
 The mod is for one player now. Do not open the world to other players: see D37 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 What this version contains:
 
-- A runtime in the server that owns stations, robots and jobs, and saves them with the world.
-- Two Lua modules for the turtle: transport, and keep a stock.
-- Uno: it changes a written request into a proposal, starts it after your confirmation, and reports on the work.
+- A runtime in the server that owns stations, robots and jobs, and saves them with the world. It writes its record through a temporary file.
+- Two Lua modules for the turtle: transport, and keep a stock. A robot that cannot move waits, and continues by itself when the path is free.
+- Uno: it changes a written request into one action. It starts, changes, resumes and cancels a job after your confirmation. It pauses a job and reports on it at once.
+- A diary of each job. Uno warns you in the chat when a job needs you, and gives a summary when you open its screen.
 - Two contact points that open the screen of Uno: a tablet and a projector.
 - Commands for each operation.
 
-Without an API key Uno understands only simple sentences. With an Anthropic API key Uno interprets the request with Claude.
+Without an API key Uno understands only simple sentences. With an Anthropic API key Uno interprets the requests of an operator with Claude, with a limit for each server session.
 
 | Document | Content |
 | --- | --- |
 | [docs/MINDCRAFT_CLAUDE_BRIEF.md](docs/MINDCRAFT_CLAUDE_BRIEF.md) | Vision and status of the choices |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decisions, evidence and review conditions |
 | [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md) | Tests that ran, tests that did not run, and limits |
+| [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md) | The checklist of the play session of increment A |
 
 ## Versions
 
@@ -88,6 +90,7 @@ The load of this jar on an installed Forge is not verified yet.
 ## Manual test in the game
 
 No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md).
+This procedure uses the commands. The play session of increment A uses commands only at the setup: see [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md).
 
 1. Start the development client with `./gradlew runClient`. Create a world in creative mode with commands enabled.
 2. Place two chests. Put the coal in the first chest.

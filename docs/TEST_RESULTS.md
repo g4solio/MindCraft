@@ -1,6 +1,6 @@
 # Test results
 
-Date: 2026-11-12. Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: Tweaked 1.121.0.
+Dates: 2026-11-12 (S0 to S2 and the review) and 2026-11-13 (increment A). Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: Tweaked 1.121.0.
 
 ## Types of test
 
@@ -8,10 +8,11 @@ Date: 2026-11-12. Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: T
 | --- | --- |
 | **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer` |
 | **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0`, or of the compiled code of Minecraft and Forge with `javap`. A code examination is not a test: it says what the code does, not that it was seen to do it |
-| **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" |
+| **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" and "Increment A — the play session" |
+| **Observed in one manual run** | A condition built by hand around an automatic run. No command of the repository repeats it. Only ticket #7 has one |
 
 No test uses a simulation of the game. Where a condition is built artificially, the table says so.
-One test uses a false server in place of the Anthropic API: `t18_claude_provider`. It verifies the code of the provider, not the language model.
+Two tests use a false server in place of the Anthropic API: `t18_claude_provider` and, since increment A, `a_screen_model_lines`. They verify the code of the provider and of the screen, not the language model.
 One test calls the real Claude service: `t18_claude_live`. It is not part of the normal run. Command: `gradlew runGameTestServer -Plive`.
 Reasons: each run costs four requests on the account of the key owner, and a language model can answer differently at each run.
 
@@ -62,7 +63,79 @@ x:  0          1      2        3    4      5
 | 28 | 41 of 42 | `t18_claude_provider` failed for a race in the test, not in the mod. The deterministic provider answered before the second request arrived. Thus the first request was not open any more, and Uno accepted the second. The race existed before the review. The test now holds the first request open on purpose |
 | 29, 30 | 42 of 42, two times | None |
 | 31 | 42 of 43 | With the new test `t23_robots_of_an_earlier_session`, before its correction: it failed as expected |
-| 32, 33 | **43 of 43**, two times | None. Current code. Server line: `All 43 required tests passed :)` |
+| 32, 33 | **43 of 43**, two times | None. The code after the review of 2026-11-12. Server line: `All 43 required tests passed :)` |
+| 34 | 43 of 43 | None. Increment A, ticket #7: the atomic write of the record |
+| 35 | 43 of 44, expected | Ticket #6, red run. A move step changed by hand for this run only. `a_path_with_one_corner` failed as expected |
+| 36 | 44 of 44 | None. Ticket #6: a path with one corner |
+| 37 | 40 of 44, expected | Ticket #2, red run: four new and changed tests, before the code |
+| 38 | 44 of 44 | None. Ticket #2: the provider answers with an action |
+| 39 | 45 of 45 | None. Ticket #2, merged with tickets #6 and #7 |
+| 40 | 39 of 45, expected | Ticket #5, red run 1: three tests of the obstacle, and three tests that expect the new versions of the modules |
+| 41 | 45 of 45 | None. Ticket #5: the obstacle is a wait |
+| 42 | 41 of 47, expected | Ticket #5, red run 2: six tests of the causes of `BLOCKED` |
+| 43 | 47 of 47 | None. Ticket #5: the causes of `BLOCKED` |
+| 44 | 49 of 49 | None. Ticket #5, merged with tickets #2, #6 and #7 |
+| 45 | 44 of 49, expected | Ticket #3, red run: five new tests |
+| 46 | 48 of 49 | Ticket #3. `a_t19_words_of_another_player` failed for an error of the test: it built its text before the enrollment. The test was corrected |
+| 47 | 49 of 49 | None. Ticket #3: report and pause by words |
+| 48 | 53 of 53 | None. Ticket #3, merged with tickets #2, #5, #6 and #7 |
+| 49 | 44 of 50, expected | Ticket #11, red run: five new tests. `t23_state_of_an_earlier_session` failed too: a new test left the Claude stand-in on the server. The test was corrected |
+| 50 | 50 of 50 | None. Ticket #11: limits on the model calls |
+| 51 | 54 of 54 | None. Ticket #11, merged with tickets #2, #5, #6 and #7 |
+| 52 | 58 of 58 | None. The same, merged also with ticket #3 |
+| 53 | 49 of 50, expected | Ticket #8, red run 1: `a_diary_of_a_job`, with a diary that stays empty |
+| 54 | 52 of 56, expected | Ticket #8, run 2: the diary passed. The test of the limit and three tests of the notices failed as expected |
+| 55 | 53 of 56, expected | Ticket #8, run 3: three older tests expected the notice with the cause |
+| 56 | 56 of 56 | None. Ticket #8: the diary and the notices |
+| 57 | 65 of 65 | None. Ticket #8, merged with tickets #2, #3, #5, #6, #7 and #11 |
+| 58 | 53 of 54, expected | Ticket #4, red run 1: the test of the fixed rules |
+| 59 | 54 of 56, expected | Ticket #4, green run 1 and red run 2: the two tests of the change by words |
+| 60 | 55 of 56, expected | Ticket #4, green run 2: `a_confirmation_of_older_values` failed as expected at the cancellation |
+| 61 | 56 of 58, expected | Ticket #4, red run 3: the tests of the resume and of the cancellation |
+| 62 | 58 of 58 | None. Ticket #4: change, resume and cancel by words |
+| 63 | 70 of 70 | None. Ticket #4, merged with tickets #8 and #11 |
+| 64 | 64 of 67, expected | Ticket #9, red run: two new tests. `a_screen_model_lines` failed as a consequence: the failed test did not give back the provider of the server |
+| 65 | 67 of 67 | None. Ticket #9: a notice for a long wait |
+| 66 | 72 of 72 | None. Ticket #9, merged with tickets #2, #3, #4, #5, #6, #7, #8 and #11 |
+| 67 | 65 of 66, expected | Ticket #10, red run 1: `a_summary_at_an_opening` |
+| 68 | 66 of 70, expected | Ticket #10, run 2: three tests failed as expected. `a_summary_at_an_opening` failed for an error of the test: it read the sentence in the JSON of the view. The test was corrected |
+| 69 | 70 of 70 | None. Ticket #10: the summary at an opening |
+| 70 | 75 of 75 | None. Ticket #10, merged with ticket #4 |
+| 71 | 78 of 78 | None. The same, merged also with ticket #9 |
+| 72 | 76 of 81, expected | The code review of increment A, red run: the five tests of the defects |
+| 73 | 81 of 81 | None. The corrections of the code review |
+| 74 | 81 of 81 | None. The same, with one more check in `a_diary_of_a_job` |
+| 75 | **81 of 81** | None. Ticket #12: the final code of increment A. Server line: `All 81 required tests passed :)` |
+
+Runs 34 to 75 are the runs of increment A, on 2026-11-13.
+
+- The tickets ran at the same time, each in a working folder of its own. Thus the numbers do not give the order in time.
+- The numbers follow the order of the merges into the branch `increment-a`: tickets #7, #6, #2, #5, #3, #11, #8, #4, #9 and #10, then the code review and ticket #12. Inside a ticket they follow the order of its section below.
+- "Expected" marks a red run: the failed tests were new or changed tests, and their code did not exist yet. Each section below names the tests.
+- This table has only the normal runs. The restart phases are in the next table. No run of increment A called the real Claude service.
+
+Restart phases of increment A. Type: in the game, automatic. Each row is the four phases in their order, unless the row says otherwise.
+
+| Code | Phases | Result |
+| --- | --- | --- |
+| Run 34, ticket #7 | All four | Passed |
+| Run 43, ticket #5 | All four | Passed |
+| Run 44, ticket #5 after the merge | All four | Passed |
+| Run 56, ticket #8 | All four | Passed |
+| Run 62, ticket #4 | All four | Passed |
+| Run 63, ticket #4 after the merge | All four | Passed |
+| Run 65, ticket #9 | All four | Passed |
+| Run 66, ticket #9 after the merge | All four | Passed |
+| Between runs 68 and 69, ticket #10 | `stop`, `check` | Red: `stop` passed. `check` failed as expected: the openings were not saved yet |
+| Run 69, ticket #10 | All four | Passed |
+| Run 70, ticket #10 after the merge with ticket #4 | All four | Passed |
+| Run 71, ticket #10 after the merge with ticket #9 | All four | Passed |
+| Run 72, code review | `crash`, `check-crash` | Red: `crash` passed. `check-crash` failed as expected: the summary missed the `RECOVERY` of the load |
+| Run 73, code review | All four | Passed |
+| Run 75, ticket #12 | All four | **Passed**. See "Increment A — final runs and evidence" |
+
+Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
+Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
 
 Lesson from run 2: the exit code is not sufficient. The log must contain the line `GAME TESTS COMPLETE`.
 Lesson from run 14: that line is not sufficient either. The number of tests and the line `Enabled Gametest Namespaces` say which tests ran.
@@ -70,7 +143,7 @@ Lesson from run 21: a test that passed 12 times can hide a defect that depends o
 Lesson from the restart test after run 25: the normal run does not contain the restart test. A change of the transfer rules needs the four restart phases too. One case of them is now also in the normal run.
 Lesson from run 28: a test must not depend on which thread is faster. A fast provider can answer inside the call that sends the request.
 
-The real Claude service was not called after run 19. The corrections of the review were tested with the deterministic provider and with providers written in the tests.
+The real Claude service was not called after run 19. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases.
 
 The test world is flat and has no structures. See D14 for the reason.
 
@@ -107,7 +180,7 @@ The default configuration has only one thread for the computers (`computer_threa
 
 ## S1 — Adversarial matrix
 
-All "passed" rows come from runs 6 and 7. The later runs confirm them, up to run 33.
+All "passed" rows come from runs 6 and 7. The later runs confirm them, up to run 75.
 Increment A changed T04, T05 and T06: an obstacle is a wait, and each block has a cause. The rows T04, T05 and T06 below describe the behaviour of S1. See "Increment A — waits and blocks".
 
 | ID | Test | What it does | Result | Observed result |
@@ -151,6 +224,8 @@ The rig is the same, at a fixed position at y = 100, in a chunk that is kept loa
 | --- | --- | --- | --- |
 | `stop`, then `check` | Normal stop of the server in the tick of the withdrawal. Then a restart | Passed, 9 times | After the restart the record says `RUNNING` with 24 items on board. The robot starts again by itself and delivers. Final: source 40, destination 24, robot 0. No `RECOVERY` |
 | `crash`, then `check-crash` | A save after the withdrawal. A delivery. After 15 seconds, a stop of the process without a save. Then a restart | Passed, 8 times. Failed 1 time, after run 25, with a first version of a correction. See "Review of 2026-11-12" | See below |
+
+The counts above end with the review of 2026-11-12. Increment A ran the phases again after each change of the runtime or of a Lua module: see "Restart phases of increment A" in "Runs".
 
 State on disk after the sudden stop:
 
@@ -198,6 +273,13 @@ The four phases of the restart test (T11) were repeated after run 19. They passe
 Runs 32 and 33 confirm all the rows of this table with the final code, except the "real Claude" rows.
 The four phases of the restart test were repeated after run 33, with the final code. They passed.
 One sentence of the report changed in the review: for a transport that waits at the reserve, Uno now says "I must carry N more" in place of "To reach N in …". The sentence for a stock is the same as before.
+Increment A changed three things in these rows. The rows describe S2.
+
+- A provider gives an action (D29.1). The schema of `t18_claude_provider` now has ten required fields. The `problem` field is now the reason of the action `none`. See "Increment A — The provider answers with an action".
+- The "Confirm" button has the label "Confirm #N" (D29.3).
+- The "real Claude" rows used the schema of S2. The schema of increment A has no run with the real service.
+
+Run 75, the final run of increment A, confirms the other rows.
 
 | ID | Test | What it does | Result | Observed result |
 | --- | --- | --- | --- | --- |
@@ -309,7 +391,7 @@ Changes to the older tests:
 Ticket #2 of spec #1, on 2026-11-13. See D29.1.
 All tests of this section are in the game and automatic. They use the fixed rules, providers written in the tests, or the Claude provider with a false server in place of the API.
 No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 37 to 39.
 
 | Run | Code | Result |
 | --- | --- | --- |
@@ -342,7 +424,7 @@ Changes to the older tests:
 Ticket #3 of spec #1, on 2026-11-13. See D29.2.
 All tests of this section are in the game and automatic. They use the fixed rules, providers written in the tests, or the Claude provider with a false server in place of the API.
 No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 45 to 48.
 
 Rig: two tests use one rig. `a_report_and_pause_by_words` uses two rigs of one player, side by side: the second is 3 blocks to the south of the first.
 The sources are empty. Thus each job waits for materials, and its state does not change by itself during the test.
@@ -374,7 +456,7 @@ Changes to the older tests:
 Ticket #4 of spec #1, on 2026-11-13. See D29.3.
 All tests of this section are in the game and automatic. They use the fixed rules or providers written in the tests.
 No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 58 to 63.
 
 Rig: the ordinary rig of one robot. `a_change_by_words` has 30 coal in the source. `a_resume_and_cancel_by_words` has 64.
 `a_confirmation_of_older_values` and `a_change_through_the_view` have an empty source: each job waits for materials, and its state does not change by itself.
@@ -408,7 +490,7 @@ Changes to the older tests:
 | --- | --- |
 | **Verified automatically, in the game** | All rows of the tables above |
 | **Deduced from a code examination** | A proposal of a change, of a resume or of a cancellation is not saved and belongs to one server session: Uno keeps it in the same session object as the proposal of a start. `t23_state_of_an_earlier_session` tests this object with a start, not with a change. `/uno confirm` calls the same function `Uno.confirm` as the tests |
-| **Not verified** | The real Claude service with a change, a resume or a cancellation. The proposal and the button in a client. A resume proposal for a job that goes to `RECOVERY` before the confirmation (D29.3) |
+| **Not verified** | The real Claude service with a change, a resume or a cancellation. The proposal and the button in a client: steps 3, 4, 7, 8 and 12 of the checklist of the play session. A resume proposal for a job that goes to `RECOVERY` before the confirmation (D29.3), until the code review of increment A. Since then `a_resume_proposal_holds_the_state` tests it |
 
 ## Design discussion of 2026-11-13 — code examinations, no test
 
@@ -433,7 +515,7 @@ No automatic test stops the process during a write. The protection against such 
 
 | Run | Type | Result | Observed result |
 | --- | --- | --- | --- |
-| Normal run | In the game, automatic | **43 of 43** | 92 transfers wrote the record through the new write. No write error in the log. After the run the data folder contains `mindcraft.dat` and no temporary file |
+| Normal run (run 34) | In the game, automatic | **43 of 43** | 92 transfers wrote the record through the new write. No write error in the log. After the run the data folder contains `mindcraft.dat` and no temporary file |
 | `stop`, `check`, `crash`, `check-crash` | In the game, automatic | Passed, each phase | The same results as before the change. `check`: the record says `RUNNING` with 24 on board, then `DONE`, source 40, destination 24. `check-crash`: the record written at the delivery loads, the job goes to `RECOVERY` ("the world is older than the record of this job"), then `DONE` after `resume`. After each phase the data folder contains no temporary file |
 | `stop`, then `check` with a failure of the write | Observed in one manual run. Not a test of the repository, and not one of the types above: a condition built by hand around an automatic phase | Passed | See below |
 
@@ -480,7 +562,7 @@ z \ x:  0          1      2   3   4   5        6
 - The test checks that the robot is at the corner with 0 on board (toward the source), then at the corner with 24 on board (toward the destination).
 - At the end: `DONE`, 40 in the source, 24 in the destination, 0 in the robot, the robot on the destination dock, the walls still in place.
 
-Runs of this ticket. They are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+Runs of this ticket: runs 35 and 36 in the table "Runs".
 
 | Run | Code | Result |
 | --- | --- | --- |
@@ -495,7 +577,7 @@ Runs of this ticket. They are not numbered in the table "Runs": other tickets of
 
 Ticket #5 of spec #1, on 2026-11-13. See D34.
 All tests of this section are in the game and automatic. No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 40 to 44.
 
 | Run | Code | Result |
 | --- | --- | --- |
@@ -539,7 +621,7 @@ Changes to the older tests:
 | --- | --- |
 | **Verified automatically, in the game** | All rows of the tables above |
 | **Deduced from a code examination** | The hologram shows the attention colour during the wait: `MindRuntime.mood` gives `ATTENTION` for each `WAITING`. `s2_projector` tests the colour with a wait for materials, not with an obstacle. The mod uses only `dan200.computercraft.api`: the new Lua functions are in `RobotApi`, with the same imports as before |
-| **Not verified** | A player on the path (`can_push = true`). A robot at the edge of a loaded area ("Cannot leave loaded world" is also an obstacle). Two robots that face each other. The screen in a client during the wait |
+| **Not verified** | A player on the path (`can_push = true`). A robot at the edge of a loaded area ("Cannot leave loaded world" is also an obstacle). Two robots that face each other. The screen in a client during the wait. Steps 5 and 6 of the checklist of the play session have the player on the path and the screen during the wait |
 
 Known limit: a robot waits without an end behind an obstacle that does not go away. The report and the hologram show the wait. The notice after a long wait is ticket #9: see "Increment A — a notice for a long wait".
 
@@ -547,7 +629,7 @@ Known limit: a robot waits without an end behind an obstacle that does not go aw
 
 Ticket #8 of spec #1, on 2026-11-13. See D30 and D31.
 All tests of this section are in the game and automatic. No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 53 to 57.
 No test has a connected player. The tests replace the exit of the notices with one that records the owner and the text of each notice, then sends the notice as before.
 
 | Run | Code | Result |
@@ -581,7 +663,7 @@ Code examination, not a test:
 
 Not covered:
 
-- A notice in the chat of a client. It is a step of the checklist of the play session.
+- A notice in the chat of a client. Steps 5, 7, 9 and 11 of the checklist of the play session have one: [PLAY_SESSION_A.md](PLAY_SESSION_A.md).
 - A notice to an owner who is connected in a different dimension.
 - A `RECOVERY` that the load of the record finds at the server start, for a job of a player. Its notice leaves before a player can be connected. The phase `check-crash` writes such an entry, but its job belongs to the console.
 
@@ -596,7 +678,7 @@ The merge brought no change of the runtime (`MindRuntime.java`, `RobotApi.java`)
 
 Ticket #9 of spec #1, on 2026-11-13. See D30.
 All tests of this section are in the game and automatic. No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 64 to 66.
 No test has a connected player. The tests read the notices through the exit of the notices, as in ticket #8.
 No test waits 5 minutes. The tests give the moment of the check as a parameter: `MindRuntime.checkWait(job, now)`.
 
@@ -633,7 +715,7 @@ Code examination, not a test:
 
 Not covered:
 
-- A wait of 5 real minutes, and its line in the chat of a client. They are for the checklist of the play session.
+- A wait of 5 real minutes, and its line in the chat of a client. They are step 5 of the checklist of the play session.
 - A long wait across a real restart of the server. The restart phases build no wait. The save and the load in `a_long_wait` keep the start and the flag.
 
 Changes to the older tests:
@@ -647,7 +729,7 @@ Changes to the older tests:
 Ticket #11 of spec #1, on 2026-11-13. See D33.1.
 All tests of this section are in the game and automatic. They use providers written in the tests. One test uses the Claude provider with a local stand-in in place of the API.
 No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 49 to 52.
 
 | Run | Code | Result |
 | --- | --- | --- |
@@ -678,14 +760,14 @@ Code examination, not a test:
 
 | Fact | Where | What it does not prove |
 | --- | --- | --- |
-| The report, the confirmation and the buttons of a job do not call `Uno.ask`. Only the "ask" action of the screen and `/uno ask` do | `UnoView.act`, `MindCraft.registerCommands` | A test with a provider that counts its calls. It belongs to tickets #8 and #10 |
+| The report, the confirmation and the buttons of a job do not call `Uno.ask`. Only the "ask" action of the screen and `/uno ask` do | `UnoView.act`, `MindCraft.registerCommands` | A test with a provider that counts its calls. Since tickets #8 and #10, `a_notices_call_no_provider` and `a_summary_at_an_opening` count zero calls for the notices, the summary and the "Report" button. No test counts the calls for a confirmation or for the other buttons |
 | At the time limit, `orTimeout` completes the request with an exception. The thread of the provider continues, and Uno does not read its answer | `Uno.ask` | The tokens that the real service bills for such a request. The counter shows zero for them |
 | The actor of a command source has the operator flag of the source. A command block has the permission level 2 | `MindCraft.actor(CommandSourceStack)`. The level of a command block is general knowledge, not read in the sources | That `/uno ask` from a command block counts as a request of an operator. Not tried |
 
 Not covered:
 
-- The counter with the tokens of the real service.
-- The screen in a client: the counter, the lines about the provider, and their length on the screen.
+- The counter with the tokens of the real service. Steps 1 and 11 of the checklist of the play session read it, with the key.
+- The screen in a client: the counter, the lines about the provider, and their length on the screen. Steps 1 and 11 of the checklist.
 - A real client with permission level 0, and a single-player world without commands. The tests build the actors.
 - The limit of the console: one test counts one request of the console. The limit itself is tested with an operator.
 
@@ -693,7 +775,7 @@ Not covered:
 
 Ticket #10 of spec #1, on 2026-11-13. See D30, "Summary, as built".
 All tests of this section are in the game and automatic. No test called the real Claude service.
-The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+The table "Runs" gives the runs of this ticket the numbers 67 to 71.
 No test has a client. One test calls the methods of the tablet and of the projector with a fake player of Forge (`FakePlayerFactory`): a server player without a connection. The other tests call `UnoView.open`, the function that those methods call, with the moment of the opening as a parameter.
 
 | Run | Code | Result |
@@ -728,8 +810,8 @@ Code examination, not a test:
 
 Not covered:
 
-- The summary on the screen of a client: 12 lines in the text of Uno, the line breaks, and the space of the screen. It is a step of the checklist of the play session.
-- A real player who goes away and comes back. The tests set the moment of the opening as a parameter.
+- The summary on the screen of a client: 12 lines in the text of Uno, the line breaks, and the space of the screen. Steps 7, 10 and 11 of the checklist of the play session read a short summary in a client. The checklist has no summary with 12 lines.
+- A real player who goes away and comes back. The tests set the moment of the opening as a parameter. Steps 9 and 10 of the checklist do it.
 - An event in the same tick as an opening, after it. See the boundary in D30.
 - The summary of an operator in the normal run: the events of the console jobs of the tests that run at the same time would change it. The restart test has one console job only, and checks the summary of an operator there.
 
@@ -742,7 +824,7 @@ Changes to the older tests:
 
 The code review of the branch `increment-a` (spec #1), on 2026-11-13. It found five defects against the spec (P1, P2, P3, P4, P6), two documents that broke the standard of the repository (S1, S2), and code smells. See D29.3, D30, D31, D34 and D37.
 The tests of this section are in the game and automatic, unless a row says otherwise. No test called the real Claude service.
-The runs of this section are not numbered in the table "Runs".
+The table "Runs" gives the runs of this section the numbers 72 to 74.
 
 | Run | Code | Result |
 | --- | --- | --- |
@@ -804,13 +886,63 @@ Smells of the review without a change. A change was not small, or did not make t
 
 Not covered:
 
-- The button "Confirm #N" in a client: its width with a number of two or three digits.
+- The button "Confirm #N" in a client: its width with a number of two or three digits. Step 3 and check C5 of the checklist of the play session look at it.
 - A real crash with a job of a player: the restart test has a job of the console. The summary of the operator shows its events.
 - A whole record of the format of increment A before the corrections, from a real world. Such a record exists only if somebody played the branch `increment-a` before the corrections. Its load gives numbers to the entries, in their order: `a_diary_of_a_job` checks this on a copy. It ignores the openings of that record, saved under the key "openings": the next opening of each player is a first opening. That part is a code examination.
+
+## Increment A — final runs and evidence (ticket #12)
+
+Ticket #12 of spec #1, on 2026-11-13. It changed only documents. The code of its runs is the branch `increment-a` after the corrections of the code review: commit `6673fac`.
+
+| Run | Type | Result |
+| --- | --- | --- |
+| 75, the normal run | In the game, automatic | **81 of 81**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `81 GAME TESTS COMPLETE`, `All 81 required tests passed :)`. Uno used the fixed rules: "Uno interprets requests with the fixed rules, without a language model." |
+| `stop` | In the game, automatic | Passed. The test stopped the server at the game time 81 |
+| `check` | In the game, automatic | Passed. After the restart, at the game time 83, the record says `RUNNING` with 24 on board. The diary is `RUNNING`. At the end: `DONE`, source 40, destination 24, robot 0. The diary is `RUNNING, DONE`. The summary of the operator: "Since you last opened this screen:" and "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." |
+| `crash` | In the game, automatic | The test halted the process at the game time 420, as expected. The record said `DONE`, delivered 24 |
+| `check-crash` | In the game, automatic | Passed. After the restart, at the game time 83: `RECOVERY` ("the world is older than the record of this job"), source 40, destination 0, robot 24. The diary is `RUNNING, DONE, RECOVERY`. At the end: `DONE`, delivered 24, "1 recovery. The totals can be inexact." The diary is `RUNNING, DONE, RECOVERY, RUNNING, DONE`. The summary: "Since you last opened this screen:", "2 s ago: … needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job." and "0 s ago: … is done: 24 delivered." |
+
+After the four phases the data folder has `mindcraft.dat` and no temporary file.
+
+No test of increment A called the real Claude service. No run used `-Plive`. `LiveTests.java` compiles with the code of increment A: each run compiles it. It did not run.
+
+The evidence of increment A, by kind:
+
+| Kind | What it covers |
+| --- | --- |
+| **In the game, automatic** | The 81 tests of run 75. Among them, 38 tests are new in increment A: 34 with the prefix `a_`, and `t04_source_removed`, `t05_pause_and_cancel_during_the_wait`, `t05_obstacle_keep_stock` and `t06_impediment_of_an_unknown_kind`. Increment A also changed older tests: each section above lists them. The four restart phases |
+| **Code examination** | The protection of the record against a stop during a write (D37). The exit of the notices in the game: a line only for a connected owner (`Notices.CHAT`). The check of the long wait in the server tick. The templates of the long waits that no test builds. The confirmation and the buttons of a job call no provider. The hologram has the attention colour during a wait for a free path (`MindRuntime.mood`). The mod uses only `dan200.computercraft.api` |
+| **Observed in one manual run** | A failure of the write, built by hand: the earlier record stays on the disk (ticket #7) |
+| **In the game, manual** | None yet. The play session of ticket #13 is the test in the game of increment A. See the next section |
+| **Not executed** | The rows of increment A in "Not executed" below |
+
+## Increment A — the play session
+
+Ticket #13 of spec #1. Type: in the game, manual. Executor: the project owner. **Not executed yet.**
+The checklist is [PLAY_SESSION_A.md](PLAY_SESSION_A.md). After the session each row gets its result. Each difference gets a decision: correct it now, or defer it with a reason.
+
+| Part of the checklist | Result | Difference and decision |
+| --- | --- | --- |
+| B1 to B4, before the session | Not executed | |
+| S1 to S10, the setup | Not executed | |
+| Step 1 — start a stock job by words | Not executed | |
+| Step 2 — ask about the job | Not executed | |
+| Step 3 — change the reserve by words | Not executed | |
+| Step 4 — pause and resume by words | Not executed | |
+| Step 5 — an obstacle in the corridor | Not executed | |
+| Step 6 — stand on the path | Not executed | |
+| Step 7 — the fuel ends | Not executed | |
+| Step 8 — cancel the stock job by words | Not executed | |
+| Step 9 — a transport reaches `DONE` while you are far | Not executed | |
+| Step 10 — come back and read the summary | Not executed | |
+| Step 11 — close the world and open it again | Not executed | |
+| Step 12 — cancel by words, with a load on board | Not executed | |
+| C1 to C9, the checks during the whole session | Not executed | |
 
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.
+These tests are about S2. The play session of increment A is in the section above.
 At the time of these tests the text of Uno was in Italian. The answers of the project owner are translated from Italian.
 
 - **Start of the client:** verified from the log. The client loads Forge, CC: Tweaked and MindCraft up to the title screen, without errors. Repeated after the tablet and the projector were added: no error of model, texture or block state.
@@ -838,15 +970,15 @@ Third manual test, on the projector and its hologram:
 | The `/mindcraft` commands sent by a real client without operator permissions | The manual test uses a world with commands enabled. Thus the player is an operator. The `status` and `cancel` commands are tested with a player entity of the test system (`t19_status_command`). The other commands are tested only at the level of the runtime (T19) |
 | T11: unload and reload of a chunk during the transport | It needs a player or forced chunk loading |
 | T11: sudden stop on a normal server | The test server has no idle time in the tick. A normal server can write chunks to disk at different moments |
-| T05: a player on the path | It needs a client. The configuration says that a turtle pushes an entity if there is space (`can_push = true`). Not tried |
+| T05: a player on the path | It needs a client. The configuration says that a turtle pushes an entity if there is space (`can_push = true`). Not tried. Step 6 of the checklist of the play session |
 | A stair (a path that also changes y), or more than one corner | The rigs have none. The move step should permit them when each move brings the robot nearer to the target (code examination). The path with one corner is tested: `a_path_with_one_corner` |
-| `/forceload` by a player in a client, and a robot that works while the player is far | It needs a person at the game. Planned for the next play session (D28) |
+| `/forceload` by a player in a client, and a robot that works while the player is far | It needs a person at the game. Steps S7 and 9 of the checklist of the play session (D28) |
 | Two robots in one corridor that is one block wide | Outside the rig. From the code, each robot is an obstacle for the other |
 | T08: delayed confirmation | Not applicable: the runtime and the turtle are in the same process, without network messages |
 | Inventory not loaded (`WAITING` with unknown stock) in a real area that is not loaded | One test reaches the branch with an artificial station record (`t21_report_inventory_not_loaded`). No test unloads a chunk |
 | A change of world in a client: two servers, one after the other, in one Java process | It needs a person at the game. The logic is tested with an artificial session change (`t23_state_of_an_earlier_session`). See D24 |
 | A request to Uno that is open when a real server stops | It needs a server stop during a test. The branch comes from a code examination. See D24 |
-| The screen in a client after the review: the line of the proposal, "Confirm" and the buttons of a job with the new actions | It needs a person at the game. The view that the server builds is tested automatically |
+| The screen in a client after the review: the line of the proposal, "Confirm" and the buttons of a job with the new actions | It needs a person at the game. The view that the server builds is tested automatically. Steps 1 to 4 of the checklist of the play session |
 | A source that has the items but does not release them (`SOURCE_KEEPS`) | It needs an inventory that refuses the extraction. The chests of the rig do not |
 | A robot session that CC: Tweaked does not stop in time at a real server stop, then a second world | It needs a person at the game and a stop that exceeds the limit of one second. The logic is tested with an artificial server start (`t23_robots_of_an_earlier_session`). See D24 |
 | Double chests, inventories with sides (furnaces), hoppers, items with NBT | Outside the S1 rig |
@@ -855,11 +987,21 @@ Third manual test, on the projector and its hologram:
 | Cost on the server thread | No measurement |
 | S2: the screen of the tablet in the client (drawing, mouse, keyboard, network messages) | It needs a person at the game. See D19 |
 | S2: each single point of the projector in the client (the three colours, the range without a tablet, the dark) | The project owner confirmed the projector in general, not point by point. See D20 |
-| S2: the English text of Uno in a client | The project owner tried the screen only with the Italian text. The English text is tested automatically, through the view that the server builds |
+| S2: the English text of Uno in a client | The project owner tried the screen only with the Italian text. The English text is tested automatically, through the view that the server builds. Check C2 of the checklist of the play session |
 | S2: Claude with requests different from the four of the test `t18_claude_live` | Other languages, ambiguous station names, more than one free robot, a simple transport. Each request costs money to the key owner |
-| S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person |
+| S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person. The play session of increment A uses the key |
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
-| Increment A: the schema and the system text of the seven actions with the real service | A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none`. The new schema is tested only with the false API |
+| Increment A: the schema and the system text of the seven actions with the real service | A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none`. The new schema is tested only with the false API. The play session sends the first real requests of this schema, unless the project owner runs `t18_claude_live` before it (point B1 of the checklist) |
+| Increment A: the counter with the tokens of the real service | The same reason. Steps 1 and 11 of the checklist read it |
+| Increment A: a stop of the process during a write of the record | No test can stop the process at that moment. The protection rests on a code examination (D37) |
+| Increment A: a notice to an owner who is not connected, in a client | In a single-player game the server stops when the player leaves. The exit is a code examination (`Notices.CHAT`). The tests replace the exit |
+| Increment A: a notice to an owner who is connected in a different dimension | No test and no step of the checklist builds it |
+| Increment A: a long wait across a real restart | The restart phases build no wait. `a_long_wait` saves and loads the start of the wait on a copy of the record |
+| Increment A: the long waits with the causes `SOURCE_KEEPS`, `DESTINATION_FULL`, `SOURCE_UNLOADED`, `DESTINATION_UNLOADED`, `SOURCE_AT_RESERVE` with a reserve, and `NONE` | No test builds them. Their templates come from a code examination |
+| Increment A: a real crash with a job of a player | The restart test has a job of the console. Thus the `RECOVERY` at the load gives no notice to a player, and only the summary of an operator shows it |
+| Increment A: a summary with more than 10 events on the screen of a client | `a_summary_shows_the_10_newest` builds it without a client. The checklist of the play session does not |
+| Increment A: a player who is not an operator, in a real client | The tests build such actors (`a_model_only_for_operators`, `a_screen_model_lines`). The play session needs commands, thus its player is an operator |
+| Increment A: a confirmation and the buttons of a job with a provider that counts its calls | The tests count the calls only for the notices, the summary and the "Report" button. The rest is a code examination |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
@@ -870,7 +1012,8 @@ Third manual test, on the projector and its hologram:
 - An external actor that changes a chest between two visits is not detected. The state shows the last observation and its age.
 - After `RECOVERY` and `resume` the totals of the job can be inexact. The state says so.
 - There is no path finding. A path works only when each of its moves brings the robot nearer to the target dock. A straight path and a path with one corner are tested.
-- Outside loaded areas the robot does not work and the job stays `RUNNING`. The state shows the robot as not loaded.
+- Outside loaded areas the robot does not work and the job stays `RUNNING`. The state shows the robot as not loaded. No state changes, thus no notice comes.
+- A robot behind an obstacle that does not go away waits without an end. One notice comes after 5 minutes of game time (D30).
 - A chest has no owner. There is no integration with the protections of the server.
 - Uno answers only in English, also to a request in another language.
 - The `/uno confirm` command starts the newest proposal of the player, also when a different contact point made it. Only the screen names the proposal that its button confirms.

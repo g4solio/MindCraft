@@ -35,17 +35,20 @@ public final class Notices {
     }
 
     /**
-     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed.
+     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and a long wait.
      * A change that a request made is not selected: a pause, a resume or a cancellation does not come back to the owner as a notice.
+     * The other changes to WAITING are not selected: the ordinary cycle of a stock job is silent.
      */
     static boolean selected(Entry entry) {
-        return !entry.requested() && (entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
+        return !entry.requested()
+            && (entry.longWait() || entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
     }
 
     /** The sentence of a selected entry, from a fixed template for its state and its cause. It names the job, the robot and the cause. */
     static String sentence(Entry entry) {
         String job = "Job " + entry.job() + " on robot #" + entry.robot() + " (" + MindRuntime.itemName(entry.item())
             + " from '" + entry.from() + "' to '" + entry.to() + "')";
+        if (entry.longWait()) return job + longWait(entry);
         return switch (entry.state()) {
             case BLOCKED -> job + switch (entry.cause()) {
                 case OUT_OF_FUEL -> " is blocked: the robot has no fuel.";
@@ -58,6 +61,23 @@ public final class Notices {
             case RECOVERY -> job + " needs a check: I cannot say how it went. Recorded reason: " + entry.reason() + ".";
             case DONE -> job + " is done: " + entry.delivered() + " delivered.";
             default -> throw new IllegalArgumentException("No notice for the state " + entry.state());
+        };
+    }
+
+    /** The end of the sentence of a long wait: its length and the cause at that moment. No remedy. */
+    private static String longWait(Entry entry) {
+        String waited = " has waited for " + MindRuntime.LONG_WAIT / 1200 + " minutes";
+        return switch (entry.cause()) {
+            case SOURCE_AT_RESERVE -> waited + ": " + (entry.reserve() == 0 ? "nothing remains in '" + entry.from() + "'."
+                : "'" + entry.from() + "' has no item above the reserve of " + entry.reserve() + ".");
+            case SOURCE_KEEPS -> waited + ": '" + entry.from() + "' has the items, but it releases none.";
+            case ROBOT_FULL -> waited + ": the robot is full.";
+            case DESTINATION_FULL -> waited + ": '" + entry.to() + "' is full, and " + entry.carried() + " stay on board.";
+            case SOURCE_UNLOADED -> waited + ": the area of '" + entry.from() + "' is not loaded.";
+            case DESTINATION_UNLOADED -> waited + ": the area of '" + entry.to() + "' is not loaded.";
+            case PATH_OBSTRUCTED -> waited + ": the path of the robot is obstructed.";
+            // A record of an older version has no cause. The recorded text is all that Uno knows.
+            default -> waited + ". Recorded reason: " + entry.reason() + ".";
         };
     }
 

@@ -470,6 +470,52 @@ Changes to the older tests:
 
 Known limit: a robot waits without an end behind an obstacle that does not go away. The report and the hologram show the wait. The notice after a long wait is ticket #8.
 
+## Increment A — the job diary and the notices
+
+Ticket #8 of spec #1, on 2026-11-13. See D30 and D31.
+All tests of this section are in the game and automatic. No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+No test has a connected player. The tests replace the exit of the notices with one that records the owner and the text of each notice, then sends the notice as before.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red 1 | The test of the diary, with a diary that stays empty | 49 of 50. `a_diary_of_a_job` failed as expected: the diary of the job was empty |
+| Run 2: green 1, red 2 and 3 | The diary, without the limit and without notices. The tests of the limit and of the notices | 52 of 56. `a_diary_of_a_job` passed. `a_diary_limit` failed as expected: "the owner has 221 entries". `a_notices_for_blocked_recovery_and_done`, `a_no_notice_for_a_resume_that_completes_the_job` and `a_notices_call_no_provider` failed as expected: no notice. `a_no_notice_for_the_ordinary_cycle` and `a_no_notice_for_a_console_job` passed: without notices they cannot fail. They guard against a notice that must not come |
+| Run 3: green 2 and 3, red 4 | The limit, and the notices with the templates of `OUT_OF_FUEL`, `RECOVERY` and `DONE`. The notice checks in four older tests | 53 of 56. `t04_destination_removed`, `t04_source_removed` and `t16_quantity_lowered_with_load` failed as expected: their notice gave the recorded reason, not the cause. Example: "… is blocked. Recorded reason: the source station has no inventory at 55, -59, 9." `t06_impediment_of_an_unknown_kind` passed: it has no cause |
+| Green | The templates of the other causes of `BLOCKED` | **56 of 56**. Server line: `All 56 required tests passed :)`. No event of a robot was dropped |
+| `stop`, `check`, `crash`, `check-crash` | The code of Green, with the checks of the diary in the restart test | Passed, each phase. `check`: the diary after the restart is `RUNNING`, and at the end `RUNNING, DONE`. `check-crash`: after the restart `RUNNING, DONE, RECOVERY`, at the end `RUNNING, DONE, RECOVERY, RUNNING, DONE`. After the four phases the data folder has no temporary file |
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `a_diary_of_a_job` | A transport of a player. The source is empty: the job waits. 7 seconds later the test fills the robot with cobblestone and puts 24 coal in the source: the robot is full. Then the test frees one slot. After `DONE` it starts a second job on the robot | The entries of the first job: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `WAITING ROBOT_FULL`, `RUNNING`, `DONE`. The robot tried two times or more during the first wait: one entry. Each entry has the owner, the job, the robot, the two stations, coal, quantity 24 and reserve 0. Delivered and on board: 0 and 0 three times, then 0 and 24, then 24 and 0. The times grow, from the start to the end. The reason of the third entry: "the robot inventory is full". After the second job the five entries of the first job stay, and the second job has its entry `RUNNING`. A different player reads no entry of the owner. The console reads the same entries. A save and a load give the same diary. Without the diary in the saved data, the load gives an empty diary |
+| `a_diary_limit` | An operator starts a job in its own name and cancels it. Then the player starts a job and gives 110 pauses and 110 resumes in one tick | The player has 200 entries: the oldest is a `PAUSED`, the newest a `RUNNING`. The runtime records 21 removed entries, with the game time of that tick. The two older entries of the operator stay: `RUNNING`, `CANCELLED`. Nothing of the operator is removed. A save and a load give the same 200 entries and the same record of the removal |
+| `a_notices_for_blocked_recovery_and_done` | A transport of a player, with fuel 0. Then the test gives fuel and an operator resumes. After the pickup the test empties the robot. The owner resumes, pauses and resumes. After `DONE` the owner starts a second job and cancels it | Three notices to the owner, in this order: "Job N on robot #R (minecraft:coal from 'a_notice_source' to 'a_notice_destination') is blocked: the robot has no fuel.", "… needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24.", "… is done: 24 delivered." 3 seconds in `BLOCKED` give no second notice. The resume of the operator, the three requests of the owner, the second job and its cancellation give none. The operator gets none. The notices about the two jobs go to the owner only |
+| `a_no_notice_for_a_resume_that_completes_the_job` | The destination accepts 4 of 24. The test empties the robot. The owner lowers the quantity to 4 and resumes | One notice: "… needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 20." After the resume the job is `DONE`, and no second notice comes. The entries: `RUNNING`, `WAITING DESTINATION_FULL`, `RECOVERY`, `DONE` |
+| `a_no_notice_for_the_ordinary_cycle` | A stock job. The destination has 10 and needs 24. The source has 40 and a reserve of 30. The robot brings 10 and waits at the reserve. The test adds 8. Then the owner pauses, resumes and cancels | The entries: `RUNNING`, `WAITING SOURCE_AT_RESERVE`, `RUNNING`, `SATISFIED`, `PAUSED`, `RUNNING`, `CANCELLED`. The destination has 24. No notice |
+| `a_no_notice_for_a_console_job` | A transport of the console, with fuel 0. Then fuel and a resume | The entries: `RUNNING`, `BLOCKED OUT_OF_FUEL`, `RUNNING`, `DONE`. No notice about the job, and no notice to the console |
+| `a_notices_call_no_provider` | A batch of its own. The provider of the server counts its calls. A job of a player goes to `BLOCKED` without fuel, then to `DONE` | Two notices. The provider got zero calls |
+| `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load`, `t06_impediment_of_an_unknown_kind` | The older tests, with one more check in the `BLOCKED` state | One notice each: "… is blocked: there is no inventory at 't04_destination'.", "… is blocked: there is no inventory at 't04src_source'.", "… is blocked: the quantity of the job is reached, and 54 stay on board.", "… is blocked. Recorded reason: landslide: the floor fell at 1 2 3." |
+| `t11_server_restart`, four phases | The restart test, with the diary | See the table of the runs above. Minecraft saved the diary with the world at the normal stop, and the runtime wrote it at the delivery before the halt |
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| In the game the exit calls `PlayerList.getPlayer(owner)`. If the owner is connected, it calls `ServerPlayer.sendSystemMessage` with "Uno › " and the text. If not, it sends nothing | `Notices.CHAT` | That a client shows the line. No test has a connected player |
+| Only `MindRuntime.set` and the load of the record assign the state and the cause of a job. Thus each change of the state goes through the diary | `MindRuntime.java`, `RobotApi.java` | |
+| The code of the notices has no reference to Uno or to a provider | `Notices.java` | |
+
+Not covered:
+
+- A notice in the chat of a client. It is a step of the checklist of the play session.
+- A notice to an owner who is connected in a different dimension.
+- A `RECOVERY` that the load of the record finds at the server start, for a job of a player. Its notice leaves before a player can be connected. The phase `check-crash` writes such an entry, but its job belongs to the console.
+
+Changes to the older tests:
+
+- `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load` and `t06_impediment_of_an_unknown_kind`: one more check, the notice of the `BLOCKED` state.
+- `t11_server_restart`: it checks the diary after the restart and at the end.
+
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.

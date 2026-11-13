@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Cause;
+import io.github.g4solio.mindcraft.MindRuntime.Entry;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
 import io.github.g4solio.mindcraft.MindRuntime.Refusal;
@@ -372,9 +373,11 @@ public class MindCraftTests {
      * T04: the destination disappears while the robot carries the load. The robot keeps the load.
      * The job is blocked with a cause of its own, and Uno takes its sentence from the cause.
      * A record of an older version has no cause: then Uno gives the recorded reason, as before.
+     * The notice to the owner names the cause too (D30).
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t04_destination_removed(GameTestHelper helper) {
+        listen();
         Actor player = player("t04");
         Rig rig = new Rig(helper, "t04", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
@@ -389,6 +392,8 @@ public class MindCraftTests {
                 String report = Uno.report(server, player);
                 MindCraft.LOGGER.info("t04_destination_removed report: {}", report);
                 check(report.contains("I find no inventory at '" + rig.to + "'") && !report.contains("Recorded reason"), report);
+                check(notices(player).equals(List.of(subject(rig, rig.job()) + " is blocked: there is no inventory at '" + rig.to + "'.")),
+                    notices(player).toString());
 
                 long now = rig.level.getGameTime();
                 CompoundTag saved = rig.runtime.save(new CompoundTag());
@@ -408,6 +413,7 @@ public class MindCraftTests {
     /** T04 for the source: the source has no inventory when the robot arrives. The job is blocked with a cause of its own. */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t04_source_removed(GameTestHelper helper) {
+        listen();
         Actor player = player("t04src");
         // An empty source: a chest with items drops them when it disappears.
         Rig rig = new Rig(helper, "t04src", 0, 1000, player);
@@ -423,6 +429,8 @@ public class MindCraftTests {
                 String report = Uno.report(server, player);
                 MindCraft.LOGGER.info("t04_source_removed report: {}", report);
                 check(report.contains("I find no inventory at '" + rig.from + "'") && !report.contains("Recorded reason"), report);
+                check(notices(player).equals(List.of(subject(rig, rig.job()) + " is blocked: there is no inventory at '" + rig.from + "'.")),
+                    notices(player).toString());
                 helper.setBlock(rig.source, Blocks.CHEST);
                 rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 24));
                 rig.runtime.control(player, rig.id, "resume");
@@ -599,6 +607,7 @@ public class MindCraftTests {
     /** A module reports an impediment of a kind that the runtime does not know. A block without a cause: Uno gives the recorded reason. */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t06_impediment_of_an_unknown_kind(GameTestHelper helper) {
+        listen();
         Actor player = player("t06kind");
         Rig rig = new Rig(helper, "t06kind", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
@@ -616,6 +625,8 @@ public class MindCraftTests {
                 check(rig.job().cause == Cause.NONE && rig.job().reason.equals("landslide: the floor fell at 1 2 3"), rig.describe());
                 String report = Uno.report(server, player);
                 check(report.contains("I am stopped and I need your help. Recorded reason: landslide: the floor fell at 1 2 3."), report);
+                check(notices(player).equals(List.of(subject(rig, rig.job()) + " is blocked. Recorded reason: landslide: the floor fell at 1 2 3.")),
+                    notices(player).toString());
             })
             .thenIdle(60)
             .thenExecute(() -> {
@@ -1700,6 +1711,7 @@ public class MindCraftTests {
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t16_quantity_lowered_with_load(GameTestHelper helper) {
+        listen();
         Actor player = player("t16load");
         Rig rig = new Rig(helper, "t16load", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
@@ -1718,6 +1730,8 @@ public class MindCraftTests {
                 check(rig.job().delivered == 10 && rig.job().carried == 54 && rig.job().reason.contains("54 stay on board"), rig.describe());
                 check(report.contains("I delivered 10 items.") && report.contains("54 stay on board") && !report.contains("The job is complete"), report);
                 check(!report.contains("Recorded reason"), "the sentence must come from the cause: " + report);
+                check(notices(player).equals(List.of(subject(rig, rig.job()) + " is blocked: the quantity of the job is reached, and 54 stay on board.")),
+                    notices(player).toString());
             })
             .thenIdle(140)
             .thenExecute(() -> {
@@ -2097,6 +2111,326 @@ public class MindCraftTests {
             })
             .thenWaitUntil(() -> rig.state(State.DONE))
             .thenExecute(() -> rig.assertTransferred(40, 24))
+            .thenSucceed();
+    }
+
+    // --- Increment A: the job diary and the notices ---------------------------------------------------------------
+
+    /** The entries of one job that the actor reads, the oldest first. */
+    private static List<Entry> entries(MindRuntime runtime, Actor actor, int jobId) {
+        return runtime.diary(actor).stream().filter(entry -> entry.job() == jobId).toList();
+    }
+
+    /** The state and the cause of each entry of one job, the oldest first. */
+    static List<String> states(MindRuntime runtime, Actor actor, int jobId) {
+        return entries(runtime, actor, jobId).stream()
+            .map(entry -> entry.state() + (entry.cause() == Cause.NONE ? "" : " " + entry.cause())).toList();
+    }
+
+    /**
+     * D31: the runtime writes an entry at each change of the state of a job, and at each change of the cause of a wait.
+     * A repeated record of the same state and cause writes no entry. The robot first waits for materials, then waits because it is full.
+     * The entries of a job stay after a new job replaced it on the robot. Only the owner reads them.
+     * A save and a load give the same diary. A record of an older version loads with an empty diary.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_diary_of_a_job(GameTestHelper helper) {
+        Actor player = player("a_diary");
+        Rig rig = new Rig(helper, "a_diary", 0, 1000, player);
+        Job[] first = new Job[1];
+        long[] started = new long[1];
+        rig.begin()
+            .thenExecute(() -> {
+                started[0] = rig.level.getGameTime();
+                first[0] = rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            // At least one more attempt of the robot. Each attempt records the same state and cause again.
+            .thenIdle(140)
+            .thenExecute(() -> {
+                check(rig.job().ops >= 2, "expected two attempts or more: " + rig.describe());
+                List<String> states = states(rig.runtime, player, first[0].id);
+                check(states.equals(List.of("RUNNING", "WAITING SOURCE_AT_RESERVE")), states.toString());
+                Container inventory = rig.robot().turtle.getInventory();
+                for (int slot = 0; slot < inventory.getContainerSize(); slot++) inventory.setItem(slot, new ItemStack(Items.COBBLESTONE, 64));
+                rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 24));
+            })
+            .thenWaitUntil(() -> check(rig.job().cause == Cause.ROBOT_FULL, rig.describe()))
+            .thenExecute(() -> rig.robot().turtle.getInventory().setItem(0, ItemStack.EMPTY))
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                long now = rig.level.getGameTime();
+                List<String> states = states(rig.runtime, player, first[0].id);
+                check(states.equals(List.of("RUNNING", "WAITING SOURCE_AT_RESERVE", "WAITING ROBOT_FULL", "RUNNING", "DONE")), states.toString());
+                List<Entry> entries = entries(rig.runtime, player, first[0].id);
+                for (int i = 0; i < entries.size(); i++) {
+                    Entry entry = entries.get(i);
+                    check(entry.time() >= started[0] && entry.time() <= now && (i == 0 || entry.time() >= entries.get(i - 1).time()),
+                        "the time of entry " + i + " is " + entry.time() + ": the job started at " + started[0] + ", now is " + now);
+                    check(entry.owner().equals(player.id()) && entry.job() == first[0].id && entry.robot() == rig.id
+                        && entry.from().equals(rig.from) && entry.to().equals(rig.to) && entry.item() == Items.COAL
+                        && entry.quantity() == 24 && entry.reserve() == 0, entry.toString());
+                }
+                // The quantities at each moment: nothing yet, nothing yet, nothing yet, 24 on board, 24 delivered.
+                List<String> quantities = entries.stream().map(entry -> entry.delivered() + "/" + entry.carried()).toList();
+                check(quantities.equals(List.of("0/0", "0/0", "0/0", "0/24", "24/0")), "delivered/on board: " + quantities);
+                check(entries.get(2).reason().equals("the robot inventory is full"), entries.get(2).toString());
+
+                // A new job replaces the first one on the robot. The entries of the first job stay.
+                Job second = rig.startJob(8, 0);
+                check(rig.job() == second && states(rig.runtime, player, first[0].id).equals(states), states(rig.runtime, player, first[0].id).toString());
+                check(states(rig.runtime, player, second.id).equals(List.of("RUNNING")), states(rig.runtime, player, second.id).toString());
+                // Only the owner and an operator read the diary (D37).
+                check(rig.runtime.diary(player("a_diary_other")).stream().noneMatch(entry -> entry.owner().equals(player.id())),
+                    "a different player reads the diary of the owner");
+                check(entries(rig.runtime, ADMIN, first[0].id).equals(entries), "the console reads a different diary");
+
+                CompoundTag saved = rig.runtime.save(new CompoundTag());
+                check(MindRuntime.load(saved).diary(ADMIN).equals(rig.runtime.diary(ADMIN)), "the loaded diary is different");
+                saved.remove("diary");
+                check(MindRuntime.load(saved).diary(ADMIN).isEmpty(), "a record of an older version loads with entries");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D31: the limit is 200 entries for each owner. The runtime removes the oldest entries of that owner, and records that it removed them.
+     * The entries of a different owner stay, also when they are older. The test makes the entries with pauses and resumes of the owner.
+     * An operator starts the first job in its own name: thus the operator is a different owner.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_diary_limit(GameTestHelper helper) {
+        Actor player = player("a_limit");
+        Actor other = player("a_limit_operator");
+        Actor operator = new Actor(other.id(), true);
+        Rig rig = new Rig(helper, "a_limit", 0, 1000, player);
+        rig.begin()
+            .thenExecute(() -> {
+                long now = rig.level.getGameTime();
+                Job first = rig.runtime.start(operator, rig.order(MindRuntime.TRANSPORT, 8, 0));
+                rig.runtime.control(operator, rig.id, first.id, "cancel");
+                Job job = rig.startJob(8, 0);
+                for (int i = 0; i < 110; i++) {
+                    rig.runtime.control(player, rig.id, job.id, "pause");
+                    rig.runtime.control(player, rig.id, job.id, "resume");
+                }
+                // The start and 220 changes: 221 entries. The oldest 21 go.
+                List<Entry> kept = rig.runtime.diary(player);
+                check(kept.size() == 200, "the owner has " + kept.size() + " entries");
+                check(kept.get(0).state() == State.PAUSED && kept.get(199).state() == State.RUNNING, kept.get(0) + " ... " + kept.get(199));
+                check(rig.runtime.forgotten(player).equals(new MindRuntime.Forgotten(21, now)), String.valueOf(rig.runtime.forgotten(player)));
+                check(states(rig.runtime, other, first.id).equals(List.of("RUNNING", "CANCELLED")), states(rig.runtime, other, first.id).toString());
+                check(rig.runtime.forgotten(other).entries() == 0, String.valueOf(rig.runtime.forgotten(other)));
+
+                MindRuntime copy = MindRuntime.load(rig.runtime.save(new CompoundTag()));
+                check(copy.diary(player).equals(kept) && copy.forgotten(player).equals(rig.runtime.forgotten(player)),
+                    "the loaded diary is different: " + copy.forgotten(player));
+                rig.runtime.control(player, rig.id, job.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /** A notice that the exit got: the owner and the text. */
+    record Notice(UUID owner, String text) {
+    }
+
+    /** The notices since the first test that listens. Tests that run at the same time add to the same list: each test reads its own owner. */
+    static final List<Notice> NOTICES = new CopyOnWriteArrayList<>();
+    private static boolean listening;
+
+    /**
+     * Replaces the exit of the notices with one that records each notice, then sends it as before.
+     * The exit is a value of the whole server. This one changes nothing for the tests that run at the same time.
+     */
+    static synchronized void listen() {
+        if (listening) return;
+        listening = true;
+        Notices.Exit game = Notices.exit;
+        Notices.exit = (server, owner, text) -> {
+            NOTICES.add(new Notice(owner, text));
+            game.send(server, owner, text);
+        };
+    }
+
+    /** The texts of the notices to this owner, the oldest first. */
+    static List<String> notices(Actor owner) {
+        return NOTICES.stream().filter(notice -> notice.owner().equals(owner.id())).map(Notice::text).toList();
+    }
+
+    /** The notices about one job, to any owner. */
+    static List<Notice> noticesAbout(int jobId, int robotId) {
+        return NOTICES.stream().filter(notice -> notice.text().startsWith("Job " + jobId + " on robot #" + robotId + " ")).toList();
+    }
+
+    /** How a notice names a job of a rig. */
+    private static String subject(Rig rig, Job job) {
+        return "Job " + job.id + " on robot #" + rig.id + " (minecraft:coal from '" + rig.from + "' to '" + rig.to + "')";
+    }
+
+    /**
+     * D30: a change to BLOCKED, RECOVERY or DONE gives one notice to the owner. The sentence comes from a fixed template.
+     * It names the job, the robot and the cause in words. A resume by an operator, and a pause, a resume and a cancellation
+     * by the owner give no notice. No notice goes to the operator or to a different player.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_notices_for_blocked_recovery_and_done(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_notice");
+        Actor other = player("a_notice_operator");
+        Actor operator = new Actor(other.id(), true);
+        Rig rig = new Rig(helper, "a_notice", 64, 0, player);
+        Job[] jobs = new Job[2];
+        List<String> expected = new ArrayList<>();
+        rig.begin()
+            .thenExecute(() -> jobs[0] = rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            // The robot stays blocked. The notice does not repeat.
+            .thenIdle(60)
+            .thenExecute(() -> {
+                expected.add(subject(rig, jobs[0]) + " is blocked: the robot has no fuel.");
+                check(notices(player).equals(expected), notices(player).toString());
+                rig.robot().turtle.setFuelLevel(1000);
+                rig.runtime.control(operator, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> rig.robot().turtle.getInventory().clearContent())
+            .thenWaitUntil(() -> rig.state(State.RECOVERY))
+            .thenExecute(() -> {
+                expected.add(subject(rig, jobs[0]) + " needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24.");
+                check(notices(player).equals(expected), notices(player).toString());
+                // The owner accepts the observed load. Then a pause and a resume.
+                rig.runtime.control(player, rig.id, "resume");
+                rig.runtime.control(player, rig.id, "pause");
+                rig.runtime.control(player, rig.id, "resume");
+                check(notices(player).equals(expected), notices(player).toString());
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                check(rig.coal(rig.dest) == 24 && rig.coal(rig.source) == 16, rig.describe());
+                expected.add(subject(rig, jobs[0]) + " is done: 24 delivered.");
+                // A new job, and its cancellation by the owner.
+                jobs[1] = rig.startJob(8, 0);
+                rig.runtime.control(player, rig.id, "cancel");
+                check(notices(player).equals(expected), notices(player).toString());
+                check(notices(other).isEmpty() && notices(operator).isEmpty(), "the operator got a notice: " + notices(other));
+                List<Notice> about = new ArrayList<>(noticesAbout(jobs[0].id, rig.id));
+                about.addAll(noticesAbout(jobs[1].id, rig.id));
+                check(about.size() == 3 && about.stream().allMatch(notice -> notice.owner().equals(player.id())), about.toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D30: a resume by the owner gives no notice, also when the resume completes the job.
+     * The destination accepts 4. The robot loses the rest of its load. The owner lowers the quantity to 4 and resumes:
+     * the owner accepts the observed load, nothing is on board, and the job is DONE.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_no_notice_for_a_resume_that_completes_the_job(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_notice_resume");
+        Rig rig = new Rig(helper, "a_notice_resume", 64, 1000, player);
+        almostFull(rig);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 4, rig.describe()))
+            .thenExecute(() -> rig.robot().turtle.getInventory().clearContent())
+            .thenWaitUntil(() -> rig.state(State.RECOVERY))
+            .thenExecute(() -> {
+                List<String> before = notices(player);
+                check(before.equals(List.of(subject(rig, rig.job()) + " needs a check: I cannot say how it went. "
+                    + "Recorded reason: the robot holds 0, the record says 20.")), before.toString());
+                rig.runtime.update(player, rig.id, rig.job().id, rig.job().revision, 4, 0);
+                rig.runtime.control(player, rig.id, "resume");
+                rig.state(State.DONE);
+                check(notices(player).equals(before), notices(player).toString());
+                List<String> states = states(rig.runtime, player, rig.job().id);
+                check(states.equals(List.of("RUNNING", "WAITING DESTINATION_FULL", "RECOVERY", "DONE")), states.toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D30: the ordinary cycle of a stock job is silent. RUNNING, WAITING and SATISFIED give no notice.
+     * A pause, a resume and a cancellation by the owner give no notice.
+     * The destination has 10 and needs 24. The source has 40 and a reserve of 30: the robot brings 10, then waits for materials.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_no_notice_for_the_ordinary_cycle(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_notice_cycle");
+        Rig rig = new Rig(helper, "a_notice_cycle", 40, 1000, player);
+        rig.chest(rig.dest).setItem(0, new ItemStack(Items.COAL, 10));
+        rig.begin()
+            .thenExecute(() -> rig.runtime.start(player, rig.order(MindRuntime.KEEP_STOCK, 24, 30)))
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.coal(rig.dest) == 20, rig.describe()))
+            .thenExecute(() -> rig.chest(rig.source).setItem(1, new ItemStack(Items.COAL, 8)))
+            .thenWaitUntil(() -> rig.state(State.SATISFIED))
+            .thenExecute(() -> {
+                check(rig.coal(rig.dest) == 24, rig.describe());
+                rig.runtime.control(player, rig.id, "pause");
+                rig.runtime.control(player, rig.id, "resume");
+                rig.runtime.control(player, rig.id, "cancel");
+                List<String> states = states(rig.runtime, player, rig.job().id);
+                check(states.equals(List.of("RUNNING", "WAITING SOURCE_AT_RESERVE", "RUNNING", "SATISFIED", "PAUSED", "RUNNING", "CANCELLED")),
+                    states.toString());
+                check(notices(player).isEmpty(), notices(player).toString());
+            })
+            .thenSucceed();
+    }
+
+    /** D30: a job of the console has no player to warn. Its diary has the events, but no notice goes to the exit. */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_no_notice_for_a_console_job(GameTestHelper helper) {
+        listen();
+        Rig rig = new Rig(helper, "a_notice_console", 64, 0);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                rig.robot().turtle.setFuelLevel(1000);
+                rig.runtime.control(rig.actor, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                List<String> states = states(rig.runtime, ADMIN, rig.job().id);
+                check(states.equals(List.of("RUNNING", "BLOCKED OUT_OF_FUEL", "RUNNING", "DONE")), states.toString());
+                check(noticesAbout(rig.job().id, rig.id).isEmpty(), noticesAbout(rig.job().id, rig.id).toString());
+                check(notices(ADMIN).isEmpty(), notices(ADMIN).toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job goes to BLOCKED and to DONE.
+     * It has its own batch: the provider of the server is a value of the whole server.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "notice_provider")
+    public static void a_notices_call_no_provider(GameTestHelper helper) {
+        listen();
+        Actor player = player("a_notice_provider");
+        Rig rig = new Rig(helper, "a_notice_provider", 64, 0, player);
+        AtomicInteger calls = new AtomicInteger();
+        Uno.Provider before = Uno.provider;
+        rig.begin()
+            .thenExecute(() -> {
+                Uno.provider = (request, context) -> {
+                    calls.incrementAndGet();
+                    return before.answer(request, context);
+                };
+                rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                rig.robot().turtle.setFuelLevel(1000);
+                rig.runtime.control(player, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                Uno.provider = before;
+                check(notices(player).size() == 2, notices(player).toString());
+                check(calls.get() == 0, "the provider got " + calls.get() + " calls");
+            })
             .thenSucceed();
     }
 

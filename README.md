@@ -174,6 +174,33 @@ Above the block there is a hologram. Its colour shows a general state of your jo
 | Green | At least one job in progress |
 | Amber | At least one job that waits, is blocked or needs a check |
 
+### Notices
+
+Uno writes one line in your chat when one of your jobs goes to `BLOCKED`, `RECOVERY` or `DONE`. For example:
+
+```
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel.
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24.
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24 delivered.
+```
+
+- The line comes from a fixed template for the state and the cause. It names the job, the robot and the cause.
+- Uno only warns. It proposes no remedy and starts no action.
+- A notice calls no model. It works without a key, and when the model service is down.
+- `RUNNING`, `WAITING` and `SATISFIED` give no notice.
+- Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
+- A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
+- In this version there is no notice after a long wait, and no summary when you open the screen.
+
+### The diary
+
+The runtime writes a diary: each change of the state of a job, and each change of the cause of a wait or of a block.
+A repeated report of the same state and cause writes nothing.
+An entry has the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
+Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
+The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
+Only the owner and an operator read the entries of a job. In this version no screen and no command shows the diary.
+
 ### Uno with Claude
 
 Uno uses Claude if the server process has the environment variable `ANTHROPIC_API_KEY`. In a single-player game the server is the game itself.
@@ -215,6 +242,7 @@ It also reads the same request in Italian, the first language of this project.
 | `CANCELLED` | The owner cancelled. The cargo stays on board | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
+A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. See "Notices".
 Uno takes the sentence of its report from the cause. The screen and the `status` command also show the recorded reason with the position.
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.

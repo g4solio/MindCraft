@@ -8,6 +8,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
 
+import java.util.List;
+
 import static io.github.g4solio.mindcraft.MindCraftTests.check;
 
 /**
@@ -68,10 +70,19 @@ public class RestartTests {
         }
     }
 
+    /**
+     * Also D31: Minecraft saves the diary with the world. After the restart the diary has the entries of the first run.
+     * After the normal stop: the start of the job. After the crash: the start and the delivery that the record wrote at the halt,
+     * then the recovery that the load of the record found.
+     */
     private static void examine(GameTestHelper helper, Rig rig, boolean afterCrash) {
         check(rig.runtime.robots.size() == 1, "expected one enrolled robot in the saved world, found " + rig.runtime.robots.size());
         rig.id = rig.runtime.robots.keySet().iterator().next();
         MindCraft.LOGGER.info("t11_server_restart record after the restart, game time {}:\n{}", rig.level.getGameTime(), rig.describe());
+        int jobId = rig.job().id;
+        List<String> saved = MindCraftTests.states(rig.runtime, rig.actor, jobId);
+        MindCraft.LOGGER.info("t11_server_restart diary after the restart: {}", saved);
+        check(saved.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY") : List.of("RUNNING")), "the saved diary is " + saved);
         if (afterCrash) rig.state(State.RECOVERY);
         helper.startSequence()
             .thenWaitUntil(() -> check(rig.robot() != null && (rig.job().state == State.DONE || rig.job().state == State.RECOVERY), rig.describe()))
@@ -89,6 +100,10 @@ public class RestartTests {
             .thenExecute(() -> {
                 rig.assertTransferred(40, 24);
                 check(rig.job().recoveries == (afterCrash ? 1 : 0), rig.describe());
+                List<String> diary = MindCraftTests.states(rig.runtime, rig.actor, jobId);
+                MindCraft.LOGGER.info("t11_server_restart final diary: {}", diary);
+                check(diary.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY", "RUNNING", "DONE") : List.of("RUNNING", "DONE")),
+                    "the diary is " + diary);
                 MindCraft.LOGGER.info("t11_server_restart final status:\n{}", rig.describe());
             })
             .thenSucceed();

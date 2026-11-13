@@ -305,7 +305,7 @@ A request without the words of an action and without two stations gets the reaso
 | `CANCELLED` | The owner cancelled. The cargo stays on board | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
-A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. See "Notices".
+A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. A `WAITING` of 5 minutes without an interruption gives one notice too. See "Notices".
 Uno takes the sentence of its report from the cause. The screen and the `status` command also show the recorded reason with the position.
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.

@@ -214,7 +214,7 @@ public class RobotApi implements ILuaAPI {
         } else if (job.keepStock()) {
             runtime().set(job, State.SATISFIED, "the destination has " + job.toSeen + ", the target is " + job.quantity + onBoard);
         } else if (job.carried > 0) {
-            runtime().set(job, State.BLOCKED, "the quantity is " + job.quantity + " and " + job.delivered + " are delivered: "
+            runtime().blocked(job, Cause.LOAD_ABOVE_QUANTITY, "the quantity is " + job.quantity + " and " + job.delivered + " are delivered: "
                 + job.carried + " stay on board. Raise the quantity and resume, or cancel the job");
         } else {
             runtime().set(job, State.DONE, "");
@@ -247,10 +247,21 @@ public class RobotApi implements ILuaAPI {
         return new Object[]{moved, job.reason};
     }
 
-    /** The module reports an impediment that it cannot remove. The owner must resume the job. */
+    /**
+     * The module reports an impediment that it cannot remove: a kind and the detail text, with the position.
+     * The runtime decides the state from the kind. Returns the new state: "WAITING" when the module must try again later.
+     */
     @LuaFunction(mainThread = true)
-    public final void block(String reason) throws LuaException {
-        runtime().set(activeJob(), State.BLOCKED, reason);
+    public final String impediment(String kind, String detail) throws LuaException {
+        Job job = activeJob();
+        runtime().impediment(job, kind, detail);
+        return job.state.name();
+    }
+
+    /** The module tells the runtime that the robot moved. A job that waited for a free path works again. */
+    @LuaFunction(mainThread = true)
+    public final void moved() throws LuaException {
+        runtime().moved(activeJob());
     }
 
     // --- Internals -------------------------------------------------------------------------------------------------
@@ -292,7 +303,8 @@ public class RobotApi implements ILuaAPI {
         }
         IItemHandler inventory = inventoryAt(level, station.inventory(), station.dock());
         if (inventory == null) {
-            runtime().set(job, State.BLOCKED, "the " + role + " station has no inventory at " + station.inventory().toShortString());
+            runtime().blocked(job, role.equals("source") ? Cause.SOURCE_NO_INVENTORY : Cause.DESTINATION_NO_INVENTORY,
+                "the " + role + " station has no inventory at " + station.inventory().toShortString());
         }
         return inventory;
     }

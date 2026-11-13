@@ -598,6 +598,52 @@ Not covered:
 - A real client with permission level 0, and a single-player world without commands. The tests build the actors.
 - The limit of the console: one test counts one request of the console. The limit itself is tested with an operator.
 
+## Increment A — the summary at an opening
+
+Ticket #10 of spec #1, on 2026-11-13. See D30, "Summary, as built".
+All tests of this section are in the game and automatic. No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+No test has a client. One test calls the methods of the tablet and of the projector with a fake player of Forge (`FakePlayerFactory`): a server player without a connection. The other tests call `UnoView.open`, the function that those methods call, with the moment of the opening as a parameter.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red 1 | `UnoView.open` builds the view and does nothing more. The tablet and the projector call it | 65 of 66. `a_summary_at_an_opening` failed as expected: "the first opening: Tell me what you need." |
+| Run 2: green 1, red 2, 3 and 4 | The summary without the limit, without the line about the memory, and with the openings in memory only | 66 of 70. `a_summary_shows_the_10_newest` failed as expected: it showed the 12 events. `a_summary_says_where_the_memory_starts` failed as expected: "only removed entries: Tell me what you need." `a_summary_after_a_save_and_a_load` failed as expected: the loaded copy gave "From the start of my memory:" with both events. `a_t19_summary_of_another_player` passed: it guards against an event that must not come. `a_summary_at_an_opening` failed for an error of the test, after its check of the summary passed: see below |
+| `stop`, `check`, red | The limit and the line about the memory. The openings are not saved yet. The restart test has the checks of the summary | `stop` passed. `check` failed as expected: "the summary after the restart: From the start of my memory: 0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." The diary checks before it passed |
+| Green | The openings in the saved record | **70 of 70**. Server line: `All 70 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash` | The code of Green | Passed, each phase. `check`: the summary of the operator after the restart is "Since you last opened this screen:" and one line, "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." `check-crash`: the same first line and three lines: the `DONE` of the first run, the `RECOVERY` "… needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job.", and the `DONE` after the resume. After the four phases the data folder has no temporary file |
+
+The error of the test in run 2: the first version of `a_summary_at_an_opening` looked for the sentence of Uno in the text of the view. The view is JSON: Gson writes the line break as `\n` and the quote as `'`. The test now reads the text of the widget of Uno. The green run used this version.
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `a_summary_at_an_opening` | A batch of its own: the provider of the server is a `CountingModel`. A transport of a player with fuel 0: `BLOCKED`. Then fuel and a resume of the owner: `DONE`. The player uses the tablet. Then the "Report" button. Then a click on the projector. A second job goes to `BLOCKED`. The screen asks for a new view ("refresh"). Then a second click on the projector | The first opening, with the tablet: "From the start of my memory:", "2 s ago: Job N on robot #R (…) is blocked: the robot has no fuel.", "0 s ago: … is done: 24 delivered." The start and the resume of the owner are not in it. The view shows the summary as the sentence of Uno. The report replaces it. The click on the projector without a new event keeps the report. The view after "refresh" keeps the report too. The second click: "Since you last opened this screen:" and only the block of the second job. The provider got zero calls |
+| `a_summary_shows_the_10_newest` | In one tick, 12 impediments of unknown kinds through the function that the Lua modules call, each with a reason of its own. The owner resumes after each one. The opening is 12 minutes of game time later | "From the start of my memory:", "I do not show 2 older events.", then the events 3 to 12, the oldest first, each as "12 min ago: … is blocked. Recorded reason: kindN: event N." |
+| `a_summary_says_where_the_memory_starts` | A first opening without events. Two ticks later, in one tick: a start, 110 pauses and 110 resumes of the owner. The runtime removes 21 entries. A copy of the record at that moment. Then one impediment. The openings are 3 hours later. Then the "Report" button and an opening 1 minute later | The first opening without events keeps "Tell me what you need." The copy: "Since you last opened this screen:" and "My memory starts 3 h ago. I do not remember older events." The running record after the impediment: the same two lines and "3 h ago: … is blocked. Recorded reason: kind: event." The opening after the report keeps the report |
+| `a_t19_summary_of_another_player` | A block of the job of the owner. A different player opens, then the owner | The different player: Uno keeps "Tell me what you need.", and the view has no station and no event of the owner. Then the owner: "From the start of my memory:" and "0 s ago: … is blocked. Recorded reason: kind: event." |
+| `a_summary_after_a_save_and_a_load` | One block before the first opening, one block two ticks after it. A save and a load of the record, then the openings two days later: on the loaded copy and on the running record. Then a load without the saved openings | The loaded copy and the running record give the same summary: "Since you last opened this screen:" and "2 days ago: … is blocked. Recorded reason: late: event." Without the saved openings: "From the start of my memory:" and both events, each "2 days ago" |
+| `t11_server_restart`, four phases | An operator opens the screen after the start of the job, in the first run. After the restart and the end of the job, the operator opens again | See the table of the runs above. After the normal stop the summary has the first line of a later opening: the last opening of the first run survived the restart |
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The tablet and the projector call `Net.open`. The answer to an action of the screen, also the view of each second, calls `Net.sendView`. Only `Net.open` calls `UnoView.open` | `MindCraft.TABLET`, `ProjectorBlock.use`, `Net.onAction` | That a client gets the view. The fake player has no connection |
+| The code of the summary has no reference to a provider and does not call `Uno.ask` | `Notices.summary`, `UnoView.open` | |
+| The game time of the opening is the time of the overworld, as the time of the diary | `Net.open`, `MindRuntime.write` | |
+
+Not covered:
+
+- The summary on the screen of a client: 12 lines in the text of Uno, the line breaks, and the space of the screen. It is a step of the checklist of the play session.
+- A real player who goes away and comes back. The tests set the moment of the opening as a parameter.
+- An event in the same tick as an opening, after it. See the boundary in D30.
+- The summary of an operator in the normal run: the events of the console jobs of the tests that run at the same time would change it. The restart test has one console job only, and checks the summary of an operator there.
+
+Changes to the older tests:
+
+- `t11_server_restart`: in the first run an operator opens the screen after the start of the job. At the end of the second run the operator opens again and the test checks the summary.
+- The function that names a job in a notice (`subject`) is now visible to the restart test.
+
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.

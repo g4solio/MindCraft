@@ -199,6 +199,8 @@ public class MindRuntime extends SavedData {
     static final int DIARY_LIMIT = 200;
     /** Owner to what the runtime removed from the diary of that owner. */
     private final Map<UUID, Forgotten> forgotten = new HashMap<>();
+    /** Player to the game time of the last opening of a contact point by that player (D30). Minecraft saves it with the world. */
+    private final Map<UUID, Long> openings = new HashMap<>();
     private int nextJobId = 1;
     /** True after the comparison of the record with the age of the world. Not saved. */
     private boolean ageChecked;
@@ -432,6 +434,16 @@ public class MindRuntime extends SavedData {
             until = Math.max(until, owner.getValue().until());
         }
         return new Forgotten(entries, until);
+    }
+
+    /**
+     * The actor opens a contact point at this game time. The runtime records it.
+     * Returns the game time of the opening before it, or UNKNOWN at the first opening of the actor in this world.
+     */
+    public long open(Actor actor, long now) {
+        Long last = openings.put(actor.id(), now);
+        setDirty();
+        return last == null ? UNKNOWN : last;
     }
 
     /** The status of a robot and its job, for a request of a player. Only the owner and an operator read it. */
@@ -678,6 +690,9 @@ public class MindRuntime extends SavedData {
             forgottenTags.put(owner.toString(), t);
         });
         root.put("forgotten", forgottenTags);
+        CompoundTag openingTags = new CompoundTag();
+        openings.forEach((player, time) -> openingTags.putLong(player.toString(), time));
+        root.put("openings", openingTags);
         return root;
     }
 
@@ -743,6 +758,9 @@ public class MindRuntime extends SavedData {
             CompoundTag t = forgottenTags.getCompound(owner);
             rt.forgotten.put(UUID.fromString(owner), new Forgotten(t.getInt("entries"), t.getLong("until")));
         }
+        // A record of an older version has no openings: the next opening of each player is a first opening.
+        CompoundTag openingTags = root.getCompound("openings");
+        for (String player : openingTags.getAllKeys()) rt.openings.put(UUID.fromString(player), openingTags.getLong(player));
         return rt;
     }
 }

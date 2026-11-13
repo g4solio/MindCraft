@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpServer;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Cause;
@@ -29,13 +30,18 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.util.FakePlayer;
+import net.minecraftforge.common.util.FakePlayerFactory;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.gametest.GameTestHolder;
@@ -65,6 +71,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -2816,7 +2823,7 @@ public class MindCraftTests {
     }
 
     /** How a notice names a job of a rig. */
-    private static String subject(Rig rig, Job job) {
+    static String subject(Rig rig, Job job) {
         return "Job " + job.id + " on robot #" + rig.id + " (minecraft:coal from '" + rig.from + "' to '" + rig.to + "')";
     }
 
@@ -2981,6 +2988,234 @@ public class MindCraftTests {
                 Uno.provider = before;
                 check(notices(player).size() == 2, notices(player).toString());
                 check(model.calls.get() == 0, "the provider got " + model.calls.get() + " calls");
+            })
+            .thenSucceed();
+    }
+
+    // --- Increment A: the summary at an opening ----------------------------------------------------------------------
+
+    /** The first line of a summary at the first opening of a player in this world. */
+    static final String FIRST = "From the start of my memory:";
+    /** The first line of a summary at each later opening. */
+    static final String SINCE = "Since you last opened this screen:";
+    /** The age at the start of a line of a summary. */
+    private static final Pattern AGE = Pattern.compile("^(\\d+ s ago|\\d+ min ago|\\d+ h ago|1 day ago|\\d+ days ago|At an unknown time): ", Pattern.MULTILINE);
+
+    /** A sentence of Uno with each age of a summary replaced by "<age>". The age of a real event depends on the speed of the robot. */
+    static String ageless(String said) {
+        return AGE.matcher(said).replaceAll("<age>: ");
+    }
+
+    /** The text of the sentence of Uno in a view. The view is JSON: a text with a line break or a quote is escaped in it. */
+    private static String voice(String view) {
+        for (JsonElement widget : JsonParser.parseString(view).getAsJsonObject().getAsJsonArray("widgets")) {
+            JsonObject text = widget.getAsJsonObject();
+            if (text.has("style") && text.get("style").getAsString().equals("uno")) return text.get("text").getAsString();
+        }
+        throw new GameTestAssertException("the view has no sentence of Uno: " + view);
+    }
+
+    /** A module of the robot reports an impediment, through the function that the Lua modules call. */
+    private static void impediment(Rig rig, String kind, String detail) {
+        try {
+            rig.robot().impediment(kind, detail);
+        } catch (dan200.computercraft.api.lua.LuaException e) {
+            throw new GameTestAssertException("the impediment failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * D30, spec #1 "The summary": the use of the tablet and the click on a projector are an opening.
+     * At an opening Uno says the sentences of the selected entries since the last opening of that player, the oldest first, each with its age.
+     * The first opening in a world covers the whole diary of the player. The next answer of Uno replaces the summary.
+     * A second opening without a new event gives no summary: Uno keeps its sentence. A new view after an action of the screen is not an opening.
+     * The test calls the methods of the tablet and of the projector with a fake player of Forge: a server player without a client.
+     * The provider of the server counts its calls: the summary calls none (D33).
+     * It has its own batch: the provider of the server is a value of the whole server.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "summary_provider")
+    public static void a_summary_at_an_opening(GameTestHelper helper) {
+        UUID id = UUID.nameUUIDFromBytes("a_summary".getBytes(StandardCharsets.UTF_8));
+        FakePlayer fake = FakePlayerFactory.get(helper.getLevel(), new GameProfile(id, "a_summary"));
+        Actor player = MindCraft.actor(fake);
+        Rig rig = new Rig(helper, "a_summary", 64, 0, player);
+        MinecraftServer server = rig.level.getServer();
+        BlockPos relative = new BlockPos(3, 1, 0), projector = helper.absolutePos(relative);
+        helper.setBlock(relative, MindCraft.PROJECTOR.get());
+        Runnable tablet = () -> MindCraft.TABLET.get().use(rig.level, fake, InteractionHand.MAIN_HAND);
+        Runnable click = () -> rig.level.getBlockState(projector).use(rig.level, fake, InteractionHand.MAIN_HAND,
+            new BlockHitResult(Vec3.atCenterOf(projector), Direction.UP, projector, false));
+        Uno.Provider before = Uno.provider;
+        CountingModel model = new CountingModel(before);
+        Job[] jobs = new Job[2];
+        String[] report = new String[1];
+        rig.begin()
+            .thenExecute(() -> {
+                check(!player.admin(), "the fake player is an operator");
+                Uno.provider = model;
+                jobs[0] = rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                rig.robot().turtle.setFuelLevel(1000);
+                rig.runtime.control(player, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                check(Uno.said(player).equals("Tell me what you need."), Uno.said(player));
+                tablet.run();
+                // The start and the resume are requests of the owner: the attention rule does not select them.
+                String first = FIRST + "\n<age>: " + subject(rig, jobs[0]) + " is blocked: the robot has no fuel."
+                    + "\n<age>: " + subject(rig, jobs[0]) + " is done: 24 delivered.";
+                check(ageless(Uno.said(player)).equals(first), "the first opening: " + Uno.said(player));
+                MindCraft.LOGGER.info("a_summary_at_an_opening, the first opening: {}", Uno.said(player));
+                String voice = voice(UnoView.build(rig.runtime, player, rig.level.getGameTime()));
+                check(voice.equals("Uno › " + Uno.said(player)), "the view does not show the summary: " + voice);
+                UnoView.act(server, player, "report", "{}");
+                report[0] = Uno.said(player);
+                check(report[0].startsWith("Job " + jobs[0].id + ", robot #" + rig.id + ":"), "the report did not replace the summary: " + report[0]);
+                click.run();
+                check(Uno.said(player).equals(report[0]), "the second opening changed the sentence of Uno: " + Uno.said(player));
+                rig.robot().turtle.setFuelLevel(0);
+                jobs[1] = rig.startJob(8, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                // The screen asks for a new view each second. That view is not an opening.
+                UnoView.act(server, player, "refresh", "{}");
+                UnoView.build(rig.runtime, player, rig.level.getGameTime());
+                check(Uno.said(player).equals(report[0]), "a new view after an action gave a summary: " + Uno.said(player));
+                click.run();
+                String since = SINCE + "\n<age>: " + subject(rig, jobs[1]) + " is blocked: the robot has no fuel.";
+                check(ageless(Uno.said(player)).equals(since), "the opening with the projector: " + Uno.said(player));
+                Uno.provider = before;
+                check(model.calls.get() == 0, "the provider got " + model.calls.get() + " calls");
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Spec #1: the summary shows the 10 newest sentences at most, the oldest first, and says how many older ones it does not show.
+     * The age is the game time between the event and the opening. The moment of the opening is a parameter: 12 minutes later.
+     * Built artificially: in one tick the test reports 12 impediments of unknown kinds through the function that the Lua modules call.
+     * Each one is a block without a cause, with a reason of its own. The owner resumes after each one.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_summary_shows_the_10_newest(GameTestHelper helper) {
+        Actor player = player("a_summary_ten");
+        Rig rig = new Rig(helper, "a_summary_ten", 64, 1000, player);
+        rig.begin()
+            .thenExecute(() -> {
+                long now = rig.level.getGameTime();
+                Job job = rig.startJob(24, 0);
+                for (int i = 1; i <= 12; i++) {
+                    impediment(rig, "kind" + i, "event " + i);
+                    rig.runtime.control(player, rig.id, "resume");
+                }
+                UnoView.open(rig.runtime, player, now + 12 * 60 * 20);
+                List<String> expected = new ArrayList<>(List.of(FIRST, "I do not show 2 older events."));
+                for (int i = 3; i <= 12; i++) expected.add("12 min ago: " + subject(rig, job) + " is blocked. Recorded reason: kind" + i + ": event " + i + ".");
+                check(Uno.said(player).equals(String.join("\n", expected)), Uno.said(player));
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Spec #1: if the runtime removed entries of this owner that are newer than the last opening, the summary says where the memory of Uno starts.
+     * The first opening is before the events. Then, in one later tick, the owner starts a job and gives 110 pauses and 110 resumes:
+     * the runtime removes the oldest 21 entries. A copy of the record at that moment has no selected entry. Its summary has the line about the memory.
+     * Then an impediment gives a selected entry. The moment of the opening is a parameter: 3 hours later.
+     * A later opening, after the answer to a report, has no new event, and the removed entries are older than the last opening: Uno keeps its sentence.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_summary_says_where_the_memory_starts(GameTestHelper helper) {
+        Actor player = player("a_summary_memory");
+        Rig rig = new Rig(helper, "a_summary_memory", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> {
+                UnoView.open(rig.runtime, player, rig.level.getGameTime());
+                check(Uno.said(player).equals("Tell me what you need."), "a first opening without events: " + Uno.said(player));
+            })
+            .thenIdle(2)
+            .thenExecute(() -> {
+                long later = rig.level.getGameTime() + 3 * 60 * 60 * 20;
+                Job job = rig.startJob(24, 0);
+                for (int i = 0; i < 110; i++) {
+                    rig.runtime.control(player, rig.id, job.id, "pause");
+                    rig.runtime.control(player, rig.id, job.id, "resume");
+                }
+                String memory = "My memory starts 3 h ago. I do not remember older events.";
+                UnoView.open(MindRuntime.load(rig.runtime.save(new CompoundTag())), player, later);
+                check(Uno.said(player).equals(SINCE + "\n" + memory), "only removed entries: " + Uno.said(player));
+                impediment(rig, "kind", "event");
+                UnoView.open(rig.runtime, player, later);
+                String summary = SINCE + "\n" + memory + "\n3 h ago: " + subject(rig, job) + " is blocked. Recorded reason: kind: event.";
+                check(Uno.said(player).equals(summary), Uno.said(player));
+                UnoView.act(server, player, "report", "{}");
+                String report = Uno.said(player);
+                UnoView.open(rig.runtime, player, later + 1200);
+                check(Uno.said(player).equals(report), "an opening without new events changed the sentence: " + Uno.said(player));
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /** T19 for the summary (D37): the summary of a player has no event of a different player. That opening changes nothing for the owner. */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_t19_summary_of_another_player(GameTestHelper helper) {
+        Actor owner = player("a_summary_owner"), other = player("a_summary_other");
+        Rig rig = new Rig(helper, "a_summary_owner", 64, 1000, owner);
+        rig.begin()
+            .thenExecute(() -> {
+                long now = rig.level.getGameTime();
+                Job job = rig.startJob(24, 0);
+                impediment(rig, "kind", "event");
+                String view = UnoView.open(rig.runtime, other, now);
+                check(Uno.said(other).equals("Tell me what you need.") && !view.contains(rig.from) && !view.contains("kind: event"),
+                    "the opening of a different player: " + view);
+                UnoView.open(rig.runtime, owner, now);
+                check(Uno.said(owner).equals(FIRST + "\n0 s ago: " + subject(rig, job) + " is blocked. Recorded reason: kind: event."), Uno.said(owner));
+                rig.runtime.control(owner, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Spec #1: the time of the last opening of each player is saved with the world. After a save and a load the summary is the same.
+     * One event before the first opening, one event after it. The summary of the loaded copy has only the event after the opening.
+     * A record of an older version has no time of an opening: its summary covers the whole diary.
+     * The moment of the opening is a parameter: two days later.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_summary_after_a_save_and_a_load(GameTestHelper helper) {
+        Actor player = player("a_summary_saved");
+        Rig rig = new Rig(helper, "a_summary_saved", 64, 1000, player);
+        Job[] job = new Job[1];
+        rig.begin()
+            .thenExecute(() -> {
+                job[0] = rig.startJob(24, 0);
+                impediment(rig, "early", "event");
+                rig.runtime.control(player, rig.id, "resume");
+                UnoView.open(rig.runtime, player, rig.level.getGameTime());
+            })
+            .thenIdle(2)
+            .thenExecute(() -> {
+                impediment(rig, "late", "event");
+                long later = rig.level.getGameTime() + 2 * 24 * 60 * 60 * 20;
+                String early = "\n2 days ago: " + subject(rig, job[0]) + " is blocked. Recorded reason: early: event.";
+                String late = "\n2 days ago: " + subject(rig, job[0]) + " is blocked. Recorded reason: late: event.";
+                CompoundTag saved = rig.runtime.save(new CompoundTag());
+                UnoView.open(MindRuntime.load(saved), player, later);
+                String loaded = Uno.said(player);
+                UnoView.open(rig.runtime, player, later);
+                check(Uno.said(player).equals(SINCE + late) && loaded.equals(Uno.said(player)), "running: " + Uno.said(player) + " loaded: " + loaded);
+                saved.remove("openings");
+                UnoView.open(MindRuntime.load(saved), player, later);
+                check(Uno.said(player).equals(FIRST + early + late), "a record of an older version: " + Uno.said(player));
+                rig.runtime.control(player, rig.id, "cancel");
             })
             .thenSucceed();
     }

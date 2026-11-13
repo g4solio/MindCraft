@@ -205,7 +205,31 @@ Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24
 - `RUNNING`, `WAITING` and `SATISFIED` give no notice.
 - Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
 - A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
-- In this version there is no notice after a long wait, and no summary when you open the screen.
+- If you are not connected, there is no chat line. The summary at your next opening has the event.
+- In this version there is no notice after a long wait.
+
+### The summary
+
+When you open the screen of Uno, Uno says what needed your attention since you last opened it.
+An opening is the use of the tablet or a click on a projector. The new view that the screen gets each second, and the view after a button, are not an opening.
+
+```
+Uno › Since you last opened this screen:
+12 min ago: Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel.
+2 min ago: Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24 delivered.
+```
+
+- The events are the events of the notices, with the same sentences. The oldest comes first. Each line has its age.
+- The source is the diary. Thus the summary also has the events of your absence and the events before a server restart.
+- The summary is the sentence of Uno on the screen. The next answer of Uno replaces it.
+- If nothing needed your attention, Uno keeps its sentence. That sentence can be the summary of an earlier opening.
+- The first opening in a world covers your whole diary. Its first line is "From the start of my memory:".
+- The summary shows the 10 newest events at most. It says how many older ones it does not show.
+- If the runtime removed entries of yours after your last opening, the summary says where the memory of Uno starts: "My memory starts 3 h ago. I do not remember older events."
+- The age is game time. It does not count the time while the server is stopped. The ages are those of the moment of the opening: they do not change while the screen is open.
+- The summary has only your events. An operator also gets the events of the jobs of the other players and of the console, as in the list of jobs.
+- The summary calls no model.
+- Minecraft saves the time of your last opening with the world.
 
 ### The diary
 
@@ -214,7 +238,7 @@ A repeated report of the same state and cause writes nothing.
 An entry has the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
 Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
 The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
-Only the owner and an operator read the entries of a job. In this version no screen and no command shows the diary.
+Only the owner and an operator read the entries of a job. The summary shows the events of the diary that give a notice. No screen and no command shows the whole diary.
 
 ### Uno with Claude
 
@@ -223,7 +247,7 @@ Set the variable outside the project. Do not write the key in a file of the repo
 The server log says which provider is active: look for the line `Uno interprets requests with`.
 
 - Only an operator uses Claude. In a single-player game you are an operator if the world allows commands. Uno reads the requests of each other player with the fixed rules (see below).
-- Each written request of an operator is a paid call on the account of the key. The buttons, the confirmation, `/uno report` and the jobs do not call the model.
+- Each written request of an operator is a paid call on the account of the key. The buttons, the confirmation, `/uno report`, the notices, the summary and the jobs do not call the model.
 - Each operator has a limit of 100 requests to Claude in one server session. The console is one more actor with its own limit. In a single-player game a session ends when you close the world.
 - At the limit Uno says so one time. Then it reads your requests with the fixed rules until the server restarts. The buttons and the commands work as before.
 - The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.

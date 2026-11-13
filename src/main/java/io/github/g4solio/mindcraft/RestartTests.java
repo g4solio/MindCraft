@@ -1,6 +1,7 @@
 package io.github.g4solio.mindcraft;
 
 import io.github.g4solio.mindcraft.MindCraftTests.Rig;
+import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -27,6 +28,8 @@ import static io.github.g4solio.mindcraft.MindCraftTests.check;
 @PrefixGameTestTemplate(false)
 public class RestartTests {
     private static final String PHASE = System.getProperty("mindcraft.restartPhase", "");
+    /** An operator who opens the screen of Uno. Thus the summary has the events of the job of the console. */
+    private static final Actor OPERATOR = MindCraftTests.operator("t11_operator");
 
     @GameTest(template = MindCraftTests.EMPTY, timeoutTicks = MindCraftTests.TIMEOUT)
     public static void t11_server_restart(GameTestHelper helper) {
@@ -45,7 +48,12 @@ public class RestartTests {
         MindCraft.LOGGER.info("t11_server_restart setup: source {}, turtle {}, destination {}",
             helper.absolutePos(rig.source), helper.absolutePos(rig.start), helper.absolutePos(rig.dest));
         var sequence = rig.begin()
-            .thenExecute(() -> rig.startJob(24, 0))
+            .thenExecute(() -> {
+                rig.startJob(24, 0);
+                // The first opening of the operator. Nothing needed attention yet. The time of this opening goes into the saved world.
+                UnoView.open(rig.runtime, OPERATOR, rig.level.getGameTime());
+                check(Uno.said(OPERATOR).equals("Tell me what you need."), "the opening gave a summary: " + Uno.said(OPERATOR));
+            })
             .thenWaitUntil(() -> rig.carried(24));
         if (PHASE.equals("crash")) {
             // The saved world contains the pickup. The delivery occurs after the save.
@@ -105,6 +113,16 @@ public class RestartTests {
                 check(diary.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY", "RUNNING", "DONE") : List.of("RUNNING", "DONE")),
                     "the diary is " + diary);
                 MindCraft.LOGGER.info("t11_server_restart final status:\n{}", rig.describe());
+
+                // Also D30: the summary works after a restart. The last opening of the operator is from the first run.
+                // Thus the summary has the events after it, and its first line is not the line of a first opening.
+                UnoView.open(rig.runtime, OPERATOR, rig.level.getGameTime());
+                MindCraft.LOGGER.info("t11_server_restart summary after the restart: {}", Uno.said(OPERATOR));
+                String done = "\n<age>: " + MindCraftTests.subject(rig, rig.job()) + " is done: 24 delivered.";
+                String recovery = "\n<age>: " + MindCraftTests.subject(rig, rig.job())
+                    + " needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job.";
+                String summary = MindCraftTests.ageless(Uno.said(OPERATOR));
+                check(summary.equals(MindCraftTests.SINCE + (afterCrash ? done + recovery + done : done)), "the summary after the restart: " + Uno.said(OPERATOR));
             })
             .thenSucceed();
     }

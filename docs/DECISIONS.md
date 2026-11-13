@@ -637,7 +637,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D30 — Initiative: Uno warns
 
-**Status:** decided by the project owner on 2026-11-13. Increment A. The numbers are initial values, **proposed**. Implemented in part: the notices for `BLOCKED`, `RECOVERY` and `DONE` are **verified** with automatic in-game tests on 2026-11-13 (ticket #8). See "Notices, as built" below. The notice for a long wait and the summary are not implemented.
+**Status:** decided by the project owner on 2026-11-13. Increment A. The numbers are initial values, **proposed**. Implemented in part: the notices for `BLOCKED`, `RECOVERY` and `DONE` are **verified** with automatic in-game tests on 2026-11-13 (ticket #8). See "Notices, as built" below. The summary at an opening is **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #10). See "Summary, as built" below. The notice for a long wait is not implemented.
 
 - **Decision:** Uno speaks first only to warn. It proposes no remedy. It starts no action by itself, except the wait of D34.
 - **Attention rule:**
@@ -675,6 +675,33 @@ Notices, as built (ticket #8). The choices of detail are **proposed**: the proje
 - **Not verified:** a real line in the chat of a client. No test has a connected player. The code of the game exit is examined only. It is a step of the checklist of the play session.
 - **Counterexample:** the load of the record can find a `RECOVERY` at the server start ("the world is older than the record"). Its notice leaves before a player can be connected. Thus it gives no chat line. Only the summary can show it.
 
+Summary, as built (ticket #10). The rules of spec #1, section "The summary", are decided by the project owner (2026-11-13). The limit of 10 sentences is an initial value of the spec: **proposed**, to review after the play session. The choices of detail marked "proposed" are choices of the implementation: the project owner did not confirm them.
+
+- **Opening:** the use of the tablet and the click on a projector call `Net.open`. It calls `UnoView.open`, then sends the view. The view that the screen asks for each second, and the view after a button, go through `Net.sendView`: they are not an opening.
+- **Last opening:** `MindRuntime.open(actor, now)` records the game time of the overworld for the actor and returns the time of the opening before it. The record of each player is in `mindcraft.dat`. A record of an older version loads without openings: the next opening of each player is a first opening.
+- **Events:** the entries of the diary that the actor reads (`MindRuntime.diary`), newer than the last opening, that the attention rule selects (`Notices.selected`). Each line is the sentence of the notice (`Notices.sentence`). Thus a new kind of selected entry, for example the long wait of ticket #9, joins the summary without a change of the summary.
+- **Check of the actor:** the diary that the actor reads. It is the check of the list of jobs (`Actor.owns`). An operator also gets the events of the jobs of the other players and of the console.
+- **Sentence of Uno:** the summary goes through `Uno.say`, as each answer. With no line to say, `Uno.say` is not called: Uno keeps its sentence.
+- **No provider:** the code of the summary has no reference to a provider. A test with a provider that counts its calls confirms it.
+
+| Part | Text |
+| --- | --- |
+| First line, first opening | "From the start of my memory:" |
+| First line, each later opening | "Since you last opened this screen:" |
+| Removed entries newer than the last opening | "My memory starts 3 h ago. I do not remember older events." |
+| More than 10 events | "I do not show 2 older events." Then the 10 newest |
+| One event | "12 min ago: Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel." |
+
+- **Proposed, the ages:** the game time between the entry and the opening, in seconds, minutes, hours or days, rounded down. The game time does not advance while the server is stopped. An entry newer than the world, after a crash (D08.1), has the age "At an unknown time".
+- **Proposed, "where the memory starts":** the age of the newest removed entry (`MindRuntime.forgotten`). For an operator, the newest of all owners.
+- **Proposed, removed entries without a selected entry:** the summary has the first line and the line about the memory. Reason: the removed entries can be events that needed attention. The spec says "With no selected entry, Uno keeps its sentence". This choice reads that rule as "with nothing to say".
+- **Proposed, the boundary:** an event is in the summary if its game time is later than the game time of the last opening. An event in the same tick as an opening, after it, is not in the next summary. The owner had the screen open in that tick, thus connected: the notice of that event reached the chat. An operator does not get the notices of other owners: such an event of another owner is lost for the summary of the operator.
+- **Proposed, a kept summary:** at an opening without an event, Uno keeps its sentence also when that sentence is the summary of an earlier opening. Then the screen shows that summary again, with the ages of its moment, until the next answer of Uno. The spec asks that the second opening shows no summary: it builds none.
+- **Evidence:** tests `a_summary_at_an_opening`, `a_summary_shows_the_10_newest`, `a_summary_says_where_the_memory_starts`, `a_t19_summary_of_another_player` and `a_summary_after_a_save_and_a_load`. The four restart phases check the summary of an operator after the restart. See "Increment A — the summary at an opening" in `TEST_RESULTS.md`.
+- **Not verified:** the summary on the screen of a client: the length of 12 lines, and a line break in the text of Uno. The tests call the methods of the tablet and of the projector with a fake player of Forge, without a client. It is a step of the checklist of the play session.
+- **Counterexample:** the ages do not change while the screen is open. After 10 minutes, "2 min ago" is wrong by 10 minutes.
+- **Counterexample:** a player who opens the screen often sees only the events since the last opening. The other events are only in the diary, and no screen shows it.
+
 ## D31 — Memory: the job diary
 
 **Status:** decided by the project owner on 2026-11-13. Increment A. Implemented and **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #8). See "Diary, as built" below. The size limit is an initial value of spec #1, **proposed**.
@@ -693,8 +720,8 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 - **Content of an entry:** the game time of the overworld, the owner, the job ID, the robot, the two station names, the item, the state, the cause, the recorded reason, a "requested" flag, and the quantities at that moment: quantity, reserve, delivered, on board.
 - **The recorded reason** is not in the list of spec #1. The sentence of a `BLOCKED` without a cause and of a `RECOVERY` needs it.
 - **"Requested"** says that a request of an actor made the change: the start, a pause, a resume or a cancellation. The other changes come from what the runtime observed. The attention rule of D30 reads it.
-- **Limit:** above 200 entries of one owner, the runtime removes the oldest entries of that owner only. For each owner it records how many entries it removed, and the game time of the newest removed one. The summary of a later part can say from this where the memory of Uno starts.
-- **Read:** `MindRuntime.diary(actor)` and `MindRuntime.forgotten(actor)` give only the data of the owners that the actor owns: the owner, an operator and the console (D37). In this ticket no screen and no command shows the diary.
+- **Limit:** above 200 entries of one owner, the runtime removes the oldest entries of that owner only. For each owner it records how many entries it removed, and the game time of the newest removed one. The summary (ticket #10, D30) says from this where the memory of Uno starts.
+- **Read:** `MindRuntime.diary(actor)` and `MindRuntime.forgotten(actor)` give only the data of the owners that the actor owns: the owner, an operator and the console (D37). In this ticket no screen and no command shows the diary. Since ticket #10 the summary at an opening shows the selected entries.
 - **Saved:** the diary and the removed counts are in `mindcraft.dat`, with the jobs. A record of an older version has no diary: it loads with an empty one.
 - **Evidence:** tests `a_diary_of_a_job` and `a_diary_limit`. The four restart phases check the diary after a real stop and after a halt of the process. See "Increment A — the job diary and the notices" in `TEST_RESULTS.md`.
 - **Cost:** each write of the record contains the whole diary, also the write after each transfer (D08.1). No measurement.
@@ -863,6 +890,7 @@ Increment A, as built (ticket #5). The choices of detail are **proposed**: the p
 - **One player only:** the mod is for one player now. The README says so.
 - **Invariant, from increment A on:** each new kind of data (the diary, the notices, the proposals of a change, the library) has an owner, goes through the same check of the actor, and has a test of the T19 kind.
 - **The invariant for the diary and the notices (ticket #8), verified with automatic in-game tests:** each entry has the owner of its job. A read of the diary goes through the check of the actor: a different player reads no entry of the owner (`a_diary_of_a_job`). The limit removes only entries of the same owner (`a_diary_limit`). A notice goes to the owner of the job only: the operator who resumed the job gets none (`a_notices_for_blocked_recovery_and_done`).
+- **The invariant for the summary and the last opening (ticket #10), verified with automatic in-game tests:** a last opening belongs to the player who opened. The summary reads the diary through the check of the actor. A different player gets no event of the owner, and that opening does not change the summary of the owner (`a_t19_summary_of_another_player`).
 
 Gates before a second player:
 

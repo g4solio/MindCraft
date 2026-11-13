@@ -121,6 +121,18 @@ final class UnoView {
     }
 
     /**
+     * The actor opens a contact point: the use of the tablet or the click on a projector (D30). A new view after an action is not an opening.
+     * Uno says the summary of what needed attention since the last opening of the actor. It calls no provider.
+     * With nothing to say, Uno keeps its sentence. Returns the view.
+     */
+    static String open(MindRuntime runtime, Actor actor, long now) {
+        long last = runtime.open(actor, now);
+        String summary = Notices.summary(runtime.diary(actor), runtime.forgotten(actor), last, now);
+        if (summary != null) Uno.say(actor, summary);
+        return build(runtime, actor, now);
+    }
+
+    /**
      * Runs one action of a screen. The values are the text of the fields, as JSON.
      * The runtime checks the actor in each request. Uno says the result in the next view.
      */

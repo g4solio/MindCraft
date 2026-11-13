@@ -1,12 +1,15 @@
 package io.github.g4solio.mindcraft;
 
 import io.github.g4solio.mindcraft.MindRuntime.Entry;
+import io.github.g4solio.mindcraft.MindRuntime.Forgotten;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -30,6 +33,9 @@ public final class Notices {
     };
 
     static volatile Exit exit = CHAT;
+
+    /** The sentences in one summary at most (spec #1). An initial value, to review after the play session. */
+    static final int SUMMARY_SENTENCES = 10;
 
     private Notices() {
     }
@@ -65,5 +71,42 @@ public final class Notices {
     static void entry(MinecraftServer server, Entry entry) {
         if (!selected(entry) || entry.owner().equals(Util.NIL_UUID)) return;
         exit.send(server, entry.owner(), sentence(entry));
+    }
+
+    /**
+     * The summary at an opening (D30): the sentences of the selected entries after the last opening, the oldest first, each with its age.
+     * It shows the newest SUMMARY_SENTENCES, and says how many older ones it does not show.
+     * If the runtime removed entries after the last opening, it says where the memory of Uno starts: those entries can be events too.
+     * "Last" is UNKNOWN at the first opening: then the summary covers the whole diary. Null if there is nothing to say.
+     * The entries are the diary that the actor reads. Thus the summary has the same check of the actor as the list of jobs.
+     */
+    static String summary(List<Entry> diary, Forgotten forgotten, long last, long now) {
+        List<Entry> events = diary.stream().filter(entry -> entry.time() > last && selected(entry)).toList();
+        boolean gap = forgotten.entries() > 0 && forgotten.until() > last;
+        if (events.isEmpty() && !gap) return null;
+        List<String> lines = new ArrayList<>();
+        lines.add(last == MindRuntime.UNKNOWN ? "From the start of my memory:" : "Since you last opened this screen:");
+        if (gap) lines.add("My memory starts " + age(now - forgotten.until()) + ". I do not remember older events.");
+        int hidden = Math.max(0, events.size() - SUMMARY_SENTENCES);
+        if (hidden > 0) lines.add("I do not show " + hidden + (hidden == 1 ? " older event." : " older events."));
+        for (Entry entry : events.subList(hidden, events.size())) {
+            String age = age(now - entry.time());
+            lines.add(Character.toUpperCase(age.charAt(0)) + age.substring(1) + ": " + sentence(entry));
+        }
+        return String.join("\n", lines);
+    }
+
+    /**
+     * A difference of game time in words. The game time does not advance while the server is stopped.
+     * A negative difference: the entry is newer than the world, after a crash (D08.1). Then the age is unknown.
+     */
+    static String age(long ticks) {
+        if (ticks < 0) return "at an unknown time";
+        long seconds = ticks / 20;
+        if (seconds < 60) return seconds + " s ago";
+        if (seconds < 3600) return seconds / 60 + " min ago";
+        if (seconds < 86400) return seconds / 3600 + " h ago";
+        long days = seconds / 86400;
+        return days == 1 ? "1 day ago" : days + " days ago";
     }
 }

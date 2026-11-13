@@ -66,7 +66,7 @@ public class MindCraft {
     static final RegistryObject<Item> TABLET = ITEMS.register("tablet", () -> new Item(new Item.Properties().stacksTo(1)) {
         @Override
         public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-            if (player instanceof ServerPlayer serverPlayer) Net.sendView(serverPlayer);
+            if (player instanceof ServerPlayer serverPlayer) Net.open(serverPlayer);
             return InteractionResultHolder.sidedSuccess(player.getItemInHand(hand), level.isClientSide);
         }
     });

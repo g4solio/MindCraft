@@ -26,6 +26,7 @@ x:  0          1      2        3    4      5
 ```
 
 - One normal turtle, without upgrades. Two single chests. A straight and free path.
+- One test has a different rig, with a corner: see "Increment A — a path with one corner".
 - The source contains 64 items of coal, unless a test says otherwise. The basic request is 24 items.
 - **Declared simplification:** the fuel is a number set on the turtle (1000). The turtle does not burn the coal of the job.
 - The console (an administrator actor) enrolls the turtle, except in T19.
@@ -303,6 +304,39 @@ Changes to the older tests:
 - `s1_transfer` and `s2_keep_stock`: the module versions are `transport@2` and `keep_stock@2`.
 - `t18_claude_provider`, second change: the first of two requests in the same tick now has a provider that waits for the test. See run 28.
 
+## Increment A — The provider answers with an action
+
+Ticket #2 of spec #1, on 2026-11-13. See D29.1.
+All tests of this section are in the game and automatic. They use the fixed rules, providers written in the tests, or the Claude provider with a false server in place of the API.
+No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new and changed tests, with the old code of Uno and of the providers | 40 of 44. The four tests below failed as expected. The other 40 passed |
+| Green | The code of ticket #2 | **44 of 44**. Server line: `All 44 required tests passed :)` |
+| After the merge | The code of ticket #2, merged with tickets #6 and #7 of increment A | **45 of 45**. Server line: `All 45 required tests passed :)` |
+
+| Test | What it does | Red run, old code | Green run, new code |
+| --- | --- | --- | --- |
+| `s2_uno_reference_sentence` | The reference request of S2 in English and in Italian, and a transport, to the fixed rules. Then a request without a quantity | Failed: the answer was an order without an action | Passed. Each answer is the action `start` with the same order as in S2, and zero tokens. The request without a quantity gives the action `none` with the reason "the quantity is missing", and zero tokens |
+| `t18_provider_failures` | The cases of S2, and two more: an action outside the list, and a provider that throws an `IllegalArgumentException` | Failed: the exception gave "I cannot propose a job: a defect of the provider." | Passed. The exception gives "I cannot interpret the request now (a defect of the provider)." The action `dig` gives "I did not get a valid configuration". The fixed rules still give "I cannot propose a job: the quantity is missing." |
+| `t18_claude_provider` | The false API answers with actions in the shape of the new schema. The test calls the provider directly one time, then through Uno | Failed: the provider reported 0 input tokens and 0 output tokens. The later checks of the test did not run | Passed. The direct call gives the action of the answer, with 1234 input tokens and 56 output tokens. Through Uno: `none` gives its reason, `pause` gives the fixed sentence, `start` gives the proposal "carry 8 x minecraft:coal". A refusal, a cut answer, error 401, error 500 and a stopped API give their failure sentences, as before |
+| `t18_claude_provider` | Reads the request that went to the false API | Not reached | Passed. The schema has the seven actions and ten required fields. The system text names the seven actions. The context is the same as before: exactly the two stations of the player and its robot with the "free" flag |
+| `a_provider_answers_with_an_action` | A job waits for materials. A provider answers `change`, `pause`, `resume`, `cancel` and `report`. Then three answers with `none` | Failed: `change` gave "I did not get a valid configuration" | Passed. Each of the five actions gives its fixed sentence, for example "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing." No proposal. The job keeps its ID, the state `WAITING`, quantity 24, reserve 0 and its revision. A reason of 300 characters is cut to 200. `None` with a capital letter works. A `none` with a blank reason gives "I did not get a valid configuration" |
+| `s2_uno_request`, `s2_tablet_view`, `t22_confirm_only_the_shown_proposal`, `t22_t23_proposals_and_contact_points`, `t23_state_of_an_earlier_session` | The S2 flow, with the action `start` of the fixed rules or of providers of the tests | Passed | Passed. The same proposal, confirmation and job as before |
+
+Ticket #2 changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it.
+
+Code examination, not a test: `LiveTests.java` compiles with the new contract. Its check "the fixed rules cannot read this request" now reads the action `none`. Before, it waited for an exception.
+
+Changes to the older tests:
+
+- `s2_uno_reference_sentence`: it expects the action `start` and zero tokens. It also asks for a request without a quantity.
+- `t18_provider_failures` and the providers written in the other tests: they answer the action `start` with the order.
+- `t18_provider_failures`: two more cases. A provider that throws an `IllegalArgumentException` now expects the sentence of a failure.
+- `t18_claude_provider`: the false API answers with actions. Two more cases: a direct call for the tokens, and a `pause`. The check of the schema and of the system text is new. The check of the context is exact now.
+
 ## Design discussion of 2026-11-13 — code examinations, no test
 
 No test ran in this discussion. The facts below come from code examinations. They support D28, D33, D34, D36 and the proposals D06.1 and D13.1.
@@ -311,10 +345,78 @@ No test ran in this discussion. The facts below come from code examinations. The
 | --- | --- | --- |
 | `can_push = true`. The comment of the option says that turtles "push entities out of the way instead of stopping if there is space to do so" | `computercraft-server.toml` in the world of the test server | That a robot pushes a player in a corridor. Not tried |
 | The move command contains the message "Cannot leave loaded world" | The text constants of `TurtleMoveCommand` in the CC: Tweaked jar | The behaviour of a robot of this mod at the edge of a loaded area |
-| The move step tries x, then z, then y. It accepts each move that brings the robot nearer to the target | `transport.lua`, the first function `step` | That a path with a corner works. No test has one |
+| The move step tries x, then z, then y. It accepts each move that brings the robot nearer to the target | `transport.lua`, the first function `step` | That a path with a corner works. No test had one. A later test has one: see "Increment A — a path with one corner" |
 | Forge has `ForgeChunkManager.forceChunk`. The restart test keeps its chunk loaded with `setChunkForced` | The Forge 47.4.28 jar, `RestartTests.java` | `/forceload` in a client |
 | The public API of CC: Tweaked has `IComputerAccess.mount`, `mountWritable`, `ComputerCraftAPI.createSaveDirMount` and `ITurtleUpgrade` | The CC: Tweaked 1.121.0 jar | That a shared directory or a turtle upgrade works in this mod |
 | `/uno ask` has no permission requirement, no counter, and no limit other than one request at a time for each player | `MindCraft.java`, `Uno.java` | The rate of requests that a command block can make |
+
+## Increment A — atomic write of the record (ticket #7)
+
+Date: 2026-11-13. The runtime now writes `mindcraft.dat` through a temporary file `mindcraft.dat.tmp` in the same folder. One move then puts that file in the place of the record. See D37.
+
+No automatic test stops the process during a write. The protection against such a stop rests on a code examination only.
+
+### Runs
+
+| Run | Type | Result | Observed result |
+| --- | --- | --- | --- |
+| Normal run | In the game, automatic | **43 of 43** | 92 transfers wrote the record through the new write. No write error in the log. After the run the data folder contains `mindcraft.dat` and no temporary file |
+| `stop`, `check`, `crash`, `check-crash` | In the game, automatic | Passed, each phase | The same results as before the change. `check`: the record says `RUNNING` with 24 on board, then `DONE`, source 40, destination 24. `check-crash`: the record written at the delivery loads, the job goes to `RECOVERY` ("the world is older than the record of this job"), then `DONE` after `resume`. After each phase the data folder contains no temporary file |
+| `stop`, then `check` with a failure of the write | In the game, automatic, with a condition built by hand | Passed | See below |
+
+The failure of the write, condition built by hand: after the `stop` phase, a directory with one file inside was put at the place of `mindcraft.dat.tmp`. Thus the runtime cannot write the temporary file. Then the `check` phase ran.
+
+- The test passed. The robot delivered: its state is in memory.
+- The server log has two errors: one at the delivery and one at the save of the stop. Text of the second: "MindCraft could not write its record to .\world\data\mindcraft.dat. The earlier record stays on the disk.", with the cause `FileNotFoundException ... mindcraft.dat.tmp (Access is denied)`.
+- After the run `mindcraft.dat` was identical, byte for byte, to the copy taken after the `stop` phase.
+- This is one run, not a test of the repository. The directory was removed after the run.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The ordinary save of the world calls `SavedData.save(File)` for each data of the world: `DimensionDataStorage.save()`. `flush()`, after each transfer, calls the same method. `MindRuntime` overrides it. Thus one method does both writes | `javap` of the Forge 47.4.28 jar (official mappings), `MindRuntime.java` | |
+| The earlier write, `SavedData.save(File)` of Minecraft 1.20.1, opens a `FileOutputStream` on the record itself. That stream empties the file first. A stop during the write left a partial file. Minecraft logs the error of a later load and creates empty data | `javap` of `SavedData`, `NbtIo` and `DimensionDataStorage` | |
+| The new write builds the same content as Minecraft (the `data` tag and the data version). It writes it to `mindcraft.dat.tmp` and closes the file. Then it calls `Files.move` with `ATOMIC_MOVE` | `MindRuntime.save(File)` | That the operating system does the move in one step |
+| On Windows, `Files.move` with `ATOMIC_MOVE` calls `MoveFileEx` with `MOVEFILE_REPLACE_EXISTING` and nothing else | `sun/nio/fs/WindowsFileCopy.java` in the `src.zip` of Temurin 17.0.21 | Microsoft does not document `MoveFileEx` as atomic. On Linux the JDK uses `rename`, which POSIX defines as atomic. This is general knowledge: the Unix sources of the JDK were not read |
+| A stop during the write leaves the complete `mindcraft.dat` and a partial `mindcraft.dat.tmp`. Minecraft reads only `mindcraft.dat`. The next write opens the temporary file with `FileOutputStream`, which empties it first | `DimensionDataStorage.getDataFile`, `NbtIo.writeCompressed` (`javap`) | |
+| A failure of the write or of the move does not touch `mindcraft.dat`. The runtime deletes the temporary file, logs an error, and stays dirty. Thus the next save or transfer tries again. Minecraft instead marks its data as clean after a failed write | `MindRuntime.save(File)`, `javap` of `SavedData` | |
+| The runtime does not force the data to the disk before the move | `MindRuntime.save(File)` | A stop of the operating system or a loss of power during a write. Not covered |
+
+### Not covered
+
+- A stop of the process during a write. No test can stop the process at that moment.
+- A stop of the operating system or a loss of power during a write.
+- A program that holds `mindcraft.dat` open on Windows, for example a backup program. Then the move can fail: the earlier record stays and the log shows the error. General knowledge, not tried.
+
+## Increment A — a path with one corner
+
+Ticket #6. Test `a_path_with_one_corner`. Type: in the game, automatic. It verifies the fact of D28 about the corner.
+
+Rig of this test. Each object is at y = 1. `#` is a stone wall. The walls leave one corridor, with one corner.
+
+```
+z \ x:  0          1      2   3   4   5        6
+0       [source]   dock   .   .   .   corner
+1                  #      #   #   #   turtle
+2                  #      #   #   #   dock     [destination]
+```
+
+- The robot starts between the corner and the destination dock. The request is 24 coal of 64. The fuel is 1000, as in the other rig.
+- Toward the source, the first axis of the move step (x) is walled. The step must try z. Toward the destination, the order x, then z fits the corridor.
+- The test checks that the robot is at the corner with 0 on board (toward the source), then at the corner with 24 on board (toward the destination).
+- At the end: `DONE`, 40 in the source, 24 in the destination, 0 in the robot, the robot on the destination dock, the walls still in place.
+
+Runs of this ticket. They are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The move step changed by hand for this run only: it tries only the first axis that differs. The change was not kept | 43 of 44. `a_path_with_one_corner` failed as expected: "expected the robot at 27, -59, 16 with 0 on board, but it is at 27, -59, 17". The first position is the corner, the second is the start. Job `BLOCKED`, "in front: minecraft:stone", "Movement obstructed". The other 43 tests passed: their paths are straight |
+| Green | The move step of `transport.lua`, unchanged | **44 of 44**. Server line: `All 44 required tests passed :)` |
+
+- No correction of the move step was necessary. No Lua module changed. Thus the four restart phases were not repeated.
+- Not tested: a stair (a path that also changes y), more than one corner, a corridor without walls. In an open space the robot goes along x first, and it does not follow a corridor.
+- Out of scope: a path that needs a move away from the target. The README says which paths work.
 
 ## Increment A — waits and blocks
 
@@ -397,7 +499,7 @@ Third manual test, on the projector and its hologram:
 | T11: unload and reload of a chunk during the transport | It needs a player or forced chunk loading |
 | T11: sudden stop on a normal server | The test server has no idle time in the tick. A normal server can write chunks to disk at different moments |
 | T05: a player on the path | It needs a client. The configuration says that a turtle pushes an entity if there is space (`can_push = true`). Not tried |
-| A path with one corner or a stair | The rig is straight. The move step should permit it (code examination). Planned for increment A (D27) |
+| A stair (a path that also changes y), or more than one corner | The rigs have none. The move step should permit them when each move brings the robot nearer to the target (code examination). The path with one corner is tested: `a_path_with_one_corner` |
 | `/forceload` by a player in a client, and a robot that works while the player is far | It needs a person at the game. Planned for the next play session (D28) |
 | Two robots in one corridor that is one block wide | Outside the rig. From the code, each robot is an obstacle for the other |
 | T08: delayed confirmation | Not applicable: the runtime and the turtle are in the same process, without network messages |
@@ -417,6 +519,7 @@ Third manual test, on the projector and its hologram:
 | S2: Claude with requests different from the four of the test `t18_claude_live` | Other languages, ambiguous station names, more than one free robot, a simple transport. Each request costs money to the key owner |
 | S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person |
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
+| Increment A: the schema and the system text of the seven actions with the real service | A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none`. The new schema is tested only with the false API |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
@@ -426,7 +529,7 @@ Third manual test, on the projector and its hologram:
 - The guarantees apply to the actions that go through `mindcraft.take` and `mindcraft.give`. A different Lua program can use `turtle.suck` and `turtle.drop`.
 - An external actor that changes a chest between two visits is not detected. The state shows the last observation and its age.
 - After `RECOVERY` and `resume` the totals of the job can be inexact. The state says so.
-- The path must be straight along the axes. There is no path finding.
+- There is no path finding. A path works only when each of its moves brings the robot nearer to the target dock. A straight path and a path with one corner are tested.
 - Outside loaded areas the robot does not work and the job stays `RUNNING`. The state shows the robot as not loaded.
 - A chest has no owner. There is no integration with the protections of the server.
 - Uno answers only in English, also to a request in another language.

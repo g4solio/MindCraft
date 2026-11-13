@@ -2,6 +2,7 @@ package io.github.g4solio.mindcraft;
 
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
@@ -46,8 +47,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -55,6 +62,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * In-game checks. "gradlew runGameTestServer" runs them on a real headless server with real turtles.
@@ -101,11 +109,17 @@ public class MindCraftTests {
 
         /** Only the positions and names. This constructor does not change the world. */
         Rig(GameTestHelper helper, String name, Actor actor, BlockPos origin) {
-            this.source = origin;
-            this.sourceDock = origin.east(1);
-            this.start = origin.east(2);
-            this.destDock = origin.east(4);
-            this.dest = origin.east(5);
+            this(helper, name, actor, origin, origin.east(1), origin.east(2), origin.east(4), origin.east(5));
+        }
+
+        /** A rig with other positions. This constructor does not change the world. */
+        Rig(GameTestHelper helper, String name, Actor actor, BlockPos source, BlockPos sourceDock, BlockPos start,
+            BlockPos destDock, BlockPos dest) {
+            this.source = source;
+            this.sourceDock = sourceDock;
+            this.start = start;
+            this.destDock = destDock;
+            this.dest = dest;
             this.helper = helper;
             this.level = helper.getLevel();
             this.runtime = MindRuntime.get(level.getServer());
@@ -177,6 +191,16 @@ public class MindCraftTests {
 
         void carried(int expected) {
             check(job().carried == expected && job().state.active(), "expected " + expected + " on board, but: " + describe());
+        }
+
+        /** The robot is at a position of the rig, and the job says that the load on board is the expected one. */
+        void at(BlockPos relative, int carried) {
+            RobotApi robot = robot();
+            check(robot != null, "the robot is not running");
+            BlockPos position = robot.turtle.getPosition();
+            check(position.equals(helper.absolutePos(relative)) && job().carried == carried,
+                "expected the robot at " + helper.absolutePos(relative).toShortString() + " with " + carried
+                    + " on board, but it is at " + position.toShortString() + ". " + describe());
         }
 
         Container chest(BlockPos relative) {
@@ -758,6 +782,45 @@ public class MindCraftTests {
             .thenSucceed();
     }
 
+    /**
+     * D28: a path with one corner. Stone walls leave one corridor between the docks.
+     * The robot starts between the corner and the destination dock. It goes over the corner to the source,
+     * then over the corner again to the destination.
+     * Toward the source, the first axis of the move step (x) is walled. Thus the step must try the next axis (z).
+     * <pre>
+     *   z \ x:  0         1      2   3   4   5        6
+     *   0       [source]  dock   .   .   .   corner
+     *   1                 #      #   #   #   turtle
+     *   2                 #      #   #   #   dock     [destination]
+     * </pre>
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_path_with_one_corner(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "corner", ADMIN, new BlockPos(0, 1, 0), new BlockPos(1, 1, 0), new BlockPos(5, 1, 1),
+            new BlockPos(5, 1, 2), new BlockPos(6, 1, 2));
+        BlockPos corner = new BlockPos(5, 1, 0);
+        List<BlockPos> walls = new ArrayList<>();
+        for (int x = 1; x <= 4; x++) {
+            walls.add(new BlockPos(x, 1, 1));
+            walls.add(new BlockPos(x, 1, 2));
+        }
+        walls.forEach(wall -> helper.setBlock(wall, Blocks.STONE));
+        rig.build(64, 1000);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            // Toward the source: nothing on board yet.
+            .thenWaitUntil(() -> rig.at(corner, 0))
+            // Toward the destination: the load of the source on board.
+            .thenWaitUntil(() -> rig.at(corner, 24))
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                rig.assertTransferred(40, 24);
+                rig.at(rig.destDock, 0);
+                walls.forEach(wall -> helper.assertBlockPresent(Blocks.STONE, wall));
+            })
+            .thenSucceed();
+    }
+
     /** T13: a different actor takes items after the job was planned. The reserve stays in the source. */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t13_external_withdrawal(GameTestHelper helper) {
@@ -915,9 +978,15 @@ public class MindCraftTests {
         return new Actor(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)), false);
     }
 
-    private static String orderJson(String module, int robot, String from, String to, int quantity) {
-        return "{\"module\":\"" + module + "\",\"robot\":" + robot + ",\"from\":\"" + from + "\",\"to\":\"" + to
+    /** The action "start" of a provider, with its order. */
+    private static String startJson(String module, int robot, String from, String to, int quantity) {
+        return "{\"action\":\"start\",\"module\":\"" + module + "\",\"robot\":" + robot + ",\"from\":\"" + from + "\",\"to\":\"" + to
             + "\",\"item\":\"minecraft:coal\",\"quantity\":" + quantity + ",\"reserve\":0}";
+    }
+
+    /** The answer of a provider of the test. It calls no model, thus it uses no tokens. */
+    private static Uno.Answer answer(String json) {
+        return new Uno.Answer(json, 0, 0);
     }
 
     /**
@@ -962,22 +1031,29 @@ public class MindCraftTests {
     /**
      * The reference request of the brief, word for word, with stations named "depot" and "furnace".
      * Then the same request in Italian, the language of the first version of the brief: the fixed rules also read Italian.
+     * The answer of the fixed rules is the action "start" with the order, and zero tokens: the fixed rules call no model.
+     * A request without a complete order is the action "none", with the reason for the player.
      */
     @GameTest(template = EMPTY)
     public static void s2_uno_reference_sentence(GameTestHelper helper) {
         String robots = "\"robots\":[{\"id\":7,\"free\":true},{\"id\":8,\"free\":false}]}";
         String context = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
-        String order = new Uno.RuleProvider().propose("Keep at least 64 pieces of coal in the furnace chest, "
+        Uno.Answer order = new Uno.RuleProvider().answer("Keep at least 64 pieces of coal in the furnace chest, "
             + "taking them from the depot. Leave at least 32 pieces in the depot.", context);
-        check(order.equals("{\"module\":\"keep_stock\",\"robot\":7,\"from\":\"depot\",\"to\":\"furnace\","
-            + "\"item\":\"minecraft:coal\",\"quantity\":64,\"reserve\":32}"), order);
-        String transport = new Uno.RuleProvider().propose("Move 24 coal from depot to furnace with robot 8", context);
-        check(transport.equals("{\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
-            + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"), transport);
-        String italian = new Uno.RuleProvider().propose("Mantieni almeno 64 pezzi di carbone nel baule delle fornaci, "
+        check(order.json().equals("{\"action\":\"start\",\"module\":\"keep_stock\",\"robot\":7,\"from\":\"depot\",\"to\":\"furnace\","
+            + "\"item\":\"minecraft:coal\",\"quantity\":64,\"reserve\":32}"), order.json());
+        Uno.Answer transport = new Uno.RuleProvider().answer("Move 24 coal from depot to furnace with robot 8", context);
+        check(transport.json().equals("{\"action\":\"start\",\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
+            + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"), transport.json());
+        Uno.Answer italian = new Uno.RuleProvider().answer("Mantieni almeno 64 pezzi di carbone nel baule delle fornaci, "
             + "prendendoli dal deposito. Lascia almeno 32 pezzi nel deposito.", "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots);
-        check(italian.equals("{\"module\":\"keep_stock\",\"robot\":7,\"from\":\"deposito\",\"to\":\"fornaci\","
-            + "\"item\":\"minecraft:coal\",\"quantity\":64,\"reserve\":32}"), italian);
+        check(italian.json().equals("{\"action\":\"start\",\"module\":\"keep_stock\",\"robot\":7,\"from\":\"deposito\",\"to\":\"fornaci\","
+            + "\"item\":\"minecraft:coal\",\"quantity\":64,\"reserve\":32}"), italian.json());
+        Uno.Answer none = new Uno.RuleProvider().answer("Move coal from depot to furnace", context);
+        check(none.json().equals("{\"action\":\"none\",\"reason\":\"the quantity is missing\"}"), none.json());
+        for (Uno.Answer answer : List.of(order, transport, italian, none)) {
+            check(answer.inputTokens() == 0 && answer.outputTokens() == 0, "the fixed rules reported tokens: " + answer);
+        }
         helper.succeed();
     }
 
@@ -992,9 +1068,9 @@ public class MindCraftTests {
         MinecraftServer server = rig.level.getServer();
         List<String> invalid = new CopyOnWriteArrayList<>(), failed = new CopyOnWriteArrayList<>();
         GameTestSequence sequence = rig.begin();
-        sequence = ask(sequence, server, player, "x", (r, c) -> orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, "t18_unknown", 8), 5000, invalid);
-        sequence = ask(sequence, server, player, "x", (r, c) -> orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, -5), 5000, invalid);
-        sequence = ask(sequence, server, player, "x", (r, c) -> orderJson("dig_a_mine", rig.id, rig.from, rig.to, 8), 5000, invalid);
+        sequence = ask(sequence, server, player, "x", (r, c) -> answer(startJson(MindRuntime.TRANSPORT, rig.id, rig.from, "t18_unknown", 8)), 5000, invalid);
+        sequence = ask(sequence, server, player, "x", (r, c) -> answer(startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, -5)), 5000, invalid);
+        sequence = ask(sequence, server, player, "x", (r, c) -> answer(startJson("dig_a_mine", rig.id, rig.from, rig.to, 8)), 5000, invalid);
         sequence = sequence.thenExecute(() -> {
             MindCraft.LOGGER.info("t18_provider_failures invalid orders: {}", invalid);
             check(invalid.stream().allMatch(a -> a.startsWith("I cannot propose this job")), invalid.toString());
@@ -1008,17 +1084,24 @@ public class MindCraftTests {
         }, 5000, failed);
         sequence = ask(sequence, server, player, "x", (r, c) -> {
             Thread.sleep(3000);
-            return "{}";
+            return answer("{}");
         }, 300, failed);
-        sequence = ask(sequence, server, player, "x", (r, c) -> "this is not JSON", 5000, failed);
+        sequence = ask(sequence, server, player, "x", (r, c) -> answer("this is not JSON"), 5000, failed);
+        // An action outside the closed list is not a valid answer.
+        sequence = ask(sequence, server, player, "x", (r, c) -> answer("{\"action\":\"dig\",\"robot\":null,\"station\":null}"), 5000, failed);
+        // An exception is always a failure, also an IllegalArgumentException. Only the action "none" says that a value is missing.
+        sequence = ask(sequence, server, player, "x", (r, c) -> {
+            throw new IllegalArgumentException("a defect of the provider");
+        }, 5000, failed);
         // Not a failure: the request has no quantity. The answer must not look like a failure of the provider.
         sequence = ask(sequence, server, player, "carry coal", new Uno.RuleProvider(), 5000, failed);
         sequence
             .thenExecute(() -> {
                 MindCraft.LOGGER.info("t18_provider_failures failures: {}", failed);
-                check(failed.stream().filter(a -> a.startsWith("I cannot interpret the request now")).count() == 2, failed.toString());
-                check(failed.stream().anyMatch(a -> a.contains("provider offline")) && failed.stream().anyMatch(a -> a.contains("TimeoutException")), failed.toString());
-                check(failed.stream().filter(a -> a.startsWith("I did not get a valid configuration")).count() == 1, failed.toString());
+                check(failed.stream().filter(a -> a.startsWith("I cannot interpret the request now")).count() == 3, failed.toString());
+                check(failed.stream().anyMatch(a -> a.contains("provider offline")) && failed.stream().anyMatch(a -> a.contains("TimeoutException"))
+                    && failed.contains("I cannot interpret the request now (a defect of the provider). The jobs in progress continue."), failed.toString());
+                check(failed.stream().filter(a -> a.startsWith("I did not get a valid configuration")).count() == 2, failed.toString());
                 check(failed.contains("I cannot propose a job: the quantity is missing."), failed.toString());
                 check(Uno.confirm(server, player).startsWith("I have no pending proposal"), "a failure became a proposal");
             })
@@ -1041,9 +1124,17 @@ public class MindCraftTests {
 
     /** An answer of the Messages API with one text block, or with no content if the text is null. */
     private static String claudeMessage(String stopReason, String text) {
+        return claudeMessage(stopReason, text, 1, 1);
+    }
+
+    private static String claudeMessage(String stopReason, String text, long inputTokens, long outputTokens) {
         JsonObject message = JsonParser.parseString("{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\""
-            + ClaudeProvider.MODEL + "\",\"content\":[],\"stop_sequence\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}").getAsJsonObject();
+            + ClaudeProvider.MODEL + "\",\"content\":[],\"stop_sequence\":null}").getAsJsonObject();
         message.addProperty("stop_reason", stopReason);
+        JsonObject usage = new JsonObject();
+        usage.addProperty("input_tokens", inputTokens);
+        usage.addProperty("output_tokens", outputTokens);
+        message.add("usage", usage);
         if (text != null) {
             JsonObject block = new JsonObject();
             block.addProperty("type", "text");
@@ -1053,6 +1144,22 @@ public class MindCraftTests {
         return message.toString();
     }
 
+    /**
+     * An action in the shape of the output schema of the Claude provider: each field is present, and null if the action does not use it.
+     * The arguments after the reason are pairs of a field name and a value.
+     */
+    private static String modelAction(String action, String reason, Object... fields) {
+        JsonObject json = new JsonObject();
+        json.addProperty("action", action);
+        json.addProperty("reason", reason);
+        for (String name : List.of("robot", "station", "module", "from", "to", "item", "quantity", "reserve")) json.add(name, JsonNull.INSTANCE);
+        for (int i = 0; i < fields.length; i += 2) {
+            if (fields[i + 1] instanceof Number number) json.addProperty((String) fields[i], number);
+            else json.addProperty((String) fields[i], (String) fields[i + 1]);
+        }
+        return json.toString();
+    }
+
     /** One answer of the false API and the text that Uno must say then. Status -1: the API is off. */
     private record ClaudeCase(int status, Supplier<String> body, String expected) {
     }
@@ -1060,6 +1167,7 @@ public class MindCraftTests {
     /**
      * T18 for the Claude provider. A local HTTP server is in the place of the API of Anthropic.
      * This checks the code of the provider and the SDK inside the game: the request that goes out, and each kind of answer.
+     * The provider reads one action from an answer, and the input and output tokens of the answer.
      * It does not check the language model. LiveTests does that with the real service.
      * Also: Uno accepts one request at a time from each player.
      */
@@ -1085,21 +1193,26 @@ public class MindCraftTests {
             .baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build());
 
         String request = "Carry eight pieces of coal to the destination";
-        String problem = "{\"problem\":\"You did not give the source.\",\"module\":\"transport\",\"robot\":0,\"from\":\"\",\"to\":\"\","
-            + "\"item\":\"\",\"quantity\":0,\"reserve\":0}";
+        String none = modelAction("none", "You did not give the source.");
+        Supplier<String> pause = () -> modelAction("pause", "", "robot", rig.id);
+        Supplier<String> start = () -> modelAction("start", "", "robot", rig.id, "module", MindRuntime.TRANSPORT, "from", rig.from, "to", rig.to,
+            "item", "minecraft:coal", "quantity", 8, "reserve", 0);
         String error = "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"test\"}}";
         List<ClaudeCase> cases = List.of(
             // A missing value is not a failure of the service: the answer has a different sentence.
-            new ClaudeCase(200, () -> claudeMessage("end_turn", problem), "I cannot propose a job: You did not give the source."),
+            new ClaudeCase(200, () -> claudeMessage("end_turn", none), "I cannot propose a job: You did not give the source."),
             new ClaudeCase(200, () -> claudeMessage("refusal", null), "(the model declined the request)"),
-            new ClaudeCase(200, () -> claudeMessage("max_tokens", "{\"problem\":"), "(the answer of the model is incomplete)"),
+            new ClaudeCase(200, () -> claudeMessage("max_tokens", "{\"action\":"), "(the answer of the model is incomplete)"),
             new ClaudeCase(401, () -> error, "(the API key is not valid or has no permission)"),
             new ClaudeCase(500, () -> error, "(the model service answered with error 500)"),
-            new ClaudeCase(200, () -> claudeMessage("end_turn", "{\"problem\":\"\"," + orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 8).substring(1)),
-                "Proposal: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"),
+            // An action that Uno does not handle yet: a fixed sentence and no proposal.
+            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "I cannot pause a job from a written request yet."),
+            new ClaudeCase(200, () -> claudeMessage("end_turn", start.get()), "Proposal: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"),
             new ClaudeCase(-1, () -> "", "(the model service is not reachable)"));
+        int proposalCase = 6;
 
         List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
+        AtomicReference<Object> direct = new AtomicReference<>();
         CountDownLatch open = new CountDownLatch(1);
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> {
@@ -1107,13 +1220,30 @@ public class MindCraftTests {
                 // request arrives: then the first request is not open any more, and the test does not check the rule.
                 Uno.ask(server, player, "x", (r, c) -> {
                     open.await(10, TimeUnit.SECONDS);
-                    throw new IllegalArgumentException("the quantity is missing");
+                    return answer("{\"action\":\"none\",\"reason\":\"the quantity is missing\"}");
                 }, 5000, busy::add);
                 Uno.ask(server, player, "x", busy::add);
                 check(busy.equals(List.of("I am still working on your previous request.")), "a second request did not wait: " + busy);
                 open.countDown();
             })
-            .thenWaitUntil(() -> check(busy.size() == 2, "answers: " + busy));
+            .thenWaitUntil(() -> check(busy.size() == 2, "answers: " + busy))
+            .thenExecute(() -> {
+                // The answer of the provider itself: one action, and the tokens of the answer.
+                // The provider runs off the server thread, as in Uno.ask. The first request also loads the classes of the SDK.
+                status.set(200);
+                body.set(claudeMessage("end_turn", start.get(), 1234, 56));
+                String context = Uno.context(rig.runtime, player);
+                CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return claude.answer(request, context);
+                    } catch (Exception e) {
+                        throw new CompletionException(e);
+                    }
+                }).whenComplete((answer, failure) -> direct.set(failure == null ? answer : failure));
+            })
+            .thenWaitUntil(() -> check(direct.get() != null, "the provider did not answer yet"))
+            .thenExecute(() -> check(direct.get() instanceof Uno.Answer answer && answer.json().equals(start.get())
+                && answer.inputTokens() == 1234 && answer.outputTokens() == 56, "the answer of the provider: " + direct.get()));
         for (int i = 0; i < cases.size(); i++) {
             int index = i;
             ClaudeCase test = cases.get(i);
@@ -1122,7 +1252,6 @@ public class MindCraftTests {
                     if (test.status() < 0) api.stop(0);
                     status.set(test.status());
                     body.set(test.body().get());
-                    // The first request also loads the classes of the SDK. That can take some seconds.
                     Uno.ask(server, player, request, claude, 15_000, answers::add);
                 })
                 .thenWaitUntil(() -> check(answers.size() > index, "Uno did not answer yet"))
@@ -1130,7 +1259,7 @@ public class MindCraftTests {
                     MindCraft.LOGGER.info("t18_claude_provider answer {}: {}", index, answers.get(index));
                     check(answers.get(index).contains(test.expected()), answers.get(index));
                     // Only the complete order becomes a proposal. The request after it fails: then the proposal must be gone.
-                    check(Uno.hasProposal(player) == (index == 5), "wrong proposal state after answer " + index);
+                    check(Uno.hasProposal(player) == (index == proposalCase), "wrong proposal state after answer " + index);
                 });
         }
         sequence
@@ -1140,13 +1269,79 @@ public class MindCraftTests {
                 JsonObject output = message.getAsJsonObject("output_config");
                 check(message.get("model").getAsString().equals(ClaudeProvider.MODEL) && message.get("fallbacks").getAsString().equals("default")
                     && beta.get().contains("server-side-fallback-2026-07-01"), sent.get());
-                check(output.get("effort").getAsString().equals("low") && output.getAsJsonObject("format").get("type").getAsString().equals("json_schema")
-                    && output.getAsJsonObject("format").getAsJsonObject("schema").getAsJsonArray("required").size() == 8, sent.get());
+                check(output.get("effort").getAsString().equals("low") && output.getAsJsonObject("format").get("type").getAsString().equals("json_schema"), sent.get());
                 check(!message.has("thinking") && !message.has("temperature"), sent.get());
-                String content = message.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").toString();
-                check(content.contains(request) && content.contains(rig.from) && content.contains(rig.to), content);
+                // The closed list of the actions. Each field is required: the model writes null in a field that its action does not use.
+                JsonObject schema = output.getAsJsonObject("format").getAsJsonObject("schema");
+                check(schema.getAsJsonObject("properties").getAsJsonObject("action").get("enum").toString()
+                    .equals("[\"start\",\"change\",\"pause\",\"resume\",\"cancel\",\"report\",\"none\"]"), schema.toString());
+                Set<String> required = new HashSet<>();
+                schema.getAsJsonArray("required").forEach(field -> required.add(field.getAsString()));
+                check(required.equals(Set.of("action", "reason", "robot", "station", "module", "from", "to", "item", "quantity", "reserve"))
+                    && schema.getAsJsonObject("properties").keySet().equals(required), schema.toString());
+                String system = message.get("system").getAsString();
+                check(Stream.of("start", "change", "pause", "resume", "cancel", "report", "none").allMatch(action -> system.contains("\"" + action + "\"")), system);
+                // The context is the same as before the actions: the station names of the player, the robot numbers and the "free" flag (D21).
+                String content = message.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString();
+                check(content.equals("Context: {\"stations\":[\"" + rig.to + "\",\"" + rig.from + "\"],\"robots\":[{\"id\":" + rig.id
+                    + ",\"free\":true}]}\nRequest: " + request), content);
             })
             .thenSucceed();
+    }
+
+    /**
+     * Increment A: a provider answers with one action from the closed list of D29.
+     * In this part Uno acts on "start" and "none" only. Each other action gets a fixed sentence: Uno creates no proposal,
+     * and the job does not change. A "none" action gives its reason with the length limit.
+     * During the test the job waits for materials: its state does not change by itself.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_provider_answers_with_an_action(GameTestHelper helper) {
+        Actor player = player("a_actions");
+        Rig rig = new Rig(helper, "a_actions", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        // An answer of the provider and the sentence of Uno. %d is the robot of the job.
+        Map<String, String> cases = new LinkedHashMap<>();
+        cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":8,\"reserve\":4}",
+            "I cannot change a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
+        cases.put("{\"action\":\"pause\",\"robot\":null,\"station\":\"a_actions_source\"}",
+            "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
+        cases.put("{\"action\":\"resume\",\"robot\":%d,\"station\":null}",
+            "I cannot resume a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
+        cases.put("{\"action\":\"cancel\",\"robot\":%d,\"station\":null}",
+            "I cannot cancel a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
+        cases.put("{\"action\":\"report\",\"robot\":null,\"station\":null}",
+            "I cannot report on a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
+        // The reason of "none" has a limit of 200 characters.
+        cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}",
+            "I cannot propose a job: " + "a".repeat(150) + "b".repeat(50) + ".");
+        // A model does not guarantee the case of a value of the schema.
+        cases.put("{\"action\":\"None\",\"reason\":\"The request names no station.\"}", "I cannot propose a job: The request names no station.");
+        // A "none" action without a reason is not a valid answer.
+        cases.put("{\"action\":\"none\",\"reason\":\" \"}", "I did not get a valid configuration. I created no proposal.");
+
+        List<String> answers = new CopyOnWriteArrayList<>();
+        int[] job = new int[2];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                job[0] = rig.job().id;
+                job[1] = rig.job().revision;
+            });
+        for (Map.Entry<String, String> test : cases.entrySet()) {
+            sequence = ask(sequence, server, player, "x", (r, c) -> answer(test.getKey().formatted(rig.id)), 5000, answers)
+                .thenExecute(() -> {
+                    String said = answers.get(answers.size() - 1);
+                    MindCraft.LOGGER.info("a_provider_answers_with_an_action: {} -> {}", test.getKey(), said);
+                    check(said.equals(test.getValue()), said);
+                    check(!Uno.hasProposal(player), "the action became a proposal: " + test.getKey());
+                    Job now = rig.job();
+                    check(now.id == job[0] && now.state == State.WAITING && now.quantity == 24 && now.reserve == 0 && now.revision == job[1],
+                        "the action changed the job: " + rig.describe());
+                });
+        }
+        sequence.thenSucceed();
     }
 
     /** T21: the robot is off and the last observation is old. Uno gives the last known data and says that it is old. */
@@ -1380,7 +1575,7 @@ public class MindCraftTests {
                 check(button[0] != null && view.get().contains("carry 8 x minecraft:coal from '" + rig.from + "'"), view.get());
                 Uno.ask(server, player, "x", (request, context) -> {
                     slow.await(10, TimeUnit.SECONDS);
-                    return orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 16);
+                    return answer(startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 16));
                 }, 15_000, answers::add);
                 UnoView.act(server, player, button[0], "{}");
                 check(rig.job() == null, "Confirm started the old proposal while a newer request was open");
@@ -1439,7 +1634,7 @@ public class MindCraftTests {
                 // A request is open when the session ends. Its answer would be a valid order of 16.
                 Uno.ask(server, player, "x", (request, context) -> {
                     slow.await(10, TimeUnit.SECONDS);
-                    return orderJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 16);
+                    return answer(startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 16));
                 }, 15_000, late::add);
                 Uno.newSession();
                 // The open request of the old session must not keep the player waiting in the new session.

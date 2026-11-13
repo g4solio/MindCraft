@@ -135,9 +135,10 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Disproved assumption:** "a check at the first contact of the robot is sufficient". In the first version the state said `DONE` until the robot called the runtime. If the robot is not loaded, that false statement stayed.
 - **Not verified:** the statement "Minecraft writes chunks to disk more frequently than `SavedData`" comes from general knowledge of the game. The code of Minecraft 1.20.1 was not read. On the test server, 15 seconds after the delivery, the world on disk did not contain the delivery. The test server has no idle time in the tick and a normal server can behave differently.
 - **Counterexample:** the opposite case stays undetectable. If someone restores an old `mindcraft.dat` file on a new world, only the comparison of the cargo applies (T09).
-- **Limit:** the write of the file is not atomic, as for each `SavedData` of Minecraft. A stop during the write can corrupt the file. Then Minecraft creates empty data and the runtime loses stations, robots and jobs.
+- **Limit until increment A:** the write of the file was not atomic, as for each `SavedData` of Minecraft. A stop during the write could corrupt the file. Then Minecraft creates empty data and the runtime loses stations, robots and jobs. Since increment A the write is atomic. See D37.
 - **Cost:** one file write on the server thread for each transfer. Not measured.
 - **Changed in the review of 2026-11-12:** at `resume` the runtime now corrects the delivered total by the load that the robot still holds. See D16.1. The guarantees of this section are not larger than before. The tests cover the same specific cases. The save of the world and the save of the record are still not one atomic operation.
+- **Changed in increment A (D37):** the runtime writes the record to a temporary file and then moves that file in the place of `mindcraft.dat` in one step. This applies to the write after each transfer and to the save of the world. The order of the saves of this section does not change. The world and the record are still two separate writes.
 
 ## D09 — Pause, cancellation and forced stop
 
@@ -687,11 +688,20 @@ Limits on the calls. Increment A.
 
 ## D37 — Protection of the record, one player only, gates for multiplayer
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented.
+**Status:** decided by the project owner on 2026-11-13. The atomic write is implemented: see "Status of the atomic write" below. The rest is not implemented.
 
 - **Atomic write (increment A):** the runtime writes a temporary file and then puts it in the place of `mindcraft.dat`.
 - **Reason:** D08.1 says that a stop during the write can corrupt the file. Then the runtime loses stations, robots and jobs. After D31 the file also holds the memory of Uno. With work while the player is away (D28), more writes occur that nobody sees.
 - **Verification:** no automatic test stops the process during a write. The evidence will be a code examination only.
+- **Status of the atomic write:** decided and implemented in increment A. The protection against a stop is not verified: no test stops the process during a write. Its evidence is a code examination. See "Increment A — atomic write of the record" in [TEST_RESULTS.md](TEST_RESULTS.md).
+  - The write is in `MindRuntime.save(File)`. The record goes to `mindcraft.dat.tmp` in the same folder, then `Files.move` with `ATOMIC_MOVE` puts it in the place of `mindcraft.dat`. The ordinary save of the world and the write after each transfer both use this method.
+  - Verified: the new write gives a record that loads. The normal run (43 of 43) and the four restart phases passed with it. No temporary file stayed after these runs.
+  - Verified in one run with a condition built by hand: when the write fails, `mindcraft.dat` stays identical and the server log has the error. This run is not a test of the repository.
+- **Provisional choice (proposed):** after a failed write the record stays dirty. The next save of the world or the next transfer tries again. Minecraft instead marks its data as clean after a failed write.
+- **Limits of the atomic write:**
+  - The runtime does not force the data to the disk before the move. A stop of the operating system or a loss of power is not covered.
+  - On Windows the JDK uses `MoveFileEx`. Microsoft does not document it as atomic.
+  - While the writes fail, the record on the disk is older than the world. Then the guarantee of D08.1 does not hold. The log shows each failure.
 - **Gate for two robots:** before two robots use the same station, a reserve must belong to the station (deferred in D31). A round on one robot does not need it: its duties are in sequence.
 - **One player only:** the mod is for one player now. The README says so.
 - **Invariant, from increment A on:** each new kind of data (the diary, the notices, the proposals of a change, the library) has an owner, goes through the same check of the actor, and has a test of the T19 kind.

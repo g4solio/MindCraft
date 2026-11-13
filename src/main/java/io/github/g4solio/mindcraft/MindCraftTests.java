@@ -1211,8 +1211,8 @@ public class MindCraftTests {
             new ClaudeCase(200, () -> claudeMessage("max_tokens", "{\"action\":"), "(the answer of the model is incomplete)"),
             new ClaudeCase(401, () -> error, "(the API key is not valid or has no permission)"),
             new ClaudeCase(500, () -> error, "(the model service answered with error 500)"),
-            // An action that Uno does not handle yet: a fixed sentence and no proposal.
-            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "I cannot pause a job from a written request yet."),
+            // A pause of the robot, which has no job: Uno asks for the robot number of a job and creates no proposal.
+            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "You have no job on robot #"),
             new ClaudeCase(200, () -> claudeMessage("end_turn", start.get()), "Proposal: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"),
             new ClaudeCase(-1, () -> "", "(the model service is not reachable)"));
         int proposalCase = 6;
@@ -1297,7 +1297,7 @@ public class MindCraftTests {
 
     /**
      * Increment A: a provider answers with one action from the closed list of D29.
-     * In this part Uno acts on "start" and "none" only. Each other action gets a fixed sentence: Uno creates no proposal,
+     * Uno does not act on "change", "resume" and "cancel" yet. Each gets a fixed sentence: Uno creates no proposal,
      * and the job does not change. A "none" action gives its reason with the length limit.
      * During the test the job waits for materials: its state does not change by itself.
      */
@@ -1310,14 +1310,10 @@ public class MindCraftTests {
         Map<String, String> cases = new LinkedHashMap<>();
         cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":8,\"reserve\":4}",
             "I cannot change a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
-        cases.put("{\"action\":\"pause\",\"robot\":null,\"station\":\"a_actions_source\"}",
-            "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
         cases.put("{\"action\":\"resume\",\"robot\":%d,\"station\":null}",
             "I cannot resume a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
         cases.put("{\"action\":\"cancel\",\"robot\":%d,\"station\":null}",
             "I cannot cancel a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
-        cases.put("{\"action\":\"report\",\"robot\":null,\"station\":null}",
-            "I cannot report on a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
         // The reason of "none" has a limit of 200 characters.
         cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}",
             "I cannot propose a job: " + "a".repeat(150) + "b".repeat(50) + ".");
@@ -1348,6 +1344,247 @@ public class MindCraftTests {
                 });
         }
         sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A: the fixed rules read a simple form of a report and of a pause, in English and in Italian.
+     * The action names the job with a robot number ("robot N"), with one station of the player, or with nothing.
+     * A request that names two stations stays a start. The fixed rules call no model, thus they report zero tokens.
+     */
+    @GameTest(template = EMPTY)
+    public static void a_fixed_rules_report_and_pause(GameTestHelper helper) {
+        String robots = "\"robots\":[{\"id\":7,\"free\":false},{\"id\":8,\"free\":true}]}";
+        String english = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
+        String italian = "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots;
+        String report = "{\"action\":\"report\",\"robot\":%s,\"station\":%s}", pause = "{\"action\":\"pause\",\"robot\":%s,\"station\":%s}";
+        // A request, its context and the answer of the fixed rules.
+        List<String[]> cases = List.of(
+            new String[]{"How is the furnace?", english, report.formatted("null", "\"furnace\"")},
+            new String[]{"Report", english, report.formatted("null", "null")},
+            new String[]{"What is the status of robot 8?", english, report.formatted("8", "null")},
+            new String[]{"Pause the furnace job", english, pause.formatted("null", "\"furnace\"")},
+            new String[]{"pause", english, pause.formatted("null", "null")},
+            new String[]{"Pause robot 7.", english, pause.formatted("7", "null")},
+            new String[]{"Come vanno le fornaci?", italian, report.formatted("null", "\"fornaci\"")},
+            new String[]{"Rapporto", italian, report.formatted("null", "null")},
+            new String[]{"Come sta il robot 8?", italian, report.formatted("8", "null")},
+            new String[]{"Metti in pausa il lavoro del deposito", italian, pause.formatted("null", "\"deposito\"")},
+            new String[]{"Pausa", italian, pause.formatted("null", "null")},
+            new String[]{"Sospendi il robot 7", italian, pause.formatted("7", "null")},
+            // Two stations: a start, as before. The action word does not decide.
+            new String[]{"Pause, then carry 24 coal from depot to furnace with robot 8", english,
+                "{\"action\":\"start\",\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
+                    + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"});
+        List<String> wrong = new ArrayList<>();
+        for (String[] test : cases) {
+            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], test[1]);
+            if (!answer.json().equals(test[2]) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
+                wrong.add("'" + test[0] + "' -> " + answer);
+            }
+        }
+        check(wrong.isEmpty(), wrong.toString());
+        helper.succeed();
+    }
+
+    /** Two rigs of one player, side by side. The second is 3 blocks to the south of the first. */
+    private static Rig[] twoRigs(GameTestHelper helper, String name, Actor actor) {
+        Rig first = new Rig(helper, name, actor, new BlockPos(0, 1, 1));
+        Rig second = new Rig(helper, name + "2", actor, new BlockPos(0, 1, 4));
+        first.build(0, 1000);
+        second.build(0, 1000);
+        return new Rig[]{first, second};
+    }
+
+    /** A provider of the test that always gives this answer. */
+    private static Uno.Provider gives(Supplier<String> json) {
+        return (request, context) -> answer(json.get());
+    }
+
+    /**
+     * Increment A: report and pause by words, through the conversation with a provider of the test.
+     * Two jobs of one player wait for materials. Both use the destination of the first rig: two robots bring coal to one furnace.
+     * Uno finds the job from the robot number, from a station of exactly one open job, or from the only open job.
+     * In each other case Uno says how many jobs fit, asks for the robot number and changes nothing.
+     * A pause runs immediately through the ordinary request of the runtime. Uno creates no proposal.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_report_and_pause_by_words(GameTestHelper helper) {
+        Actor player = player("a_words");
+        Rig[] rigs = twoRigs(helper, "a_words", player);
+        Rig a = rigs[0], b = rigs[1];
+        MinecraftServer server = a.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        String ask = " Tell me the robot number of the job. I did nothing.";
+        // The jobs before each request that must change nothing: robot, job ID, state and revision.
+        Runnable unchanged = () -> {
+            check(!Uno.hasProposal(player), "Uno created a proposal: " + last.get());
+            check(a.job().state == State.WAITING && a.job().revision == 0 && b.job().state == State.WAITING && b.job().revision == 0,
+                "a request changed a job: " + a.describe() + "\n" + b.describe());
+        };
+        GameTestSequence sequence = helper.startSequence()
+            .thenWaitUntil(a::enroll).thenWaitUntil(a::restarted)
+            .thenWaitUntil(b::enroll).thenWaitUntil(b::restarted)
+            .thenExecute(() -> {
+                a.startJob(24, 0);
+                a.runtime.start(player, new Order(MindRuntime.TRANSPORT, b.id, b.from, a.to, Items.COAL, 16, 0));
+            })
+            .thenWaitUntil(() -> {
+                a.state(State.WAITING);
+                b.state(State.WAITING);
+            });
+
+        // A report by a station of one job: the report of that job only.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "", "station", a.from)), 5000, answers)
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_report_and_pause_by_words report by station: {}", last.get());
+                check(last.get().startsWith("Job " + a.job().id + ", robot #" + a.id + ": carry 24 items from '" + a.from + "' to '" + a.to + "'"), last.get());
+                check(!last.get().contains("\n") && !last.get().contains("robot #" + b.id + ":"), "the report is not about one job: " + last.get());
+                unchanged.run();
+            });
+        // A report by a robot number: the report of the job of that robot only.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "", "robot", b.id)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Job " + b.job().id + ", robot #" + b.id + ": carry 16 items from '" + b.from + "' to '" + a.to + "'"), last.get());
+                check(!last.get().contains("\n") && !last.get().contains("robot #" + a.id + ":"), "the report is not about one job: " + last.get());
+                unchanged.run();
+            });
+        // A report without a target: the report on all jobs, as the "Report" button gives it.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "")), 5000, answers)
+            .thenExecute(() -> {
+                String[] lines = last.get().split("\n");
+                check(lines.length == 2 && Stream.of(lines).anyMatch(line -> line.startsWith("Job " + a.job().id + ", robot #" + a.id + ":"))
+                    && Stream.of(lines).anyMatch(line -> line.startsWith("Job " + b.job().id + ", robot #" + b.id + ":")), last.get());
+                unchanged.run();
+            });
+        // A station of two open jobs, no target with two open jobs, a station and a robot of no job: Uno asks and changes nothing.
+        Map<Supplier<String>, Supplier<String>> doubts = new LinkedHashMap<>();
+        doubts.put(() -> modelAction("report", "", "station", a.to), () -> "2 of your open jobs use the station '" + a.to + "'." + ask);
+        doubts.put(() -> modelAction("pause", "", "station", a.to), () -> "2 of your open jobs use the station '" + a.to + "'." + ask);
+        doubts.put(() -> modelAction("pause", ""), () -> "You have 2 open jobs." + ask);
+        doubts.put(() -> modelAction("pause", "", "station", "a_words_nothing"), () -> "None of your open jobs uses the station 'a_words_nothing'." + ask);
+        doubts.put(() -> modelAction("pause", "", "robot", 999_999), () -> "You have no job on robot #999999." + ask);
+        doubts.put(() -> modelAction("report", "", "robot", 999_999), () -> "You have no job on robot #999999." + ask);
+        for (Map.Entry<Supplier<String>, Supplier<String>> doubt : doubts.entrySet()) {
+            sequence = ask(sequence, server, player, "x", gives(doubt.getKey()), 5000, answers)
+                .thenExecute(() -> {
+                    check(last.get().equals(doubt.getValue().get()), last.get());
+                    unchanged.run();
+                });
+        }
+        // A pause by a station of one job: immediately, without a proposal. The other job continues to wait.
+        int[] jobB = new int[1];
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("pause", "", "station", b.from)), 5000, answers)
+            .thenExecute(() -> {
+                jobB[0] = b.job().id;
+                check(last.get().equals("Job " + jobB[0] + " on robot #" + b.id + " is paused. The cargo stays on board."), last.get());
+                check(!Uno.hasProposal(player), "a pause became a proposal");
+                check(b.job().state == State.PAUSED && b.job().reason.equals("paused by the owner") && b.job().id == jobB[0], b.describe());
+                a.state(State.WAITING);
+            });
+        // A pause of a job that is not running: the refusal of the runtime.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("pause", "", "robot", b.id)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot pause the job: Job " + jobB[0] + " is not running (PAUSED)."), last.get());
+                b.state(State.PAUSED);
+                // The second job ends. The player has one open job now.
+                a.runtime.control(player, b.id, "cancel");
+            });
+        // A pause without a target, with one open job: Uno pauses that job.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("pause", "")), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("Job " + a.job().id + " on robot #" + a.id + " is paused. The cargo stays on board."), last.get());
+                check(!Uno.hasProposal(player), "a pause became a proposal");
+                a.state(State.PAUSED);
+                b.state(State.CANCELLED);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A and T19: a different player names the job of the owner, by its robot number, by its stations or with nothing.
+     * The other player cannot pause the job and gets no data of it: each sentence is the one for a job that does not exist.
+     * The job of the owner does not change.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_t19_words_of_another_player(GameTestHelper helper) {
+        Actor owner = player("a_t19_owner"), other = player("a_t19_other");
+        Rig rig = new Rig(helper, "a_t19", 0, 1000, owner);
+        MinecraftServer server = rig.level.getServer();
+        String ask = " Tell me the robot number of the job. I did nothing.";
+        List<String> answers = new CopyOnWriteArrayList<>();
+        // An answer of the provider and the sentence for the other player.
+        Map<Supplier<String>, Supplier<String>> cases = new LinkedHashMap<>();
+        for (String action : List.of("pause", "report")) {
+            cases.put(() -> modelAction(action, "", "robot", rig.id), () -> "You have no job on robot #" + rig.id + "." + ask);
+            cases.put(() -> modelAction(action, "", "station", rig.from), () -> "None of your open jobs uses the station '" + rig.from + "'." + ask);
+            cases.put(() -> modelAction(action, "", "station", rig.to), () -> "None of your open jobs uses the station '" + rig.to + "'." + ask);
+        }
+        cases.put(() -> modelAction("pause", ""), () -> "You have no open job." + ask);
+        cases.put(() -> modelAction("report", ""), () -> "I have no record of a job of yours.");
+        int[] job = new int[1];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> job[0] = rig.startJob(24, 0).id)
+            .thenWaitUntil(() -> rig.state(State.WAITING));
+        for (Map.Entry<Supplier<String>, Supplier<String>> test : cases.entrySet()) {
+            sequence = ask(sequence, server, other, "x", gives(test.getKey()), 5000, answers)
+                .thenExecute(() -> check(answers.get(answers.size() - 1).equals(test.getValue().get()), answers.get(answers.size() - 1)));
+        }
+        // The same request through the fixed rules: the context of the other player has no station and no robot.
+        // The text is built when the step runs: the robot has its number only after the enrollment.
+        sequence
+            .thenExecute(() -> Uno.ask(server, other, "Pause robot " + rig.id, new Uno.RuleProvider(), 5000, answers::add))
+            .thenWaitUntil(() -> check(answers.size() == cases.size() + 1, "Uno did not answer yet"))
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_t19_words_of_another_player: {}", answers);
+                check(answers.get(answers.size() - 1).equals("You have no job on robot #" + rig.id + "." + ask), answers.get(answers.size() - 1));
+                check(answers.stream().noneMatch(a -> a.contains("Job " + job[0]) || a.contains("delivered") || a.contains("paused")), answers.toString());
+                check(rig.job().id == job[0] && rig.job().state == State.WAITING, rig.describe());
+                check(!Uno.hasProposal(other), "the other player has a proposal");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Increment A: the same behaviour through the "ask" action of the screen, with the fixed rules of the server.
+     * A report by a station, a pause in Italian without a target, a pause of a job that is not running, a report of all jobs.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_report_and_pause_through_the_view(GameTestHelper helper) {
+        Actor player = player("a_view");
+        Rig rig = new Rig(helper, "a_view", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        String[] job = new String[1];
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                job[0] = "Job " + rig.job().id;
+                UnoView.act(server, player, "ask", "{\"request\":\"How is " + rig.to + "?\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("Uno › " + job[0] + ", robot #" + rig.id + ": carry 24 items"), view.get()))
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_report_and_pause_through_the_view report: {}", view.get());
+                rig.state(State.WAITING);
+                UnoView.act(server, player, "ask", "{\"request\":\"Metti in pausa\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("Uno › " + job[0] + " on robot #" + rig.id + " is paused. The cargo stays on board."), view.get()))
+            .thenExecute(() -> {
+                rig.state(State.PAUSED);
+                check(action(view.get(), "confirm") == null, "a pause became a proposal: " + view.get());
+                check(action(view.get(), "resume") != null && view.get().contains(" · paused"), view.get());
+                UnoView.act(server, player, "ask", "{\"request\":\"Pause robot " + rig.id + "\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("Uno › I cannot pause the job: " + job[0] + " is not running (PAUSED)."), view.get()))
+            .thenExecute(() -> UnoView.act(server, player, "ask", "{\"request\":\"Rapporto\"}"))
+            .thenWaitUntil(() -> check(view.get().contains("Uno › " + job[0] + ", robot #" + rig.id + ":")
+                && view.get().contains("I am paused at your request."), view.get()))
+            .thenExecute(() -> {
+                rig.state(State.PAUSED);
+                check(action(view.get(), "confirm") == null, view.get());
+            })
+            .thenSucceed();
     }
 
     /** T21: the robot is off and the last observation is old. Uno gives the last known data and says that it is old. */

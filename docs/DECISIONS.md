@@ -558,7 +558,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D29 — Uno acts on words through a closed list of actions
 
-**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented in part: the contract of a provider is verified with automatic in-game tests (D29.1). The actions change, pause, resume, cancel and report are not implemented.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented in part: the contract of a provider (D29.1), and the pause and the report (D29.2), are verified with automatic in-game tests. The actions change, resume and cancel are not implemented.
 
 - **Problem:** with the code of S2, three requests fail.
   - "Leave only 16 in the depot", for an open job. The provider can only give a new order, and the robot is busy. Uno refuses.
@@ -571,6 +571,7 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Cost:** each change needs two steps. D17 already names this friction.
 - **Change:** in D17 a provider gives only an order. D23 holds: one proposal for each player, the newest.
 - **Implemented in part:** the contract of a provider. See D29.1. Uno acts on `start` and `none` only. The other five actions are not implemented.
+- **Implemented in part, ticket #3:** Uno also acts on `pause` and `report`, and finds the job on the server. See D29.2. The actions `change`, `resume` and `cancel` are not implemented.
 
 ### D29.1 — The contract of a provider: one action and its tokens
 
@@ -599,6 +600,40 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Not verified:** the new schema and the new system text with the real service. The test `t18_claude_live` compiles with the new contract. It was not run: a run costs money and needs the consent of the project owner. Its four requests are the requests of S2: they test only `start` and `none`.
 - **Counterexample:** the real service can refuse the schema, for example with "Schema is too complex for compilation". Then each request to Claude fails, and Uno says that the model service answered with error 400. The fixed rules do not take over.
 - **Counterexample:** until the next parts, "pause the furnace job" gets two different answers. With Claude it gets the fixed sentence of `pause`. With the fixed rules it gets "I cannot propose a job: the quantity is missing."
+- **Changed on 2026-11-13, ticket #3:** `pause` and `report` do not get the fixed sentence any more. The fixed rules read them. The counterexample above holds now only for `change`, `resume` and `cancel`. See D29.2.
+
+### D29.2 — Report and pause by words
+
+**Status:** the rules below marked "decided" are decided by the project owner on 2026-11-13: spec #1, sections "How Uno finds the job" and "Immediate actions and proposals", and its further note 2. They are implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules and with providers written in the tests. Not verified with the real Claude service. Increment A, ticket #3. The choices marked "proposed" are choices of the implementation, not confirmed by the project owner.
+
+- **Decided, the search of the job:** Uno finds the job on the server. It looks only at the jobs that the actor owns, with the same check of the actor as each other request.
+  - From the robot number, if the request gives one.
+  - From a station name, if exactly one open job of the actor uses that station as source or as destination.
+  - With no target, if the actor has exactly one open job.
+- **Decided, each other case:** Uno says how many jobs fit and asks for the robot number. It does nothing and creates no proposal. The sentences:
+
+| Case | Sentence of Uno |
+| --- | --- |
+| A station of two open jobs | "2 of your open jobs use the station 'furnace'. Tell me the robot number of the job. I did nothing." |
+| A station of no open job | "None of your open jobs uses the station 'mine'. Tell me the robot number of the job. I did nothing." |
+| No target, two open jobs | "You have 2 open jobs. Tell me the robot number of the job. I did nothing." |
+| No target, no open job | "You have no open job. Tell me the robot number of the job. I did nothing." |
+| A robot without a job of the actor | "You have no job on robot #9. Tell me the robot number of the job. I did nothing." |
+
+- **Decided, the report:** it runs immediately. A request about one job gives the report sentence of that job only: the same line as in the report on all jobs. A report request without a target gives the report on all jobs of the actor, as the "Report" button does.
+- **Decided, the pause:** it runs immediately, without a proposal. It is the ordinary request of the runtime, with the robot and the job ID. Uno says: "Job 3 on robot #5 is paused. The cargo stays on board." A refusal of the runtime becomes the sentence of Uno: "I cannot pause the job: Job 3 is not running (PAUSED)."
+- **Decided, T19:** a different player cannot pause the job and gets no data of it. The search looks only at the jobs of the actor. Thus the sentence for the job of a different player is the sentence for a job that does not exist, and it does not say whether the robot or the station exists.
+- **Proposed, a robot number names the job that the robot has now, open or not.** Thus "how is robot 5?" also reports a job that is `DONE` or `CANCELLED`. A pause of such a job gets the refusal of the runtime: "Robot #5 has no open job." A station name and a request without a target look only at open jobs, as the spec says.
+- **Proposed, the robot number wins:** if a request gives a robot number and a station, Uno uses the robot number and ignores the station.
+- **Proposed, the search ignores the case of a station name.** A model does not guarantee the case of a value. An empty station name is the same as no station.
+- **Proposed, the words of the fixed rules:** a request that names two stations of the player stays a start (decided in the spec). With one station or none, the first action that fits decides: first the pause, then the report. Pause: `pause`, `pausa`, `sospendi`. Report: `report`, `status`, `how is`, `how's`, `how are`, `rapporto`, `stato`, `come va`, `come vanno`, `come sta`, `come stanno`. The job: "robot N", or the name of one station. A request without these words goes to the rules of a start, as before. Thus the reasons of "none" do not change. The README lists the words.
+- **The provider calls:** a written report request goes to the provider, as each written request. With Claude it is a paid call. The "Report" button and `/uno report` call no provider.
+- **No change of the runtime and of the Lua modules.** The pause uses `MindRuntime.control` with the job ID, as the "Pause" button does.
+- **Evidence:** tests `a_fixed_rules_report_and_pause`, `a_report_and_pause_by_words`, `a_t19_words_of_another_player`, `a_report_and_pause_through_the_view`, and the changed test `t18_claude_provider`. Each failed with the code before the change and passed after it. See "Increment A — Report and pause by words" in TEST_RESULTS.md.
+- **Not verified:** the real Claude service with a pause or a report. The schema and the system text of the Claude provider did not change in this ticket. A run of `t18_claude_live` costs money and needs the consent of the project owner. Its requests test only `start` and `none`.
+- **Counterexample:** "How is the furnace?" after the furnace job is `DONE` gets "None of your open jobs uses the station 'furnace'." The player must give the robot number.
+- **Counterexample:** the fixed rules read a robot number only after the word "robot". "Pause 5" is a pause without a target. With one open job, Uno pauses that job, also if it is not on robot #5. A pause is reversible with `resume`.
+- **Counterexample:** a start request with one station and a word of an action is that action. "Report the coal from the depot" is a report about the depot job.
 
 ## D30 — Initiative: Uno warns
 

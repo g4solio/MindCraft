@@ -108,6 +108,7 @@ The default configuration has only one thread for the computers (`computer_threa
 ## S1 — Adversarial matrix
 
 All "passed" rows come from runs 6 and 7. The later runs confirm them, up to run 33.
+Increment A changed T04, T05 and T06: an obstacle is a wait, and each block has a cause. The rows T04, T05 and T06 below describe the behaviour of S1. See "Increment A — waits and blocks".
 
 | ID | Test | What it does | Result | Observed result |
 | --- | --- | --- | --- | --- |
@@ -447,6 +448,58 @@ Runs of this ticket. They are not numbered in the table "Runs": other tickets of
 - No correction of the move step was necessary. No Lua module changed. Thus the four restart phases were not repeated.
 - Not tested: a stair (a path that also changes y), more than one corner, a corridor without walls. In an open space the robot goes along x first, and it does not follow a corridor.
 - Out of scope: a path that needs a move away from the target. The README says which paths work.
+
+## Increment A — waits and blocks
+
+Ticket #5 of spec #1, on 2026-11-13. See D34.
+All tests of this section are in the game and automatic. No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red 1 | The new and changed tests of the obstacle, with the old code | 39 of 45. `t05_obstacle`, `t05_pause_and_cancel_during_the_wait` and `t05_obstacle_keep_stock` failed as expected: the job went to `BLOCKED` ("Movement obstructed"), not to `WAITING`. `s1_transfer`, `s2_keep_stock` and `t15_next_job_with_another_module` failed as expected: they wait for the new versions of the modules |
+| Green 1 | The obstacle is a wait | **45 of 45**. Server line: `All 45 required tests passed :)` |
+| Red 2 | The tests of the causes of `BLOCKED`, before the causes existed | 41 of 47. `t04_destination_removed`, `t04_source_removed`, `t06_no_fuel`, `t16_quantity_lowered_with_load`, `t16_quantity_lowered_after_partial_delivery` and `t16_quantity_below_delivered` failed as expected: the job was `BLOCKED` without a cause. `t06_impediment_of_an_unknown_kind` passed already: the code of Green 1 needed that branch for the module error of the agent |
+| Green 2 | The causes of `BLOCKED` | **47 of 47**. Server line: `All 47 required tests passed :)` |
+| After the merge | The code of ticket #5, merged with tickets #2, #6 and #7 of increment A | **49 of 49**. Server line: `All 49 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash` | The code of Green 2 | Passed, each phase. `check`: the record says `RUNNING` with 24 on board, then `DONE`, source 40, destination 24, executor `transport@3`. `check-crash`: `RECOVERY` ("the world is older than the record of this job"), then `DONE` after `resume`, source 40, destination 24, "1 recovery" |
+| `stop`, `check`, `crash`, `check-crash`, after the merge | The merged code, with the atomic write of ticket #7 | Passed, each phase, with the same results. After the four phases the data folder has no temporary file |
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `t05_obstacle` | A stone on the path, after the pickup. Then a window of 15 seconds. Then the test removes the stone | `WAITING` with the cause `PATH_OBSTRUCTED`, 235 ticks after the pickup (run "After the merge"; the test asks for at least 160). 24 on board, the stone intact. The reason with the position is in the record, in the view of the screen and in the `status` text: "the robot cannot move from … (east, in front: minecraft:stone) toward …: Movement obstructed". The report: "My path is obstructed. I try to move again every few seconds, and I continue by myself when the path is free." It has no recorded reason. In the window the robot did not move. The longest time without a call of the robot was 100 ticks (the test accepts 80 to 150): one attempt every 5 seconds. After the removal: `RUNNING`, then `DONE`, source 40, destination 24, robot 0. No `resume` |
+| `t05_pause_and_cancel_during_the_wait` | During the wait: a pause, the removal of the stone, a `resume` with the stone back, then a cancellation and the removal of the stone | After the pause the job stays `PAUSED` for 14 seconds. The robot does not move, also without the stone. After `resume` the job waits again with `PATH_OBSTRUCTED`. After the cancellation the job stays `CANCELLED`. The robot does not move. 24 stay on board |
+| `t05_obstacle_keep_stock` | A stock job. A stone on the path after the pickup | `WAITING` with `PATH_OBSTRUCTED`, 24 on board. After the removal: `SATISFIED`, destination 24, source 40, robot 0. No `resume` |
+| `t06_no_fuel` | A turtle with fuel 0 and no fuel item | `BLOCKED` with the cause `OUT_OF_FUEL`. Report: "I am stopped: I have no fuel. Give me fuel, then resume the job." After the test sets the fuel: still `BLOCKED` 7 seconds later, nothing taken. After `resume`: `DONE`, source 40, destination 24 |
+| `t06_impediment_of_an_unknown_kind` | The test reports the impediment "landslide" for the robot | The function returns `BLOCKED`. The job is `BLOCKED` without a cause. Reason: "landslide: the floor fell at 1 2 3". Report: "I am stopped and I need your help. Recorded reason: landslide: the floor fell at 1 2 3." 3 seconds later still `BLOCKED`, nothing taken |
+| `t04_destination_removed` | The destination chest disappears while the robot carries 24 | `BLOCKED` with the cause `DESTINATION_NO_INVENTORY`. 24 on board. Report: "I am stopped: I find no inventory at 't04_destination'. Put it back, then resume the job." A save and a load keep the cause. Without the cause in the saved data, the loaded record gives "I am stopped and I need your help. Recorded reason: the destination station has no inventory at …", as before. After the chest and `resume`: `DONE` |
+| `t04_source_removed` | The source chest disappears before the start | `BLOCKED` with the cause `SOURCE_NO_INVENTORY`, 0 on board. Report: "I am stopped: I find no inventory at 't04src_source'. …". After a chest with 24 and `resume`: `DONE` |
+| `t16_quantity_lowered_with_load`, `t16_quantity_lowered_after_partial_delivery`, `t16_quantity_below_delivered` | The owner lowers the quantity of a transport with a load on board | `BLOCKED` with the cause `LOAD_ABOVE_QUANTITY`. Report, for example: "I am stopped: the quantity of the job is reached, and 54 stay on board. Raise the quantity and resume, or cancel the job." The other results are the same as before |
+| `t12_second_session` | A second turtle with the same computer ID | Runs Green 1, Green 2 and "After the merge": the second turtle waits behind the first, with `PATH_OBSTRUCTED` and "in front: computercraft:turtle_normal". The first turtle lost its authority and does not move: the wait has no end. No coal lost |
+| `s1_transfer`, `s2_keep_stock`, `t15_next_job_with_another_module` | The versions of the modules | `transport@3` and `keep_stock@3` |
+
+Conditions built artificially:
+
+- **Interval of the attempts:** the test does not count the moves. It reads the game time of the last call of the robot (`lastContact`, in the `status` text as "last contact"). Each attempt calls the runtime.
+- **Unknown kind:** the test calls the Lua function `impediment` from Java, in the tick of the start. No module of the mod sends that kind.
+- **Record of an older version:** the test removes the cause from the saved data of a blocked job, then loads them.
+- **No fuel:** the test sets the fuel level of the turtle with a direct call.
+- **Source removed:** the source chest is empty when the test removes it. A chest with items drops them.
+
+Changes to the older tests:
+
+- `t05_obstacle`: it expects `WAITING`, and the end without `resume`. It uses a player, for the report.
+- `t04_destination_removed`, `t06_no_fuel` and the three `t16_quantity_*` tests above: they expect their cause. `t04_destination_removed` and `t06_no_fuel` use a player, for the report. `t06_no_fuel` waits 7 seconds with fuel before the `resume`.
+- `t12_second_session`: a wait for a free path is also an accepted end of the second turtle.
+- `s1_transfer`, `s2_keep_stock`, `t15_next_job_with_another_module`: the versions `transport@3` and `keep_stock@3`.
+
+| Kind of evidence | Statements |
+| --- | --- |
+| **Verified automatically, in the game** | All rows of the tables above |
+| **Deduced from a code examination** | The hologram shows the attention colour during the wait: `MindRuntime.mood` gives `ATTENTION` for each `WAITING`. `s2_projector` tests the colour with a wait for materials, not with an obstacle. The mod uses only `dan200.computercraft.api`: the new Lua functions are in `RobotApi`, with the same imports as before |
+| **Not verified** | A player on the path (`can_push = true`). A robot at the edge of a loaded area ("Cannot leave loaded world" is also an obstacle). Two robots that face each other. The screen in a client during the wait |
+
+Known limit: a robot waits without an end behind an obstacle that does not go away. The report and the hologram show the wait. The notice after a long wait is ticket #8.
 
 ## Manual test in the game
 

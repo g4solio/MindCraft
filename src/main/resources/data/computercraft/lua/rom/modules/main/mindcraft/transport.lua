@@ -1,4 +1,4 @@
--- Transport module, version 2.
+-- Transport module, version 3.
 -- It moves one item type from the source station to the destination station.
 --
 -- The module keeps no state of the work: only the ID of its job. It reads the job state from the runtime before each step.
@@ -8,10 +8,10 @@
 --
 -- Limit: the path between the docks must be free on straight lines. There is no path search.
 
-local VERSION = "transport@2"
-local MOVE_RETRIES = 10 -- attempts before the module reports an impediment
+local VERSION = "transport@3"
+local MOVE_RETRIES = 10 -- attempts at MOVE_RETRY_SECONDS before the module reports an impediment
 local MOVE_RETRY_SECONDS = 1
-local POLL_SECONDS = 5 -- time between two attempts when a station cannot give or accept items
+local POLL_SECONDS = 5 -- time between two attempts while the job waits
 
 local TURNS = { north = 0, east = 1, south = 2, west = 3 }
 
@@ -76,7 +76,9 @@ local function refuel(jobItem)
     return turtle.getFuelLevel() == "unlimited" or turtle.getFuelLevel() > 0
 end
 
--- Goes to the target. Returns true on arrival. Returns false when the job stops or an impediment remains.
+-- Goes to the target. Returns true on arrival. Returns false when the job stops.
+-- A robot that cannot move tries MOVE_RETRIES times, then reports an impediment. The runtime decides the state from its kind.
+-- If the job waits, the robot tries one move at each POLL_SECONDS. A pause or a cancellation applies at the next attempt.
 local function goTo(target)
     local failures = 0
     while true do
@@ -86,18 +88,27 @@ local function goTo(target)
         local result, err = step(target)
         if result == "arrived" then return true end
         if result == "moved" then
+            -- A job that waited for a free path works again. The runtime ignores this call for each other wait.
+            if job.state == "WAITING" then mindcraft.moved() end
             failures = 0
         else
             failures = failures + 1
-            local noFuel = err == "Out of fuel"
-            if (noFuel and not refuel(job.item)) or failures >= MOVE_RETRIES then
+            local fuelError = err == "Out of fuel"
+            local kind
+            if fuelError and not refuel(job.item) then
+                kind = "fuel"
+            elseif failures >= MOVE_RETRIES then
+                kind = "obstacle"
+            end
+            if kind then
                 local x, y, z, facing = mindcraft.pose()
                 local found, block = turtle.inspect()
-                mindcraft.block(("the robot cannot move from %d %d %d (%s, in front: %s) toward %d %d %d: %s"):format(
+                local state = mindcraft.impediment(kind, ("the robot cannot move from %d %d %d (%s, in front: %s) toward %d %d %d: %s"):format(
                     x, y, z, facing, found and block.name or "no block", target.x, target.y, target.z, tostring(err)))
-                return false
+                if state == "WAITING" then sleep(POLL_SECONDS) end
+            elseif not fuelError then
+                sleep(MOVE_RETRY_SECONDS)
             end
-            if not noFuel then sleep(MOVE_RETRY_SECONDS) end
         end
     end
 end

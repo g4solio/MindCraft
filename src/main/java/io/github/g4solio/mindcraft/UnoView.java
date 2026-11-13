@@ -70,7 +70,11 @@ final class UnoView {
         String what = job.quantity + " x " + MindRuntime.itemName(job.item);
         widgets.add(text(job.keepStock() ? "Keep at least " + what + " in " + to + ", taken from " + from
             : "Carry " + what + " from " + from + " to " + to, "normal"));
-        if (job.state == State.BLOCKED || job.state == State.RECOVERY) widgets.add(text("Recorded reason: " + job.reason, "muted"));
+        // The reason with the position helps the owner to find the robot. A wait for a free path has it too.
+        // The other waits do not show it: a stock job often changes between them, and a new line changes the shape of the screen.
+        if (job.state == State.BLOCKED || job.state == State.RECOVERY || job.cause == MindRuntime.Cause.PATH_OBSTRUCTED) {
+            widgets.add(text("Recorded reason: " + job.reason, "muted"));
+        }
         if (job.state.open()) {
             widgets.add(number("quantity:" + robotId, job.keepStock() ? "Level to keep" : "Quantity to carry", job.quantity));
             widgets.add(number("reserve:" + robotId, "Reserve in the source", job.reserve));

@@ -394,7 +394,7 @@ public final class Uno {
             case PAUSED -> "I am paused at your request. ";
             case CANCELLED -> "You cancelled the job. ";
             case WAITING -> waiting(job, from, to);
-            case BLOCKED -> "I am stopped and I need your help. Recorded reason: " + job.reason + ". ";
+            case BLOCKED -> blocked(job, from, to);
             case RECOVERY -> "I cannot say how it went. Recorded reason: " + job.reason + ". You decide whether to resume or cancel. ";
         });
         if (job.recoveries > 0) text.append("After a recovery the totals can be inexact. ");
@@ -424,8 +424,22 @@ public final class Uno {
             case DESTINATION_FULL -> "The destination is full. I am waiting for free space. ";
             case SOURCE_UNLOADED -> "The area of " + from + " is not loaded: I cannot see its inventory and I do not know its stock. ";
             case DESTINATION_UNLOADED -> "The area of " + to + " is not loaded: I cannot see its inventory and I do not know its stock. ";
+            case PATH_OBSTRUCTED -> "My path is obstructed. I try to move again every few seconds, and I continue by myself when the path is free. ";
             // A record of an older version has no cause. The recorded text is all that Uno knows.
-            case NONE -> "I am waiting. Recorded reason: " + job.reason + ". ";
+            default -> "I am waiting. Recorded reason: " + job.reason + ". ";
+        };
+    }
+
+    /** Why the job is blocked. A block needs the hands of the owner. The sentence comes from the cause that the runtime recorded. */
+    private static String blocked(Job job, String from, String to) {
+        return switch (job.cause) {
+            case OUT_OF_FUEL -> "I am stopped: I have no fuel. Give me fuel, then resume the job. ";
+            case SOURCE_NO_INVENTORY -> "I am stopped: I find no inventory at " + from + ". Put it back, then resume the job. ";
+            case DESTINATION_NO_INVENTORY -> "I am stopped: I find no inventory at " + to + ". Put it back, then resume the job. ";
+            case LOAD_ABOVE_QUANTITY -> "I am stopped: the quantity of the job is reached, and " + job.carried
+                + " stay on board. Raise the quantity and resume, or cancel the job. ";
+            // A record of an older version, or an impediment of a kind that the runtime does not know. The recorded text is all that Uno knows.
+            default -> "I am stopped and I need your help. Recorded reason: " + job.reason + ". ";
         };
     }
 

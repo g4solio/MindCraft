@@ -16,7 +16,7 @@ while true do
         if not ok then
             if err == "Terminated" then error(err, 0) end
             -- A module error must be visible to the owner. It must not kill the agent.
-            pcall(mindcraft.block, "module error: " .. tostring(err))
+            pcall(mindcraft.impediment, "module error", tostring(err))
         end
     else
         -- The runtime queues a "mindcraft" event when the job changes.

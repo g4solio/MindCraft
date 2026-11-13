@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpServer;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
+import io.github.g4solio.mindcraft.MindRuntime.Cause;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
 import io.github.g4solio.mindcraft.MindRuntime.Refusal;
@@ -280,7 +281,7 @@ public class MindCraftTests {
                 rig.assertTransferred(40, 24);
                 Job job = rig.job();
                 check(job.taken == 24 && job.delivered == 24 && job.fromSeen == 40 && job.toSeen == 24, rig.describe());
-                check(job.executor.equals("transport@2"), rig.describe());
+                check(job.executor.equals("transport@3"), rig.describe());
                 MindCraft.LOGGER.info("s1_transfer final status:\n{}", rig.describe());
             })
             .thenSucceed();
@@ -367,18 +368,35 @@ public class MindCraftTests {
             .thenSucceed();
     }
 
-    /** T04: the destination disappears while the robot carries the load. The robot keeps the load. */
+    /**
+     * T04: the destination disappears while the robot carries the load. The robot keeps the load.
+     * The job is blocked with a cause of its own, and Uno takes its sentence from the cause.
+     * A record of an older version has no cause: then Uno gives the recorded reason, as before.
+     */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t04_destination_removed(GameTestHelper helper) {
-        Rig rig = new Rig(helper, "t04", 64, 1000);
+        Actor player = player("t04");
+        Rig rig = new Rig(helper, "t04", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
         rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> rig.carried(24))
             .thenExecute(() -> helper.setBlock(rig.dest, Blocks.AIR))
             .thenWaitUntil(() -> rig.state(State.BLOCKED))
             .thenExecute(() -> {
-                check(rig.job().reason.contains("no inventory"), rig.describe());
+                check(rig.job().cause == Cause.DESTINATION_NO_INVENTORY && rig.job().reason.contains("no inventory"), rig.describe());
                 check(rig.held() == 24 && rig.job().delivered == 0, rig.describe());
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t04_destination_removed report: {}", report);
+                check(report.contains("I find no inventory at '" + rig.to + "'") && !report.contains("Recorded reason"), report);
+
+                long now = rig.level.getGameTime();
+                CompoundTag saved = rig.runtime.save(new CompoundTag());
+                check(MindRuntime.load(saved).jobs.get(rig.id).cause == Cause.DESTINATION_NO_INVENTORY, "the saved cause is different");
+                saved.getCompound("jobs").getCompound(String.valueOf(rig.id)).remove("cause");
+                String old = Uno.report(MindRuntime.load(saved), player, now);
+                check(old.contains("I am stopped and I need your help. Recorded reason: " + rig.job().reason + "."), old);
+
                 helper.setBlock(rig.dest, Blocks.CHEST);
                 rig.runtime.control(rig.actor, rig.id, "resume");
             })
@@ -387,20 +405,190 @@ public class MindCraftTests {
             .thenSucceed();
     }
 
-    /** T05: an obstacle on the path. The robot does not remove it. The job stops with a reason. */
+    /** T04 for the source: the source has no inventory when the robot arrives. The job is blocked with a cause of its own. */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t04_source_removed(GameTestHelper helper) {
+        Actor player = player("t04src");
+        // An empty source: a chest with items drops them when it disappears.
+        Rig rig = new Rig(helper, "t04src", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> {
+                helper.setBlock(rig.source, Blocks.AIR);
+                rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                check(rig.job().cause == Cause.SOURCE_NO_INVENTORY && rig.job().carried == 0, rig.describe());
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t04_source_removed report: {}", report);
+                check(report.contains("I find no inventory at '" + rig.from + "'") && !report.contains("Recorded reason"), report);
+                helper.setBlock(rig.source, Blocks.CHEST);
+                rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 24));
+                rig.runtime.control(player, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(0, 24))
+            .thenSucceed();
+    }
+
+    /**
+     * T05: an obstacle on the path. The robot does not remove it. An obstacle can end by itself, thus it is a wait (D34).
+     * After 10 attempts at 1 second the job waits with the cause "path obstructed". The robot keeps its load.
+     * During the wait the robot tries one move every 5 seconds. When the obstacle goes away, the job continues by itself:
+     * the owner gives no resume.
+     */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t05_obstacle(GameTestHelper helper) {
-        Rig rig = new Rig(helper, "t05", 64, 1000);
+        Actor player = player("t05");
+        Rig rig = new Rig(helper, "t05", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
         BlockPos obstacle = new BlockPos(3, 1, 1);
         helper.setBlock(obstacle, Blocks.STONE);
+        // The pickup, the start of the observed window, and the longest time without a call of the robot in that window.
+        long[] time = new long[3];
+        BlockPos[] stop = new BlockPos[1];
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> time[0] = rig.level.getGameTime())
+            .thenWaitUntil(() -> check(rig.job().state != State.RUNNING, rig.describe()))
+            .thenExecute(() -> {
+                long now = rig.level.getGameTime();
+                rig.state(State.WAITING);
+                check(rig.job().cause == Cause.PATH_OBSTRUCTED, rig.describe());
+                check(now - time[0] >= 160, "the job waits " + (now - time[0]) + " ticks after the pickup: less than 10 attempts at 1 second");
+                helper.assertBlockPresent(Blocks.STONE, obstacle);
+                check(rig.held() == 24 && rig.job().carried == 24 && rig.coal(rig.dest) == 0, rig.describe());
+                // The reason with the position stays in the record, on the screen and in the status command.
+                String reason = rig.job().reason;
+                check(reason.contains("cannot move from") && reason.contains("in front: minecraft:stone") && reason.contains("Movement obstructed"), rig.describe());
+                String view = UnoView.build(rig.runtime, player, now);
+                check(view.contains("Recorded reason: " + reason), view);
+                check(rig.runtime.status(player, rig.id, now).contains(reason), rig.runtime.status(player, rig.id, now));
+                // The report takes its sentence from the cause, not from the recorded text.
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t05_obstacle report: {}", report);
+                check(report.contains("My path is obstructed") && !report.contains("Recorded reason"), report);
+                stop[0] = rig.robot().turtle.getPosition();
+                time[1] = now;
+            })
+            // A window of 15 seconds. Each attempt is a call of the robot. One attempt every 5 seconds: about 100 ticks without a call.
+            .thenWaitUntil(() -> {
+                long now = rig.level.getGameTime();
+                time[2] = Math.max(time[2], now - rig.job().lastContact);
+                check(now - time[1] >= 300, "the window is not complete");
+            })
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("t05_obstacle: the job waited {} ticks after the pickup. Longest time without a call of the robot during the wait: {} ticks",
+                    time[1] - time[0], time[2]);
+                rig.state(State.WAITING);
+                check(rig.job().cause == Cause.PATH_OBSTRUCTED && rig.robot().turtle.getPosition().equals(stop[0]), rig.describe());
+                check(time[2] >= 80 && time[2] <= 150, "during the wait the longest time without a call of the robot was "
+                    + time[2] + " ticks: expected one attempt every 5 seconds");
+                helper.setBlock(obstacle, Blocks.AIR);
+            })
+            .thenWaitUntil(() -> check(rig.job().state != State.WAITING, rig.describe()))
+            .thenExecute(() -> rig.state(State.RUNNING))
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(40, 24))
+            .thenSucceed();
+    }
+
+    /**
+     * T05 with T14: a pause and a cancellation during the wait for a free path. Each applies at the next attempt.
+     * The robot does not move while the job is paused or cancelled, also when the obstacle is gone.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t05_pause_and_cancel_during_the_wait(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "t05stop", 64, 1000);
+        BlockPos obstacle = new BlockPos(3, 1, 1);
+        helper.setBlock(obstacle, Blocks.STONE);
+        BlockPos[] stop = new BlockPos[1];
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job().state != State.RUNNING, rig.describe()))
+            .thenExecute(() -> {
+                rig.state(State.WAITING);
+                check(rig.job().cause == Cause.PATH_OBSTRUCTED, rig.describe());
+                stop[0] = rig.robot().turtle.getPosition();
+                rig.runtime.control(rig.actor, rig.id, "pause");
+            })
+            // More than one wait interval: the robot makes its next attempt, sees the pause and stops.
+            .thenIdle(140)
+            .thenExecute(() -> {
+                rig.state(State.PAUSED);
+                helper.setBlock(obstacle, Blocks.AIR);
+            })
+            .thenIdle(140)
+            .thenExecute(() -> {
+                rig.state(State.PAUSED);
+                check(rig.robot().turtle.getPosition().equals(stop[0]) && rig.held() == 24, "the robot moved during the pause: " + rig.describe());
+                helper.setBlock(obstacle, Blocks.STONE);
+                rig.runtime.control(rig.actor, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().cause == Cause.PATH_OBSTRUCTED, rig.describe()))
+            .thenExecute(() -> rig.runtime.control(rig.actor, rig.id, "cancel"))
+            .thenIdle(140)
+            .thenExecute(() -> {
+                rig.state(State.CANCELLED);
+                helper.setBlock(obstacle, Blocks.AIR);
+            })
+            .thenIdle(140)
+            .thenExecute(() -> {
+                rig.state(State.CANCELLED);
+                check(rig.robot().turtle.getPosition().equals(stop[0]) && rig.held() == 24 && rig.job().carried == 24,
+                    "the robot moved after the cancel: " + rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /** T05 for a stock job. The stock module uses the move functions of the transport module, thus it waits in the same way. */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t05_obstacle_keep_stock(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "t05keep", 64, 1000);
+        BlockPos obstacle = new BlockPos(3, 1, 1);
+        rig.begin()
+            .thenExecute(() -> rig.runtime.start(rig.actor, rig.order(MindRuntime.KEEP_STOCK, 24, 0)))
+            // The robot observes the destination first. The obstacle comes after the pickup, between the robot and the destination.
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> helper.setBlock(obstacle, Blocks.STONE))
+            .thenWaitUntil(() -> check(rig.job().state != State.RUNNING, rig.describe()))
+            .thenExecute(() -> {
+                rig.state(State.WAITING);
+                check(rig.job().cause == Cause.PATH_OBSTRUCTED && rig.held() == 24 && rig.coal(rig.dest) == 0, rig.describe());
+                helper.setBlock(obstacle, Blocks.AIR);
+            })
+            .thenWaitUntil(() -> rig.state(State.SATISFIED))
+            .thenExecute(() -> check(rig.coal(rig.dest) == 24 && rig.coal(rig.source) == 40 && rig.held() == 0, rig.describe()))
+            .thenSucceed();
+    }
+
+    /**
+     * T06: no fuel. The fuel does not come back by itself, thus this is a block (D34) with the cause "out of fuel".
+     * The job continues only after the owner gives fuel and a resume.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void t06_no_fuel(GameTestHelper helper) {
+        Actor player = player("t06");
+        Rig rig = new Rig(helper, "t06", 64, 0, player);
+        MinecraftServer server = rig.level.getServer();
         rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> rig.state(State.BLOCKED))
             .thenExecute(() -> {
-                helper.assertBlockPresent(Blocks.STONE, obstacle);
-                check(rig.job().reason.contains("Movement obstructed"), rig.describe());
-                check(rig.held() == 24, rig.describe());
-                helper.setBlock(obstacle, Blocks.AIR);
+                check(rig.job().cause == Cause.OUT_OF_FUEL && rig.job().reason.contains("Out of fuel"), rig.describe());
+                check(rig.coal(rig.source) == 64 && rig.job().carried == 0, rig.describe());
+                String report = Uno.report(server, player);
+                MindCraft.LOGGER.info("t06_no_fuel report: {}", report);
+                check(report.contains("I have no fuel") && !report.contains("Recorded reason"), report);
+                rig.robot().turtle.setFuelLevel(1000);
+            })
+            // The fuel alone does not end the block.
+            .thenIdle(140)
+            .thenExecute(() -> {
+                rig.state(State.BLOCKED);
+                check(rig.coal(rig.source) == 64 && rig.job().carried == 0, rig.describe());
                 rig.runtime.control(rig.actor, rig.id, "resume");
             })
             .thenWaitUntil(() -> rig.state(State.DONE))
@@ -408,21 +596,32 @@ public class MindCraftTests {
             .thenSucceed();
     }
 
-    /** T06: no fuel. The job stops with a reason. It continues after the owner gives fuel. */
+    /** A module reports an impediment of a kind that the runtime does not know. A block without a cause: Uno gives the recorded reason. */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
-    public static void t06_no_fuel(GameTestHelper helper) {
-        Rig rig = new Rig(helper, "t06", 64, 0);
+    public static void t06_impediment_of_an_unknown_kind(GameTestHelper helper) {
+        Actor player = player("t06kind");
+        Rig rig = new Rig(helper, "t06kind", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
         rig.begin()
-            .thenExecute(() -> rig.startJob(24, 0))
-            .thenWaitUntil(() -> rig.state(State.BLOCKED))
             .thenExecute(() -> {
-                check(rig.job().reason.contains("Out of fuel"), rig.describe());
-                check(rig.coal(rig.source) == 64 && rig.job().carried == 0, rig.describe());
-                rig.robot().turtle.setFuelLevel(1000);
-                rig.runtime.control(rig.actor, rig.id, "resume");
+                rig.startJob(24, 0);
+                String state;
+                try {
+                    state = rig.robot().impediment("landslide", "the floor fell at 1 2 3");
+                } catch (dan200.computercraft.api.lua.LuaException e) {
+                    throw new GameTestAssertException("the impediment failed: " + e.getMessage());
+                }
+                check(state.equals("BLOCKED"), "the module got " + state);
+                rig.state(State.BLOCKED);
+                check(rig.job().cause == Cause.NONE && rig.job().reason.equals("landslide: the floor fell at 1 2 3"), rig.describe());
+                String report = Uno.report(server, player);
+                check(report.contains("I am stopped and I need your help. Recorded reason: landslide: the floor fell at 1 2 3."), report);
             })
-            .thenWaitUntil(() -> rig.state(State.DONE))
-            .thenExecute(() -> rig.assertTransferred(40, 24))
+            .thenIdle(60)
+            .thenExecute(() -> {
+                rig.state(State.BLOCKED);
+                check(rig.coal(rig.source) == 64 && rig.job().carried == 0, rig.describe());
+            })
             .thenSucceed();
     }
 
@@ -552,7 +751,8 @@ public class MindCraftTests {
     /**
      * T12: a second turtle with the same computer ID starts. Only the newest session has authority.
      * The result depends on the moment. The second turtle can finish the job, find a load mismatch,
-     * or find the first turtle on the dock. In each case the first turtle must stop and no coal must be lost.
+     * or find the first turtle on its path. Then the second turtle waits for a free path, without an end (D34).
+     * In each case the first turtle must stop and no coal must be lost.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t12_second_session(GameTestHelper helper) {
@@ -565,7 +765,7 @@ public class MindCraftTests {
                 placeTurtle(helper, new BlockPos(2, 1, 0), rig.id, 1000, null);
             })
             .thenWaitUntil(() -> check(rig.robot() != null && rig.robot() != first[0], "the second turtle is not running yet"))
-            .thenWaitUntil(() -> check(!rig.job().state.active(), rig.describe()))
+            .thenWaitUntil(() -> check(!rig.job().state.active() || rig.job().cause == Cause.PATH_OBSTRUCTED, rig.describe()))
             .thenIdle(100)
             .thenExecute(() -> {
                 int total = rig.coal(rig.source) + rig.coal(rig.dest) + first[0].held(Items.COAL) + rig.held();
@@ -736,7 +936,7 @@ public class MindCraftTests {
             .thenWaitUntil(() -> rig.state(State.SATISFIED))
             .thenExecute(() -> {
                 check(rig.coal(rig.dest) == 64 && rig.coal(rig.source) == 74 && rig.held() == 0, rig.describe());
-                check(rig.job().delivered == 54 && rig.job().executor.equals("keep_stock@2"), rig.describe());
+                check(rig.job().delivered == 54 && rig.job().executor.equals("keep_stock@3"), rig.describe());
                 // 2. Something uses 20 pieces.
                 dest.removeItem(0, 20);
             })
@@ -1751,8 +1951,10 @@ public class MindCraftTests {
                 check(rig.coal(rig.dest) == 10 && rig.held() == 54 && rig.coal(rig.source) == 0,
                     "destination " + rig.coal(rig.dest) + ", robot " + rig.held() + ". " + rig.describe());
                 rig.state(State.BLOCKED);
+                check(rig.job().cause == Cause.LOAD_ABOVE_QUANTITY, rig.describe());
                 check(rig.job().delivered == 10 && rig.job().carried == 54 && rig.job().reason.contains("54 stay on board"), rig.describe());
                 check(report.contains("I delivered 10 items.") && report.contains("54 stay on board") && !report.contains("The job is complete"), report);
+                check(!report.contains("Recorded reason"), "the sentence must come from the cause: " + report);
             })
             .thenIdle(140)
             .thenExecute(() -> {
@@ -1828,6 +2030,7 @@ public class MindCraftTests {
                 check(rig.coal(rig.dest) == 70 && rig.held() == 14 && rig.coal(rig.source) == 40,
                     "destination " + rig.coal(rig.dest) + ", robot " + rig.held() + ". " + rig.describe());
                 rig.state(State.BLOCKED);
+                check(rig.job().cause == Cause.LOAD_ABOVE_QUANTITY, rig.describe());
                 check(rig.job().delivered == 10 && rig.job().carried == 14, rig.describe());
                 check(report.contains("I delivered 10 items.") && report.contains("14 stay on board"), report);
             })
@@ -1854,6 +2057,7 @@ public class MindCraftTests {
                 String report = Uno.report(server, player);
                 MindCraft.LOGGER.info("t16_quantity_below_delivered report: {}", report);
                 rig.state(State.BLOCKED);
+                check(rig.job().cause == Cause.LOAD_ABOVE_QUANTITY, rig.describe());
                 check(rig.coal(rig.dest) == 64 && rig.held() == 20 && rig.coal(rig.source) == 40, rig.describe());
                 check(rig.job().delivered == 4 && rig.job().carried == 20, rig.describe());
                 check(report.contains("carry 2 items") && report.contains("I delivered 4 items. That is more than the quantity"), report);
@@ -1996,7 +2200,7 @@ public class MindCraftTests {
             .thenWaitUntil(() -> check(rig.job().state == State.SATISFIED || rig.job().state == State.BLOCKED, rig.describe()))
             .thenExecute(() -> {
                 rig.state(State.SATISFIED);
-                check(rig.job().executor.equals("keep_stock@2") && rig.coal(rig.dest) == 16 && rig.coal(rig.source) == 48, rig.describe());
+                check(rig.job().executor.equals("keep_stock@3") && rig.coal(rig.dest) == 16 && rig.coal(rig.source) == 48, rig.describe());
             })
             .thenSucceed();
     }

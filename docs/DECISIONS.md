@@ -41,6 +41,7 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Counterexample:** the API is present on each turtle, also if the player does not want it. The documentation of CC: Tweaked prefers peripherals to global APIs.
 - **Cost of change:** low. The same Lua functions can move to a peripheral (alternative 2). The Lua module changes only the way it gets the object.
 - **Discard condition:** the survival progression needs an item that the player must build to connect a turtle to Uno. Then alternative 2 is better.
+- **Design discussion of 2026-11-13:** a turtle addon is planned for Lua customization (D36). It is proposed as an addition: this API stays on each turtle. Thus the discard condition does not apply yet.
 
 ## D03 — Lua agent in the ROM, started from `rom/autorun`
 
@@ -90,6 +91,19 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Check of the station:** at the registration and at each transfer the runtime checks that an inventory is at the position. If it is missing, the job goes to `BLOCKED` (T04).
 - **Counterexample:** a chest that was replaced at the same position is the same station. The robot always knows its exact position, without GPS: this is a product choice to review for the survival progression.
 - **Discard condition:** a real path is not straight. Then a registered path with waypoints or a path search is necessary.
+- **Fact from a code examination, 2026-11-13:** the move step accepts each move that brings the robot nearer to the target. A path with one corner is possible. No test has one. See D28.
+- **Decided on 2026-11-13, not implemented:** an obstacle becomes a wait, not a block. See D34.
+
+### D06.1 — A computed route
+
+**Status:** proposed on 2026-11-13, from an idea of the project owner. Deferred: see D27.
+
+- **Idea:** the runtime calculates a route one time and keeps it. The route stays the same until the robot finds that it is wrong.
+- **Moment of the calculation:** when Uno proposes a job. A route has two ends, and a station gives only one. The robot can also start from any position (T12). The validation of an order already occurs at that moment. Uno can answer "I find no free route from 'depot' to 'furnace'" before the start.
+- **When a route is wrong:** a short obstacle does not make it wrong: the wait of D34 applies. After that, one new calculation. If that also fails, the job goes to `BLOCKED` with the reason. Without this limit, a door that opens and closes makes a loop.
+- **Advantage:** the robot always uses the same route. The player learns it and keeps it free. The player teaches nothing, unlike registered waypoints.
+- **Counterexample:** the calculation reads blocks that no robot observed. This needs a product rule, for example "Uno knows a route from the moment of its calculation". The new calculation reads the world again when the player is not there.
+- **Cost:** a search with limits of volume and of nodes, only in loaded areas and only through air. The route saved in the job. Tests that build their own terrain (D14). The four restart phases again.
 
 ## D07 — Inventories are observed only from the dock
 
@@ -133,6 +147,7 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Forced stop:** the runtime can turn off the computer with the command `/computercraft shutdown #<id>`. It also works with a program that does not cooperate.
 - **Evidence:** T14, `s0_probe_hard_stop`.
 - **Limit:** after a cancellation, a new job for the same item is refused until the player empties the turtle.
+- **Decided on 2026-11-13, not implemented:** a new job will adopt the load on board. Then this limit ends. See D34.
 - **Disproved assumption:** "`shutdown` followed by `turn-on` restarts the computer". CC: Tweaked has no restart command. It ignores `turn-on` while the shutdown is in progress and ignores `shutdown` while the computer starts (`ComputerExecutor.queueStart` and `queueStop` in the sources). In the third test run, 3 turtles of 20 did not start again for this reason.
 - **Correction:** the runtime repeats `shutdown` at each tick until the old session ends. Then it repeats `turn-on` until a new session starts. The limit is 30 seconds of real time.
 
@@ -155,6 +170,7 @@ Facts found on the real Lua machine (`s0_probe_environment`, `s0_probe_no_yield`
 - **Consequence:** the limits of a job apply only to the actions that go through `mindcraft.take` and `mindcraft.give`. A Lua program with access to the `turtle` API can go around them. The `transport` module is code of this project and uses `turtle` only to move.
 - **Consequence:** Uno must not run arbitrary Lua until a managed environment passes dedicated tests (T17). The environment must give copies of the libraries, a restricted `load`, and no access to `getfenv`, `debug` and `getmetatable`.
 - **Not verified:** the effect of a loop without `yield` on the other computers with `computer_threads = 1`. During the tests the other robots continued to work, but there is no measurement.
+- **Decided on 2026-11-13, not implemented:** Uno can propose Lua that the owner reads and confirms, on a turtle with the addon. The rule becomes: Uno never runs Lua that the owner did not read and confirm. The managed environment stays the condition for code that runs without a confirmation. See D36.
 
 ## D11 — Ownership and permissions
 
@@ -183,6 +199,21 @@ Facts found on the real Lua machine (`s0_probe_environment`, `s0_probe_no_yield`
 - **Provisional choice:** the work occurs only in areas that are already active. The mod does not load chunks.
 - **Partial evidence:** after a server restart, in a chunk that is kept loaded, the robot continues without connected players (T11).
 - **Not verified:** unload and reload of a chunk during a transport. The explicit suspension outside active areas is not implemented: the job stays `RUNNING` and `status` shows the robot as not loaded.
+- **Decided on 2026-11-13:** work while the player is away is wanted. In the next play session the project owner gives `/forceload` at the setup. The mod still loads no chunk. See D28.
+
+### D13.1 — The satellite
+
+**Status:** proposed on 2026-11-13, from an idea of the project owner. Deferred: see D27.
+
+- **Idea:** an item that the player crafts. One satellite keeps one chunk active, and the player chooses the chunk. More satellites keep more chunks active.
+- **Reason:** it answers the limits that the brief asks for chunk loading (6.4). One satellite is one chunk. The number of satellites is the limit. The player decides where the area of Uno grows.
+- **Use before it exists:** `/forceload` gives the same effect without code. The sessions with it show if this work is important.
+- **Open point 1, the choice of the chunk:** an item that the player uses in the chunk, with a list on the tablet to release it. Or a block on the ground: visible, removed by breaking it, less code, but a bad fit for the name.
+- **Open point 2, the borders:** a chunk is 16 by 16 blocks, and its borders are not visible. A corridor can be across two chunks. With one satellite the robot stops at the border when the player is away ("Cannot leave loaded world"). Uno could warn in the proposal: "the dock of 'furnace' is outside the area that I keep active".
+- **Open point 3, the recipe:** a recipe starts the survival progression. The mod has no recipe now. At the start the item can come as the tablet (D18).
+- **Fact from a code examination:** Forge 47.4.28 has `ForgeChunkManager.forceChunk`. It ties a forced chunk to an owner and saves it with the world.
+- **Alternative that was considered:** the projector keeps its own area active. It uses a block, an owner and a test that exist. It does not cover a far place without a projector.
+- **Counterexample:** in multiplayer each player loads areas of the server. A limit of the server operator is necessary (D37).
 
 ## D14 — World and time of the test server
 
@@ -235,6 +266,7 @@ Definition of availability:
 - **Counterexample:** "at least 64" is a target, not a guarantee. Between two trips the stock can go below the level. While the robot waits for material at the source it does not observe the destination. A job occupies a whole robot, also when the stock is sufficient.
 - **Counterexample:** two jobs on the same source each respect their own reserve. They do not coordinate.
 - **Discard condition:** a job needs more than one robot, or a robot needs more than one job. Then a common coordination with reservations is necessary.
+- **Design discussion of 2026-11-13:** the second behaviour needs more than one job for a robot. The discard condition applies in increment C. See D35.
 
 ### D16.1 — A lower quantity while a load is on board
 
@@ -280,6 +312,7 @@ Example of a report produced in the test, with the real data of the job:
 - **One request at a time:** Uno accepts only one written request in progress for each player. To the second it answers "I am still working on your previous request." Reason: a provider can cost money for each request. The rule applies to each source of requests. It does not depend on a time limit any more: a request ends when its answer arrives, or when its own time limit gives the answer. Evidence: tests `t18_claude_provider` and `t22_confirm_only_the_shown_proposal`.
 - **A request without a complete order is not a failure:** a provider signals it with `IllegalArgumentException`. Uno answers "I cannot propose a job: …". Each other error of a provider is a failure: "I cannot interpret the request now (…)". Evidence: tests `t18_provider_failures` and `t18_claude_provider`.
 - **Decided by the project owner on 2026-11-12:** the first provider with a language model is Claude. See D21.
+- **Decided on 2026-11-13, not implemented:** a provider will give an action from a closed list, not only an order (D29). Uno will speak first to warn (D30). The model will write the answers to written requests, and this fixed template stays as the fallback (D32).
 
 ## D18 — Contact points: tablet and projector, one native screen
 
@@ -371,6 +404,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Not verified:** the load of the `-all` jar on an installed Forge. The coexistence with other mods that bring Kotlin or Jackson. A favourable sign: in the development game the same libraries load as modules together with those of Forge.
 - **Not done:** a check of the license notices of the 25 libraries inside the `-all` jar. The repository does not contain those libraries. Only a built `-all` jar does.
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
+- **Decided on 2026-11-13, not implemented:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). By default only an operator will use Claude, with a session limit and a counter on the screen (D33).
 
 ## D22 — License: MIT
 
@@ -455,3 +489,221 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Evidence:** test `t15_next_job_with_another_module`: a transport ends and a `keep_stock` job starts in the same tick. Before the correction the job went to `BLOCKED` with the module error. After it, the job reaches `SATISFIED` with the executor `keep_stock@2`.
 - **Limit:** the check is in the Lua modules of the mod. The functions `take`, `give`, `observe` and `block` carry no job ID. One tick stays between the last state reading of a run and its next call. In that tick a new job can get a call of the old run, for example its impediment.
 - **Proposed for T15 in S3:** each call of a module names its job, and the runtime refuses a call for a different job.
+
+## D27 — Plan after the first review: four increments
+
+**Status:** decided by the project owner on 2026-11-13, in a design discussion. Not implemented.
+
+- **Problem:** S3 of the brief is visual composition and Lua customization. After S2, Uno can do one thing with words: create a job. A change, a pause, a question about the state and a report are buttons or commands. Uno never speaks first. An editor does not change this.
+- **Decision:** the work on Uno comes before S3. S3 is divided. The order is A, B, C, D.
+
+| Increment | Content | Decisions |
+| --- | --- | --- |
+| A — Uno understands you and warns you | Actions from words, the job diary, notices and a summary with fixed templates, an obstacle as a wait, protection of the record, limits on the model calls, a test of a path with a corner | D29, D30, D31, D33, D34, D37 |
+| B — Uno has a voice | The sentence of the model with its checks, the choice of the model by a measurement, a load on board in a new job, the low fuel notice | D32, D33, D34 |
+| C — Two duties | The `drain` module, parameters that each module declares, a round of duties on one robot | D35 |
+| D — Lua together | The turtle addon, the shared library, a custom step, code that Uno proposes | D36 |
+
+- **Exit of A:** the automatic in-game tests pass. The project owner plays one session with a written checklist. The steps and the results are recorded in `TEST_RESULTS.md`. In that session, after the setup, the project owner uses no `/mindcraft` command.
+- **Reason for A before B:** each part of A has a test that can be repeated, and A needs no paid run. B needs the fixed templates of A anyway: they are its fallback.
+- **In A the model routes and the server speaks.** This is the order of the work. It does not change D32.
+- **Cost:** the order of the brief changes. The requirement "both the player and Uno can write and change programs" (brief 2.1) stays without evidence until D. The `Order` record keeps the shape of a transport until C.
+- **Counterexample:** the visual level is a candidate for the main level in the brief (2.2). After this plan it has no increment. Its seed is the round of C, described as a list.
+
+Deferred without a date. Each item names the condition that opens it again.
+
+| Deferred | It opens again when |
+| --- | --- |
+| Visual editor | The round of C exists, and a list cannot describe it any more |
+| Managed Lua environment and T17 | Uno must run code without a confirmation of the owner |
+| Multiplayer | The project owner wants a second player. See the gates in D37 |
+| Chunk loading by the mod (the satellite, D13) | The sessions with `/forceload` show that work without the player near is important |
+| Computed route (D06) | The corridor is a problem, or Uno must send a robot to a place |
+| Inspection round | "I am coming to check" becomes necessary |
+| Reserve that belongs to a station | Two robots use the same station |
+| Spontaneous voice of the model, remedies that Uno proposes, conversation context | A spending limit exists that the server operator can set (D33) |
+| The `-all` jar on an installed Forge, recipes, the language of the voice | The project owner wants to play outside the development client, or the survival progression starts |
+
+## D28 — The next play session
+
+**Status:** decided by the project owner on 2026-11-13. The facts below come from code examinations. No test supports them.
+
+- **Decision:**
+  - One player: the project owner. The development client (`gradlew runClient`). The Anthropic key in the environment of the game.
+  - A normal world. A prepared corner of a base: two chests and a corridor that the player keeps free.
+  - No path search. The rule is "the corridor is part of the base".
+  - The project owner gives `/forceload` one time at the setup, for the chunks of the corridor. The mod loads no chunk.
+  - A second player and the installed jar are deferred (D27).
+- **Facts from code examinations:**
+  - The move step of `transport.lua` is not "straight only". It tries x, then z, then y, and accepts each move that brings the robot nearer to the target. Thus a path with one corner, or a stair, is possible. A path that needs a move away from the target is not.
+  - The server configuration of the test server has `can_push = true`. The comment of the option says that a turtle pushes an entity out of the way if there is space.
+  - The move command of CC: Tweaked contains the message "Cannot leave loaded world".
+  - `RestartTests` keeps its chunk loaded with `setChunkForced`. T11 shows that the robot works there without a connected player.
+- **Not verified:** a path with a corner. A player on the path. `/forceload` in a client with one player. A robot at the edge of the loaded area.
+- **Counterexample:** `/forceload` needs commands enabled. The mod does not know the forced area. If the player forgets it, the robot stops as before and the job stays `RUNNING`.
+- **Counterexample:** if the key is in the environment of the user, the development client uses Claude with no other step. Then each written request is a paid call (D21).
+
+## D29 — Uno acts on words through a closed list of actions
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A.
+
+- **Problem:** with the code of S2, three requests fail.
+  - "Leave only 16 in the depot", for an open job. The provider can only give a new order, and the robot is busy. Uno refuses.
+  - "How is the furnace?" The provider answers that this is not an order.
+  - A robot stops. Uno says nothing. Only the colour of the hologram changes.
+- **Decision:** a provider gives one action from a closed list, with its parameters: start, change, pause, resume, cancel, report, none. The server finds the job from the station name or the robot number. The provider already gets these (D17).
+- **Confirmation:** Uno does immediately only an action that stops or reads: pause and report. Each other action becomes a proposal. The server writes the text of each proposal, never the model. The player confirms as in D23.
+- **Proposed detail:** a proposal that is about a job carries the job ID and the revision, as the actions of the screen do (D19).
+- **Buttons and commands stay.** They are the control surface when the provider fails.
+- **Cost:** each change needs two steps. D17 already names this friction.
+- **Change:** in D17 a provider gives only an order. D23 holds: one proposal for each player, the newest.
+
+## D30 — Initiative: Uno warns
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A. The numbers are initial values, **proposed**.
+
+- **Decision:** Uno speaks first only to warn. It proposes no remedy. It starts no action by itself, except the wait of D34.
+- **Attention rule:**
+
+| Event | Notice |
+| --- | --- |
+| A job goes to `BLOCKED`, `RECOVERY` or `DONE` | One line in the chat of the owner |
+| A job stays `WAITING` for 5 minutes | One line, one time |
+| `RUNNING`, `SATISFIED` | None |
+
+- **Summary:** when the owner opens the screen, Uno gives a summary of the events since the owner last opened a contact point. The source is the diary (D31).
+- **Text:** each notice and the summary come from a fixed template, with the data of the record. They call no model (D33). Thus they also work without a key, and when the service is down.
+- **Deferred:** remedies that Uno proposes. Actions that Uno starts by itself. See D27.
+- **Counterexample:** a `keep_stock` job changes often between `RUNNING`, `WAITING` and `SATISFIED`. A notice for each change is not acceptable. This is the reason for the rule.
+- **Counterexample:** after B, Uno has two voices. The notices are flatter than the answers.
+
+## D31 — Memory: the job diary
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A.
+
+- **Problem:** the record keeps one job for each robot: the last. A new job replaces the job before it (`MindRuntime.start`). Uno has no history. The summary of D30 has no source.
+- **Decision:** the runtime writes a diary: each change of the state of a job, with the time, the cause and the quantities. Minecraft saves the diary with the world. The diary has a size limit. When old entries are removed, Uno says where its memory starts.
+- **Reason:** it is a verifiable memory in the sense of the brief (2.4). Each line comes from the runtime.
+- **Deferred:** permanent decisions, for example a reserve that belongs to a station. The context of the conversation for the model.
+- **Cost:** the owner must write a complete sentence for each change. Uno does not know the sentence before it.
+- **Not decided:** the size limit.
+
+## D32 — The model speaks, the server checks
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment B.
+
+- **Decision:** the model writes the sentences of Uno when the player writes to Uno.
+- **Alternative that the project owner did not choose:** the model gives only the action, and the server writes each sentence from fixed templates. It was the recommendation in the discussion. Its advantages: no sentence without evidence, no new data outside the server, tests that can be repeated.
+- **One call:** the provider gives the action (D29), its parameters and one sentence.
+- **Check of the numbers:** each number in the sentence must be one of the numbers that the server sent. If the check fails, Uno uses the fixed template. The same applies if the model does not answer.
+- **Uncertain states:** `RECOVERY`, a robot that is not running, an old observation. The server does not send the uncertain numbers to the model. It sends "uncertain result" and the reason. The fixed sentence about the uncertainty comes first. The sentence of the model follows.
+- **When the model speaks:** only as the answer to a written request. Notices and the summary are fixed templates (D30).
+- **Data that leave the server:** the record of the jobs of the player (parameters, state, cause, totals, observed stocks with their age) and lines of the diary. No coordinates. For this, `BLOCKED` gets causes with fixed values (D34). This changes D21. The line on the screen about Claude changes too.
+- **Limit of the check:** it stops an invented number. It does not stop a wrong description of a state with true numbers. Example: a job is `BLOCKED` with 24 items on board and a quantity of 64. The model writes "All done, I delivered 64". The check passes. The panel of the job next to the sentence shows the state.
+- **Cost:** a test cannot repeat the sentences of the model. Automatic tests use providers written in the tests. A test with the real service takes a sample of the T21 case.
+- **Cost:** the voice has no memory of the sentence before it (D31). It must say so and must not invent.
+- **Open:** the language of the voice. D15 says English.
+- **Review condition:** the tests with the real service show sentences that contradict the record.
+
+## D33 — The model and its cost
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
+
+The model. Increment B.
+
+- **One model:** one model routes and speaks. The start is Claude Haiku 5.5.
+- **Measurement:** the test with the real service runs on Haiku 5.5, Sonnet 5.5 and Opus 5.5 with the same requests. It compares the orders, the sentences and the times. Each run costs money and needs the consent of the project owner.
+- **Setting:** the model becomes a setting. It is not a constant in the code any more. Each request writes the used tokens in the server log.
+- **In A:** the model of D21 stays. The action list of D29 is not verified with the real service until B.
+- **By kind of operation:** when Uno writes code (D36), a different model can do that operation. The kind of operation selects the model. No model judges the difficulty of a request.
+- **Discarded for now:** a choice of the model by the difficulty of each request. It needs a judge: one more call, or more rules.
+
+Reference prices, from the model table of the Anthropic API documentation dated 2026-11-03:
+
+| Model | Input, $ for 1 million tokens | Output, $ for 1 million tokens | Refusal |
+| --- | --- | --- | --- |
+| Opus 5.5 (D21) | 4.00 | 20.00 | Server-side fallback |
+| Sonnet 5.5 | 2.00 | 10.00 | Server-side fallback |
+| Haiku 5.5 | 0.10 | 0.50 | No server-side fallback |
+
+- **Estimate:** with 1500 input tokens and 500 output tokens for each request, 100 requests cost about 1.60 $ with Opus 5.5 and about 0.04 $ with Haiku 5.5. The token numbers are an assumption.
+- **Consequence for refusals:** with Haiku 5.5 a refusal has no fallback. Uno says that the model declined.
+
+Limits on the calls. Increment A.
+
+- **Gate:** no call to the model without an action of the player, until a spending limit exists that the server operator can set. The gate covers a spontaneous voice, remedies that Uno proposes, and code that Uno writes by its own initiative.
+- **Session limit:** a maximum number of requests for each player in one server session. The number is fixed in the code.
+- **Counter:** the screen shows the requests and the tokens of the session.
+- **Operators only:** by default only an operator uses Claude. Other players use the fixed rules.
+- **Reason:** `/uno ask` needs no permission, and has no counter and no limit other than one request at a time (code examination). A command block that repeats the command as a player can make one request after the other. This is deduced from the code. It was not tried.
+- **Cost:** a fixed session limit can stop a long session. It becomes a setting when multiplayer opens.
+- **Not decided:** the number of the session limit.
+
+## D34 — Waits, blocks and a load on board
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. It changes a verified behaviour of D06 and replaces a limit of D09.
+
+- **Rule:** a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
+- **Obstacle (increment A):** a robot that cannot move goes to `WAITING` with a cause of its own, and tries again slowly. The attention rule of D30 applies. Now the job goes to `BLOCKED` after 10 attempts and stays there until `resume`, also after the obstacle goes away. The test `t05_obstacle` expects `BLOCKED`: it must change.
+- **Causes of `BLOCKED` (increment A):** `BLOCKED` gets causes with fixed values, as `WAITING` in D25. Uno chooses its sentence from the cause. The reason with the coordinates stays in the record. It does not go to the model (D32).
+- **Fuel (increment B):** fuel at zero stays `BLOCKED`. The robot tells the runtime its fuel level at each contact. Uno warns one time when the fuel is sufficient for few trips. The number of trips comes from the distance between the docks: it is approximate.
+- **A load on board (increment B):** a new job adopts the load that the robot already holds, if it is the item of the job. The proposal says so: "The robot holds 24: I count them as the first load." One confirmation cancels the old job and starts the new one. This replaces the limit of D09.
+- **Until B:** a change of the destination with a load on board is refused, as now.
+- **Counterexample:** the runtime does not know where a load comes from. If the owner keeps coal in the turtle as fuel, a coal job adopts it and delivers it. The proposal shows the number.
+- **Counterexample:** two robots that face each other in a corridor one block wide both wait, without an end. This is deduced from the code. It was not tried.
+- **Not decided:** the time between two attempts of a robot that cannot move. How many trips are "few". When an observation is "old" (D32).
+
+## D35 — The second behaviour and the first composition
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment C. The English names `drain` and "round" are working names.
+
+- **Second behaviour:** `drain` (in the discussion: "svuota"). The robot keeps one inventory empty of an item and carries the items to a different station. Example: the ingots from the chest of the furnaces to the depot. With `keep_stock` it closes the cycle of the furnaces.
+- **Reason:** it makes the first real conflict: two duties without an end, and one robot. That conflict is the reason for a composition. A second behaviour that is only similar to a transport does not justify an editor.
+- **Parameters:** "quantity" already has two meanings: the total to deliver, and the level to keep (D16). `drain` needs a third: the smallest batch that starts a trip. Thus each module declares its parameters, as the brief asks in 5.1. The `Order` record with fixed fields ends here.
+- **Alternatives that were not chosen:** "return the load": D34 covers most of the need. An inspection round: it moves no item, and it needs observations that belong to a station, not to a job. See D27.
+- **First composition:** a round (in the discussion: "turno"): an ordered list of duties on one robot. The robot changes duty only with no load on board, and only when the current duty has nothing to do. The list is a structured definition. The screen can show a list with the widgets of D19. It cannot show a graph.
+- **Consequence:** the discard condition of D16 applies: "a robot needs more than one job". Now each job has its robot as the key.
+- **Not chosen:** two robots with one job each in one corridor. See the last counterexample of D34.
+- **Until C:** one duty at a time. The player changes it with words.
+- **Cost:** the next play session does not show the whole cycle of the furnaces.
+
+## D36 — Lua customization: a turtle addon, a shared library, code that Uno proposes
+
+**Status:** the direction is decided by the project owner on 2026-11-13. Two points are **proposed**: they are a reading of the answer of the project owner, without an explicit confirmation. Not implemented. Increment D. The API facts come from a code examination.
+
+- **Decision:** Lua customization enters with an addon for turtles: a turtle upgrade. Through the addon, Uno can write Lua for the turtle, and the turtles share the existing programs.
+- **Custom step:** a Lua program that a round (D35) calls between two duties. It is not managed: inside the step the limits of a job do not apply (D10). The comparison of the real load with the record still applies (D08): if the step changes the load of a job, the job goes to `RECOVERY`. The runtime records the version of the step at each call. First example, distributed with the mod: refuel from a fuel chest.
+- **Code that Uno proposes:** Uno writes a draft. The screen shows the code. The step runs only after the owner confirms. From that moment the step belongs to the owner. Only a turtle with the addon runs it.
+- **Amended rule of D10:** Uno never runs Lua that the owner did not read and confirm. A managed environment with the tests T17 stays the condition for each code that runs without a confirmation.
+- **Change to the brief (4.2):** the brief asks for a verified execution environment before any Lua that Uno generates. The confirmation of the owner on each code replaces that condition, only on a turtle with the addon.
+- **Proposed, reading 1:** the programs are in a library of the runtime, saved with the world, one for each owner. A turtle with the addon sees the library as a directory. Uno can list the programs, describe them and propose one. It generates no code for this.
+- **Proposed, reading 2:** the addon is an addition. A turtle without it works as now, with the modules of the mod. Thus D02 does not open again. The addon marks the turtles where custom code can run. It has no recipe at the start, as the tablet (D18).
+- **Facts from a code examination of the CC: Tweaked jar:** the public API has `IComputerAccess.mount` and `mountWritable`, `ComputerCraftAPI.createSaveDirMount` and `ITurtleUpgrade`. The type `IComputerSystem`, which the `mindcraft` API already gets, refers to `IComputerAccess`. Not tried: a shared directory, and an upgrade, in this mod.
+- **Counterexample:** a player who cannot read Lua confirms without understanding. One wrong line passes, for example `turtle.dig()` in front of a chest. The mod declares no guarantee inside a step.
+- **Counterexample:** a turtle has two sides for upgrades. The addon uses one.
+- **Counterexample:** in multiplayer the code can change the constructions of other players. See D37.
+- **Cost:** the owner and Uno change the same program. The library must detect conflicts (T16). To write code probably needs a stronger model than to speak (D33). This is not measured.
+- **Open:** where the owner writes Lua: the agent holds the terminal of an enrolled turtle (D03). The list of the functions of a managed environment.
+
+## D37 — Protection of the record, one player only, gates for multiplayer
+
+**Status:** decided by the project owner on 2026-11-13. Not implemented.
+
+- **Atomic write (increment A):** the runtime writes a temporary file and then puts it in the place of `mindcraft.dat`.
+- **Reason:** D08.1 says that a stop during the write can corrupt the file. Then the runtime loses stations, robots and jobs. After D31 the file also holds the memory of Uno. With work while the player is away (D28), more writes occur that nobody sees.
+- **Verification:** no automatic test stops the process during a write. The evidence will be a code examination only.
+- **Gate for two robots:** before two robots use the same station, a reserve must belong to the station (deferred in D31). A round on one robot does not need it: its duties are in sequence.
+- **One player only:** the mod is for one player now. The README says so.
+- **Invariant, from increment A on:** each new kind of data (the diary, the notices, the proposals of a change, the library) has an owner, goes through the same check of the actor, and has a test of the T19 kind.
+
+Gates before a second player:
+
+1. Transfers that respect the protections of the server. The runtime moves the items without the turtle actions, and a protection mod does not see them (D05, not verified).
+2. A rule for the ownership of a station. A chest has no owner (D11).
+3. A spending limit for each player (D33).
+4. The permissions, tried with a real client that is not an operator.
+5. A limit on the chunks that stay loaded (D13).
+6. Lua that Uno writes (D36).
+7. The data that a hologram shows (D20).
+
+- **Cost:** the criterion of the brief "an interlocutor does not automatically get information or control of the jobs of other players" (2.4) stays tested only with actors that the tests build.

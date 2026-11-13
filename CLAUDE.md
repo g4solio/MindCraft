@@ -1,6 +1,7 @@
 # MindCraft
 
 The vision and the status of the choices are in [docs/MINDCRAFT_CLAUDE_BRIEF.md](docs/MINDCRAFT_CLAUDE_BRIEF.md). Read it before you work.
+The plan of the increments after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 - The repository is public. English is its base language: code, comments, documents, in-game text and commit messages. See D15 in [docs/DECISIONS.md](docs/DECISIONS.md).
 - Speak with the project owner in Italian.

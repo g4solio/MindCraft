@@ -302,6 +302,19 @@ Changes to the older tests:
 - `s1_transfer` and `s2_keep_stock`: the module versions are `transport@2` and `keep_stock@2`.
 - `t18_claude_provider`, second change: the first of two requests in the same tick now has a provider that waits for the test. See run 28.
 
+## Design discussion of 2026-11-13 — code examinations, no test
+
+No test ran in this discussion. The facts below come from code examinations. They support D28, D33, D34, D36 and the proposals D06.1 and D13.1.
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `can_push = true`. The comment of the option says that turtles "push entities out of the way instead of stopping if there is space to do so" | `computercraft-server.toml` in the world of the test server | That a robot pushes a player in a corridor. Not tried |
+| The move command contains the message "Cannot leave loaded world" | The text constants of `TurtleMoveCommand` in the CC: Tweaked jar | The behaviour of a robot of this mod at the edge of a loaded area |
+| The move step tries x, then z, then y. It accepts each move that brings the robot nearer to the target | `transport.lua`, the first function `step` | That a path with a corner works. No test has one |
+| Forge has `ForgeChunkManager.forceChunk`. The restart test keeps its chunk loaded with `setChunkForced` | The Forge 47.4.28 jar, `RestartTests.java` | `/forceload` in a client |
+| The public API of CC: Tweaked has `IComputerAccess.mount`, `mountWritable`, `ComputerCraftAPI.createSaveDirMount` and `ITurtleUpgrade` | The CC: Tweaked 1.121.0 jar | That a shared directory or a turtle upgrade works in this mod |
+| `/uno ask` has no permission requirement, no counter, and no limit other than one request at a time for each player | `MindCraft.java`, `Uno.java` | The rate of requests that a command block can make |
+
 ## Manual test in the game
 
 Date: 2026-11-12. Executor: the project owner, with the development client (`gradlew runClient`) and the procedure of the README.
@@ -332,7 +345,10 @@ Third manual test, on the projector and its hologram:
 | The `/mindcraft` commands sent by a real client without operator permissions | The manual test uses a world with commands enabled. Thus the player is an operator. The `status` and `cancel` commands are tested with a player entity of the test system (`t19_status_command`). The other commands are tested only at the level of the runtime (T19) |
 | T11: unload and reload of a chunk during the transport | It needs a player or forced chunk loading |
 | T11: sudden stop on a normal server | The test server has no idle time in the tick. A normal server can write chunks to disk at different moments |
-| T05: a player on the path | It needs a client |
+| T05: a player on the path | It needs a client. The configuration says that a turtle pushes an entity if there is space (`can_push = true`). Not tried |
+| A path with one corner or a stair | The rig is straight. The move step should permit it (code examination). Planned for increment A (D27) |
+| `/forceload` by a player in a client, and a robot that works while the player is far | It needs a person at the game. Planned for the next play session (D28) |
+| Two robots in one corridor that is one block wide | Outside the rig. From the code, each robot is an obstacle for the other |
 | T08: delayed confirmation | Not applicable: the runtime and the turtle are in the same process, without network messages |
 | Inventory not loaded (`WAITING` with unknown stock) in a real area that is not loaded | One test reaches the branch with an artificial station record (`t21_report_inventory_not_loaded`). No test unloads a chunk |
 | A change of world in a client: two servers, one after the other, in one Java process | It needs a person at the game. The logic is tested with an artificial session change (`t23_state_of_an_earlier_session`). See D24 |

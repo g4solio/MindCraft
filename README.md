@@ -6,6 +6,8 @@ MindCraft is an addon of [CC: Tweaked](https://tweaked.cc) for Minecraft 1.20.1 
 The player works together with **Uno**, an intelligence that acts in the world through turtles.
 
 Status: increments S0, S1 and S2 of the [brief](docs/MINDCRAFT_CLAUDE_BRIEF.md). S3 did not start. This is an early version, not a release.
+The plan after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md).
+The mod is for one player now. Do not open the world to other players: see D37 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 What this version contains:
 

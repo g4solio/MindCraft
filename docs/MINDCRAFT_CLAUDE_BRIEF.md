@@ -3,6 +3,7 @@
 Date: 11 November 2026. Status: product proposal and initial plan, with assumptions to verify.
 
 > This is the English translation of the brief. The project owner wrote the original in Italian. Decisions made after that date are in [DECISIONS.md](DECISIONS.md).
+> The plan after S2 changed on 2026-11-13: see D27 in [DECISIONS.md](DECISIONS.md).
 
 This document contains the context that is necessary to continue a design conversation and to start the development. It does not state that a repository, a prototype or passed tests exist. The name of the project is **MindCraft**. The identity of the central intelligence is **Uno**. The project owner confirmed these names and the experience reference in section 2.4.
 

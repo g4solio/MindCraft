@@ -201,13 +201,16 @@ It also reads the same request in Italian, the first language of this project.
 | State | Meaning | Who unblocks it |
 | --- | --- | --- |
 | `RUNNING` | The robot works | |
-| `WAITING` | The source has no material above the reserve, the destination is full, the robot is full, or the area of an inventory is not loaded. The runtime records which one. The robot tries again each 5 seconds | It unblocks by itself |
+| `WAITING` | The source has no material above the reserve, the destination is full, the robot is full, the area of an inventory is not loaded, or the path is obstructed. The runtime records which one: the cause. The robot tries again each 5 seconds. A robot that cannot move first tries 10 times at 1 second. For an obstacle the reason contains the position, the direction and the block in front of the robot | It unblocks by itself. After an obstacle the robot continues at the first move that succeeds |
 | `SATISFIED` | Only for a stock: at the last observation the destination had the requested level. A load can stay on board, if the owner lowered the level after the pickup | It starts again by itself when the stock goes down |
-| `BLOCKED` | The path is obstructed, the fuel ended or a station has no inventory. The reason contains the position, the direction and the block in front of the robot. Also: a transport has a load on board above its quantity, because the owner lowered the quantity after the pickup | The owner, with `resume`. For a load above the quantity: raise the quantity first, or cancel |
+| `BLOCKED` | The fuel ended, a station has no inventory, or a transport has a load on board above its quantity, because the owner lowered the quantity after the pickup. The runtime records the cause. A module error, or an impediment of a kind that the runtime does not know, is a block without a cause | The owner, with `resume`. Without fuel: give fuel first. For a load above the quantity: raise the quantity first, or cancel |
 | `PAUSED` | The owner asked for a pause. The cargo stays on board | The owner, with `resume` |
 | `RECOVERY` | The real cargo of the robot is different from the recorded cargo, or the world is older than the record. The runtime does not know the result | The owner, with `resume` (accepts the observed cargo) or `cancel` |
 | `DONE` | The requested quantity was delivered and no load of the job is on board | |
 | `CANCELLED` | The owner cancelled. The cargo stays on board | |
+
+The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
+Uno takes the sentence of its report from the cause. The screen and the `status` command also show the recorded reason with the position.
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.
 

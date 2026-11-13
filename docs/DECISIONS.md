@@ -93,6 +93,7 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Discard condition:** a real path is not straight. Then a registered path with waypoints or a path search is necessary.
 - **Fact from a code examination, 2026-11-13:** the move step accepts each move that brings the robot nearer to the target. A path with one corner is possible. No test has one. See D28.
 - **Decided on 2026-11-13, not implemented:** an obstacle becomes a wait, not a block. See D34.
+- **Implemented and verified in increment A, 2026-11-13:** an obstacle is a wait. The job continues by itself when the path is free. The T05 evidence above describes the earlier behaviour. See D34 and test `t05_obstacle`.
 
 ### D06.1 — A computed route
 
@@ -478,6 +479,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Artificial condition:** for the inventory that is not loaded, the test moves the inventory of the station record to a far position. The dock stays. The runtime refuses such a station at the registration. In a normal game the chunk next to a working turtle is loaded, thus this state is rare. The cause is still written by the code of the runtime, during a real pickup attempt of the turtle.
 - **Not verified:** `SOURCE_KEEPS` and `DESTINATION_UNLOADED`. No test reaches them. The destination uses the same code as the source.
 - **Counterexample:** `BLOCKED` and `RECOVERY` still have only a free text. Uno prints it as the recorded reason and does not interpret it.
+- **Changed in increment A:** `BLOCKED` has causes too, and an obstacle is a wait with the cause `PATH_OBSTRUCTED`. See D34. `RECOVERY` still has only a free text.
 
 ## D26 — One run of a Lua module executes one job
 
@@ -487,7 +489,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Choice:** `mindcraft.attach` returns the ID of the job. A run of a module keeps that ID. A job is "active" for a run only if it is the job of that run. With a different job the run ends, and the agent starts the module of the new job. The agent gives the job that it saw to the module: the run ends at once if the robot already has a different job.
 - **Versions:** the modules are now `transport@2` and `keep_stock@2`.
 - **Evidence:** test `t15_next_job_with_another_module`: a transport ends and a `keep_stock` job starts in the same tick. Before the correction the job went to `BLOCKED` with the module error. After it, the job reaches `SATISFIED` with the executor `keep_stock@2`.
-- **Limit:** the check is in the Lua modules of the mod. The functions `take`, `give`, `observe` and `block` carry no job ID. One tick stays between the last state reading of a run and its next call. In that tick a new job can get a call of the old run, for example its impediment.
+- **Limit:** the check is in the Lua modules of the mod. The functions `take`, `give`, `observe`, `impediment` and `moved` carry no job ID. In increment A `impediment` replaced `block` (D34). One tick stays between the last state reading of a run and its next call. In that tick a new job can get a call of the old run, for example its impediment.
 - **Proposed for T15 in S3:** each call of a module names its job, and the runtime refuses a call for a different job.
 
 ## D27 — Plan after the first review: four increments
@@ -641,7 +643,7 @@ Limits on the calls. Increment A.
 
 ## D34 — Waits, blocks and a load on board
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. It changes a verified behaviour of D06 and replaces a limit of D09.
+**Status:** decided by the project owner on 2026-11-13. It changes a verified behaviour of D06 and replaces a limit of D09. The part of increment A (the obstacle and the causes of `BLOCKED`) is implemented and **verified** with automatic in-game tests on 2026-11-13. See "Increment A, as built" below. The part of increment B is not implemented.
 
 - **Rule:** a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
 - **Obstacle (increment A):** a robot that cannot move goes to `WAITING` with a cause of its own, and tries again slowly. The attention rule of D30 applies. Now the job goes to `BLOCKED` after 10 attempts and stays there until `resume`, also after the obstacle goes away. The test `t05_obstacle` expects `BLOCKED`: it must change.
@@ -651,7 +653,30 @@ Limits on the calls. Increment A.
 - **Until B:** a change of the destination with a load on board is refused, as now.
 - **Counterexample:** the runtime does not know where a load comes from. If the owner keeps coal in the turtle as fuel, a coal job adopts it and delivers it. The proposal shows the number.
 - **Counterexample:** two robots that face each other in a corridor one block wide both wait, without an end. This is deduced from the code. It was not tried.
-- **Not decided:** the time between two attempts of a robot that cannot move. How many trips are "few". When an observation is "old" (D32).
+- **Not decided:** how many trips are "few". When an observation is "old" (D32).
+- **Initial value, proposed:** a robot that cannot move tries 10 times at 1 second, as before. Then the job waits, and the robot tries one move every 5 seconds: the wait interval of the module. To review after the play session (spec #1).
+
+Increment A, as built (ticket #5). The choices of detail are **proposed**: the project owner did not confirm them one by one.
+
+| Cause | State | The runtime writes it when | Sentence of Uno in the report |
+| --- | --- | --- | --- |
+| `PATH_OBSTRUCTED` | `WAITING` | A module reports the impediment "obstacle" | "My path is obstructed. I try to move again every few seconds, and I continue by myself when the path is free." |
+| `OUT_OF_FUEL` | `BLOCKED` | A module reports the impediment "fuel": the move failed for fuel, and the robot has no fuel item | "I am stopped: I have no fuel. Give me fuel, then resume the job." |
+| `SOURCE_NO_INVENTORY`, `DESTINATION_NO_INVENTORY` | `BLOCKED` | The robot is at the dock, and the station has no inventory | "I am stopped: I find no inventory at 'x'. Put it back, then resume the job." |
+| `LOAD_ABOVE_QUANTITY` | `BLOCKED` | A transport reached its quantity with a load on board (D16.1) | "I am stopped: the quantity of the job is reached, and N stay on board. Raise the quantity and resume, or cancel the job." |
+| `NONE` | `BLOCKED` | An impediment of an unknown kind, a module error, or a record of an older version | "I am stopped and I need your help. Recorded reason: …", as before |
+
+- **Lua API:** `mindcraft.impediment(kind, detail)` replaces `mindcraft.block(reason)`. It returns the new state. The module sleeps 5 seconds only if the state is `WAITING`: the runtime decides, not the module.
+- **Kinds:** "obstacle" and "fuel". Each failed move that is not a lack of fuel is an "obstacle", also "Cannot leave loaded world". An unknown kind keeps its name in the reason: "kind: detail". The agent reports a module error as the kind "module error". Thus its reason is the same text as before.
+- **Return to work:** `mindcraft.moved()`. The module calls it after a move that succeeds while the job is `WAITING`. The runtime changes only a `WAITING` with `PATH_OBSTRUCTED` to `RUNNING`. Each other wait stays.
+- **Each attempt reports again.** During the wait, each failed attempt reports the impediment again. Thus the reason stays current: the block in front of the robot can change. The state and the cause stay the same.
+- **Two causes for "station without an inventory":** the source and the destination, as for an inventory that is not loaded (D25). Thus Uno names the station.
+- **The screen** shows the recorded reason for `BLOCKED`, `RECOVERY` and a wait with `PATH_OBSTRUCTED`. It does not show it for the other waits. Reason: a stock job often changes between `RUNNING` and those waits, and each new line changes the shape of the screen. Then the screen creates its fields again (see the second manual test in `TEST_RESULTS.md`).
+- **The state machine of the runtime:** each change of the state goes through one function, with its cause. A state without a cause gets `NONE`.
+- **Versions:** `transport@3` and `keep_stock@3`.
+- **Evidence:** tests `t05_obstacle`, `t05_pause_and_cancel_during_the_wait`, `t05_obstacle_keep_stock`, `t06_no_fuel`, `t06_impediment_of_an_unknown_kind`, `t04_destination_removed`, `t04_source_removed`, and the three `t16_quantity_*` tests with a load above the quantity. The four phases of the restart test. See `TEST_RESULTS.md`, "Increment A — waits and blocks".
+- **Observed, not built on purpose:** in `t12_second_session` the second turtle now waits without an end, behind the first turtle that lost its authority. This is the counterexample above, with one robot that does not move any more.
+- **Not verified:** a player on the path (`can_push`), and "Cannot leave loaded world". No test builds them. A wait of 5 minutes and its notice: ticket #8.
 
 ## D35 — The second behaviour and the first composition
 

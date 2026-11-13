@@ -435,6 +435,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Counterexample:** the `/uno confirm` command carries no number. It starts the newest proposal of the player, also when a different contact point made it. The chat can still show an older proposal as its last line.
 - **Counterexample:** a wrong request removes a good proposal. This is the cost of one meaning for "Confirm".
 - **Not verified:** the new line and the new button in a client.
+- **Extended on 2026-11-13, ticket #4:** the rule holds for each kind of proposal: a start, a change, a resume and a cancellation. A different player confirms nothing, with the button of the owner or with the command. Evidence: `a_change_through_the_view`, `a_confirmation_of_older_values`. See D29.3.
 
 ## D24 — The temporary state of Uno and of the robots belongs to one server session
 
@@ -557,7 +558,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D29 — Uno acts on words through a closed list of actions
 
-**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented in part: the contract of a provider (D29.1), and the pause and the report (D29.2), are verified with automatic in-game tests. The actions change, resume and cancel are not implemented.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented: the contract of a provider (D29.1), the pause and the report (D29.2), and the change, the resume and the cancellation (D29.3) are verified with automatic in-game tests. Not verified with the real Claude service.
 
 - **Problem:** with the code of S2, three requests fail.
   - "Leave only 16 in the depot", for an open job. The provider can only give a new order, and the robot is busy. Uno refuses.
@@ -571,6 +572,7 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Change:** in D17 a provider gives only an order. D23 holds: one proposal for each player, the newest.
 - **Implemented in part:** the contract of a provider. See D29.1. Uno acts on `start` and `none` only. The other five actions are not implemented.
 - **Implemented in part, ticket #3:** Uno also acts on `pause` and `report`, and finds the job on the server. See D29.2. The actions `change`, `resume` and `cancel` are not implemented.
+- **Implemented, ticket #4:** Uno also acts on `change`, `resume` and `cancel`. Each becomes a proposal. The proposed detail above is implemented: spec #1 decided it. See D29.3.
 
 ### D29.1 — The contract of a provider: one action and its tokens
 
@@ -600,6 +602,7 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Counterexample:** the real service can refuse the schema, for example with "Schema is too complex for compilation". Then each request to Claude fails, and Uno says that the model service answered with error 400. The fixed rules do not take over.
 - **Counterexample:** until the next parts, "pause the furnace job" gets two different answers. With Claude it gets the fixed sentence of `pause`. With the fixed rules it gets "I cannot propose a job: the quantity is missing."
 - **Changed on 2026-11-13, ticket #3:** `pause` and `report` do not get the fixed sentence any more. The fixed rules read them. The counterexample above holds now only for `change`, `resume` and `cancel`. See D29.2.
+- **Changed on 2026-11-13, ticket #4:** no action gets the fixed sentence any more. The fixed rules read `change`, `resume` and `cancel`. The counterexample above does not hold any more. See D29.3.
 
 ### D29.2 — Report and pause by words
 
@@ -633,6 +636,44 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Counterexample:** "How is the furnace?" after the furnace job is `DONE` gets "None of your open jobs uses the station 'furnace'." The player must give the robot number.
 - **Counterexample:** the fixed rules read a robot number only after the word "robot". "Pause 5" is a pause without a target. With one open job, Uno pauses that job, also if it is not on robot #5. A pause is reversible with `resume`.
 - **Counterexample:** a start request with one station and a word of an action is that action. "Report the coal from the depot" is a report about the depot job.
+
+### D29.3 — Change, resume and cancel by words
+
+**Status:** the rules below marked "decided" are decided by the project owner on 2026-11-13: spec #1, section "Immediate actions and proposals", and its further note 1. They are implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules and with providers written in the tests. Not verified with the real Claude service. Not tried in a client. Increment A, ticket #4. The choices marked "proposed" are choices of the implementation, not confirmed by the project owner.
+
+- **Decided, proposals:** a start, a change, a resume and a cancellation become a proposal. A pause and a report run immediately (D29.2). One proposal for each player, the newest, with a number (D23). A proposal belongs to one server session and is not saved (D24). The search of the job is the one of D29.2.
+- **Decided, what a proposal holds:** its request for the runtime. A start holds the order. A change holds the robot, the job ID, the revision and the two values after the change. A resume and a cancellation hold the robot and the job ID.
+- **Decided, the text:** the server writes the text of each proposal, never the model. The screen shows the same text above the "Confirm" button. Sentences from the tests:
+
+| Proposal | Sentence of Uno |
+| --- | --- |
+| Change of the reserve | "Proposal: change job 6 on robot #7 (carry minecraft:coal from 'a_change_source' to 'a_change_destination'). Quantity to carry: 24, unchanged. Reserve to leave in 'a_change_source': from 20 to 6. I have done nothing yet. Confirm with /uno confirm." |
+| Resume of a job in `RECOVERY` | "Proposal: resume job 5 on robot #22 (carry minecraft:coal from 'a_resume_source' to 'a_resume_destination'). The job needs a check: the runtime accepts the load that it observes in the robot, and the totals can be inexact. I have done nothing yet. Confirm with /uno confirm." |
+| Cancellation | "Proposal: cancel job 5 on robot #22 (carry minecraft:coal from 'a_resume_source' to 'a_resume_destination'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm." |
+
+- **Decided, a value that the request does not give:** it stays as it is. The text says "unchanged" for it.
+- **Decided, the confirmation:** it sends the ordinary request of the runtime: `update` with the job ID and the revision, or `control` with the job ID. The runtime validates again. A refusal of the runtime becomes the sentence of Uno. The tests check these sentences exactly. The numbers below are examples.
+
+| Case | Sentence of Uno |
+| --- | --- |
+| The change after a change by a button or a command | "I cannot change the job: Job 3 changed. Read it again." |
+| The change after the robot got a different job | "I cannot change the job: Robot #7 has job 8 now, not job 3. Read it again." |
+| The cancellation after the robot got a different job | "I cannot cancel the job: Robot #7 has job 9 now, not job 8. Read it again." |
+
+- **Decided, a start for a busy robot:** it stays refused, with the number of the job: "I cannot propose this job: Robot #7 already has job 3 (WAITING)." This was already the behaviour of S2.
+- **Decided, the buttons, the number fields and the commands do not change.** The number fields show the values of the record until the confirmation.
+- **Proposed, Uno checks before the proposal:** the runtime has two new functions, `checkUpdate` and `checkControl`. Each is the validation part of `update` or `control`, without the change. Uno calls it before the proposal, as it calls `check` before the proposal of a start. `update` and `control` call it too. Thus a resume of a running job gives "I cannot propose to resume the job: Job 3 is already running." and no proposal. A cancellation of a closed job gives "I cannot propose to cancel the job: Robot #7 has no open job."
+- **Proposed, a change without a new value:** no proposal. "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal."
+- **Proposed, the button:** the action of the "Confirm" button names the number of the proposal, as since D23. Its label stays "Confirm". The number is not visible on the screen. The text of the proposal is next to the button.
+- **Proposed, the words of the fixed rules:** with one station or none, the first action that fits decides, in this order: resume, cancel, pause, change, report. Resume: `resume`, `continue`, `riprendi`, `continua`. Cancel: `cancel`, `annulla`, `cancella`. Change: the first number after `quantity`, `level`, `quantità` or `livello` is the new quantity. The first number after `leave`, `reserve`, `lascia` or `riserva` is the new reserve. A change needs at least one of the two. The number after "robot" names the job: it is never a new value. The resume comes before the pause: "Riprendi il lavoro in pausa" is a resume. The README lists the words.
+- **The runtime changed:** only the two check functions. The refusals of the buttons and of the commands have the same text as before. The Lua modules did not change. The four restart phases ran after the change.
+- **Evidence:** tests `a_fixed_rules_change_resume_cancel`, `a_change_by_words`, `a_confirmation_of_older_values`, `a_resume_and_cancel_by_words`, `a_change_through_the_view`, and the changed test `a_provider_answers_with_an_action`. See "Increment A — Change, resume and cancel by words" in TEST_RESULTS.md.
+- **Not verified:** the real Claude service with a change, a resume or a cancellation. The schema and the system text of the Claude provider did not change in this ticket. The proposal and the button in a client.
+- **Counterexample:** a resume proposal does not hold the state of the job. If a `BLOCKED` or `PAUSED` job goes to `RECOVERY` before the confirmation, the confirmation accepts the observed load, but the text did not say so. No test builds this case.
+- **Counterexample:** a cancellation holds no revision. A change by a button between the proposal and the confirmation does not stop the cancellation. The spec asks for the revision only in a change.
+- **Counterexample:** the fixed rules read a change in a request with one station and "leave N". "Carry 24 coal to the furnace, leave 8" is a change of the reserve of the furnace job, not a start. The proposal shows it. Nothing changes before the confirmation.
+- **Counterexample:** the fixed rules take the first number after the word. "Change the quantity and leave 16" gives 16 for the quantity and for the reserve. "Annulla la pausa" is a cancellation. In both cases the proposal shows what the confirmation does.
+- **Counterexample:** a change to the values that the job already has is a proposal. The text says "unchanged" for both values. Its confirmation increases the revision. Not tested.
 
 ## D30 — Initiative: Uno warns
 

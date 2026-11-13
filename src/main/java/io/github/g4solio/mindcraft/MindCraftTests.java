@@ -1290,9 +1290,9 @@ public class MindCraftTests {
     }
 
     /**
-     * Increment A: a provider answers with one action from the closed list of D29.
-     * Uno does not act on "change", "resume" and "cancel" yet. Each gets a fixed sentence: Uno creates no proposal,
-     * and the job does not change. A "none" action gives its reason with the length limit.
+     * Increment A: a provider answers with one action from the closed list of D29. Uno does not trust the answer.
+     * A change without a new value, with a value of a wrong type or with a negative quantity gives no proposal.
+     * A "none" action gives its reason with the length limit. In each case the job does not change.
      * During the test the job waits for materials: its state does not change by itself.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
@@ -1302,12 +1302,12 @@ public class MindCraftTests {
         MinecraftServer server = rig.level.getServer();
         // An answer of the provider and the sentence of Uno. %d is the robot of the job.
         Map<String, String> cases = new LinkedHashMap<>();
-        cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":8,\"reserve\":4}",
-            "I cannot change a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
-        cases.put("{\"action\":\"resume\",\"robot\":%d,\"station\":null}",
-            "I cannot resume a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
-        cases.put("{\"action\":\"cancel\",\"robot\":%d,\"station\":null}",
-            "I cannot cancel a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
+        cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":null,\"reserve\":null}",
+            "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal.");
+        cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":\"many\",\"reserve\":null}",
+            "I did not get a valid configuration. I created no proposal.");
+        cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":-5,\"reserve\":null}",
+            "I cannot propose this change: The quantity must be positive. The reserve must not be negative.");
         // The reason of "none" has a limit of 200 characters.
         cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}",
             "I cannot propose a job: " + "a".repeat(150) + "b".repeat(50) + ".");
@@ -1369,6 +1369,52 @@ public class MindCraftTests {
             new String[]{"Pause, then carry 24 coal from depot to furnace with robot 8", english,
                 "{\"action\":\"start\",\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
                     + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"});
+        List<String> wrong = new ArrayList<>();
+        for (String[] test : cases) {
+            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], test[1]);
+            if (!answer.json().equals(test[2]) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
+                wrong.add("'" + test[0] + "' -> " + answer);
+            }
+        }
+        check(wrong.isEmpty(), wrong.toString());
+        helper.succeed();
+    }
+
+    /**
+     * Increment A: the fixed rules read a simple form of a change, a resume and a cancellation, in English and in Italian.
+     * A change gives the new values that the request names. A value that the request does not name is null: it does not change.
+     * "robot N" names the job. It is not a new value. A request that names two stations stays a start.
+     */
+    @GameTest(template = EMPTY)
+    public static void a_fixed_rules_change_resume_cancel(GameTestHelper helper) {
+        String robots = "\"robots\":[{\"id\":7,\"free\":false},{\"id\":8,\"free\":true}]}";
+        String english = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
+        String italian = "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots;
+        String change = "{\"action\":\"change\",\"robot\":%s,\"station\":%s,\"quantity\":%s,\"reserve\":%s}";
+        String resume = "{\"action\":\"resume\",\"robot\":%s,\"station\":%s}", cancel = "{\"action\":\"cancel\",\"robot\":%s,\"station\":%s}";
+        // A request, its context and the answer of the fixed rules.
+        List<String[]> cases = List.of(
+            new String[]{"Leave only 16 in the depot", english, change.formatted("null", "\"depot\"", "null", "16")},
+            new String[]{"Set the quantity of robot 7 to 30", english, change.formatted("7", "null", "30", "null")},
+            new String[]{"Keep the level of the furnace at 48 and leave 8", english, change.formatted("null", "\"furnace\"", "48", "8")},
+            new String[]{"Resume the furnace job", english, resume.formatted("null", "\"furnace\"")},
+            new String[]{"Continue robot 7", english, resume.formatted("7", "null")},
+            new String[]{"Cancel the job of the depot", english, cancel.formatted("null", "\"depot\"")},
+            new String[]{"cancel", english, cancel.formatted("null", "null")},
+            new String[]{"Lascia solo 16 nel deposito", italian, change.formatted("null", "\"deposito\"", "null", "16")},
+            new String[]{"Porta la quantità del robot 7 a 30", italian, change.formatted("7", "null", "30", "null")},
+            new String[]{"Riprendi il lavoro delle fornaci", italian, resume.formatted("null", "\"fornaci\"")},
+            new String[]{"Continua", italian, resume.formatted("null", "null")},
+            new String[]{"Annulla il robot 7", italian, cancel.formatted("7", "null")},
+            new String[]{"Cancella il lavoro del deposito", italian, cancel.formatted("null", "\"deposito\"")},
+            // A resume of a paused job is a resume, not a pause.
+            new String[]{"Riprendi il lavoro in pausa", italian, resume.formatted("null", "null")},
+            // The number of the robot is not a reserve. Without a new value the request is not a change.
+            new String[]{"How is the reserve of robot 7?", english, "{\"action\":\"report\",\"robot\":7,\"station\":null}"},
+            // Two stations: a start, as before. The words of a change do not decide.
+            new String[]{"Leave 8 and carry 24 coal from depot to furnace with robot 8", english,
+                "{\"action\":\"start\",\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
+                    + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":8}"});
         List<String> wrong = new ArrayList<>();
         for (String[] test : cases) {
             Uno.Answer answer = new Uno.RuleProvider().answer(test[0], test[1]);
@@ -1537,6 +1583,231 @@ public class MindCraftTests {
                 check(!Uno.hasProposal(other), "the other player has a proposal");
             })
             .thenSucceed();
+    }
+
+    /**
+     * Increment A: the request of the ticket, "leave only N in the depot", through the fixed rules.
+     * The source has 30 and the reserve is 20: the robot delivers 10, then waits at the reserve.
+     * The change is a proposal. Its text comes from the server: the old and the new reserve, and the quantity that stays.
+     * Nothing changes before the confirmation. After it the job has the new reserve and a new revision,
+     * and the robot takes the items above the new reserve at its next step.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_change_by_words(GameTestHelper helper) {
+        Actor player = player("a_change");
+        Rig rig = new Rig(helper, "a_change", 30, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        int[] job = new int[1];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> job[0] = rig.startJob(24, 20).id)
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 10, rig.describe()));
+        sequence = ask(sequence, server, player, "Leave only 6 in the " + rig.from, new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_change_by_words proposal: {}", answers.get(0));
+                check(answers.get(0).equals("Proposal: change job " + job[0] + " on robot #" + rig.id + " (carry minecraft:coal from '" + rig.from
+                    + "' to '" + rig.to + "'). Quantity to carry: 24, unchanged. Reserve to leave in '" + rig.from + "': from 20 to 6."
+                    + " I have done nothing yet. Confirm with /uno confirm."), answers.get(0));
+                check(Uno.hasProposal(player), "no proposal");
+            })
+            // The robot looks at the source each 5 seconds. Before the confirmation it must not take anything.
+            .thenIdle(120)
+            .thenExecute(() -> {
+                Job now = rig.job();
+                check(now.id == job[0] && now.reserve == 20 && now.quantity == 24 && now.revision == 0 && now.state == State.WAITING,
+                    "the proposal changed the job: " + rig.describe());
+                check(rig.coal(rig.source) == 20 && rig.coal(rig.dest) == 10, "the robot used the new reserve before the confirmation: " + rig.describe());
+                String confirmed = Uno.confirm(server, player);
+                MindCraft.LOGGER.info("a_change_by_words confirmation: {}", confirmed);
+                check(confirmed.equals("Job " + job[0] + " on robot #" + rig.id + " changed. Quantity to carry: 24. Reserve to leave in '"
+                    + rig.from + "': 6. The robot uses the new values at its next step."), confirmed);
+                check(now.reserve == 6 && now.quantity == 24 && now.revision == 1 && !Uno.hasProposal(player), rig.describe());
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> rig.assertTransferred(6, 24));
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A: a confirmation never reaches a different job or older values.
+     * The proposal of a change holds the robot, the job ID and the revision. The proposal of a cancellation holds the robot and the job ID.
+     * 1. A change of the quantity: the text says that the reserve stays. Then the "Apply" button changes the job. The confirmation is refused.
+     * 2. A change, then the robot gets a different job with the same revision. The confirmation is refused.
+     * 3. A cancellation, then the robot gets a different job. The confirmation is refused.
+     * Also: a start for the busy robot is refused with the number of its job, and a new request replaces the proposal.
+     * The source is empty: each job waits for materials, and its state does not change by itself.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_confirmation_of_older_values(GameTestHelper helper) {
+        Actor player = player("a_older");
+        Rig rig = new Rig(helper, "a_older", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        Job[] job = new Job[1];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> job[0] = rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING));
+        // A new job for the busy robot stays refused, with the number of its job.
+        sequence = ask(sequence, server, player, "x", gives(() -> startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 8)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot propose this job: Robot #" + rig.id + " already has job " + job[0].id + " (WAITING)."), last.get());
+                check(!Uno.hasProposal(player) && rig.job() == job[0], "a start for a busy robot became a proposal");
+            });
+        // 1. The quantity changes, the reserve stays. A button changes the job before the confirmation.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("change", "", "robot", rig.id, "quantity", 30)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("Proposal: change job " + job[0].id + " on robot #" + rig.id + " (carry minecraft:coal from '" + rig.from
+                    + "' to '" + rig.to + "'). Quantity to carry: from 24 to 30. Reserve to leave in '" + rig.from + "': 0, unchanged."
+                    + " I have done nothing yet. Confirm with /uno confirm."), last.get());
+                check(job[0].quantity == 24 && job[0].revision == 0, rig.describe());
+                UnoView.act(server, player, "apply:" + rig.id + ":" + job[0].id + ":0", "{\"quantity:" + rig.id + "\":\"24\",\"reserve:" + rig.id + "\":\"5\"}");
+                check(job[0].reserve == 5 && job[0].revision == 1, rig.describe());
+                String confirmed = Uno.confirm(server, player);
+                check(confirmed.equals("I cannot change the job: Job " + job[0].id + " changed. Read it again."), confirmed);
+                check(job[0].quantity == 24 && job[0].reserve == 5 && job[0].revision == 1, "the old proposal changed the job: " + rig.describe());
+            });
+        // A new request replaces the proposal before it.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("change", "", "robot", rig.id, "reserve", 2)), 5000, answers)
+            .thenExecute(() -> check(Uno.hasProposal(player) && last.get().contains("from 5 to 2"), last.get()));
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "")), 5000, answers)
+            .thenExecute(() -> {
+                check(Uno.confirm(server, player).startsWith("I have no pending proposal") && job[0].reserve == 5, rig.describe());
+            });
+        // 2. A change, then a different job on the robot, with the same revision as the job of the proposal.
+        Job[] second = new Job[1];
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("change", "", "station", rig.to, "quantity", 30, "reserve", 3)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().contains("Quantity to carry: from 24 to 30. Reserve to leave in '" + rig.from + "': from 5 to 3."), last.get());
+                rig.runtime.control(player, rig.id, "cancel");
+                second[0] = rig.startJob(16, 0);
+                rig.runtime.update(player, rig.id, 0, 16, 0);
+                check(second[0].revision == 1 && second[0].id != job[0].id, rig.describe());
+                String confirmed = Uno.confirm(server, player);
+                check(confirmed.equals("I cannot change the job: Robot #" + rig.id + " has job " + second[0].id + " now, not job " + job[0].id
+                    + ". Read it again."), confirmed);
+                check(second[0].quantity == 16 && second[0].reserve == 0 && second[0].revision == 1, "the proposal changed a different job: " + rig.describe());
+            });
+        // 3. A cancellation, then a different job on the robot.
+        Job[] third = new Job[1];
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("cancel", "", "robot", rig.id)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Proposal: cancel job " + second[0].id + " on robot #" + rig.id), last.get());
+                rig.runtime.control(player, rig.id, "cancel");
+                third[0] = rig.startJob(8, 0);
+                String confirmed = Uno.confirm(server, player);
+                check(confirmed.equals("I cannot cancel the job: Robot #" + rig.id + " has job " + third[0].id + " now, not job " + second[0].id
+                    + ". Read it again."), confirmed);
+                check(rig.job() == third[0] && third[0].state.open(), "the proposal cancelled a different job: " + rig.describe());
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A: resume and cancel by words, through the fixed rules. Each is a proposal, with a text from the server.
+     * A different actor empties the robot during the transport: the job goes to RECOVERY (T10).
+     * The proposal to resume it says that the runtime accepts the observed load and that the totals can be inexact.
+     * Then the robot takes a new load and the owner pauses the job. The proposal to cancel it says that the cargo stays on board.
+     * Uno checks a request before the proposal: a resume of a running job and a cancellation of a closed job give no proposal.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_resume_and_cancel_by_words(GameTestHelper helper) {
+        Actor player = player("a_resume");
+        Rig rig = new Rig(helper, "a_resume", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        Supplier<String> name = () -> "job " + rig.job().id + " on robot #" + rig.id + " (carry minecraft:coal from '" + rig.from + "' to '" + rig.to + "')";
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> rig.robot().turtle.getInventory().clearContent())
+            .thenWaitUntil(() -> rig.state(State.RECOVERY));
+        sequence = ask(sequence, server, player, "Resume the job of " + rig.to, new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_resume_and_cancel_by_words resume: {}", last.get());
+                check(last.get().equals("Proposal: resume " + name.get() + ". The job needs a check: the runtime accepts the load that it observes"
+                    + " in the robot, and the totals can be inexact. I have done nothing yet. Confirm with /uno confirm."), last.get());
+                check(rig.job().state == State.RECOVERY && rig.job().recoveries == 0, "the proposal resumed the job: " + rig.describe());
+                String confirmed = Uno.confirm(server, player);
+                check(confirmed.equals("I resume job " + rig.job().id + " on robot #" + rig.id + "."), confirmed);
+                check(rig.job().state.active() && rig.job().recoveries == 1 && rig.job().carried == 0, rig.describe());
+            });
+        // The job runs: a resume gives no proposal.
+        sequence = ask(sequence, server, player, "Continua", new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot propose to resume the job: Job " + rig.job().id + " is already running."), last.get());
+                check(!Uno.hasProposal(player), "a refused resume became a proposal");
+            })
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> rig.runtime.control(player, rig.id, "pause"));
+        sequence = ask(sequence, server, player, "Annulla il lavoro di " + rig.from, new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_resume_and_cancel_by_words cancel: {}", last.get());
+                check(last.get().equals("Proposal: cancel " + name.get() + ". The cargo stays on board the robot."
+                    + " I have done nothing yet. Confirm with /uno confirm."), last.get());
+                rig.state(State.PAUSED);
+                String confirmed = Uno.confirm(server, player);
+                check(confirmed.equals("Job " + rig.job().id + " on robot #" + rig.id + " is cancelled. The cargo stays on board the robot."), confirmed);
+                rig.state(State.CANCELLED);
+                check(rig.held() == 24 && rig.job().carried == 24, "the cargo did not stay on board: " + rig.describe());
+            });
+        // The job is closed: a cancellation gives no proposal.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("cancel", "", "robot", rig.id)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot propose to cancel the job: Robot #" + rig.id + " has no open job."), last.get());
+                check(!Uno.hasProposal(player), "a refused cancellation became a proposal");
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A and T19: a change by words through the screen. The "Confirm" button names the number of the proposal,
+     * and the screen shows the text of the proposal next to it. The number fields keep the values of the record until the confirmation.
+     * A different player sees no proposal. With the button of the owner and with the command, the other player confirms nothing.
+     * A change request of the other player about the job of the owner gets the sentence for a job that does not exist.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_change_through_the_view(GameTestHelper helper) {
+        Actor player = player("a_view_change"), other = player("a_view_change_other");
+        Rig rig = new Rig(helper, "a_viewchg", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        Supplier<String> otherView = () -> UnoView.build(rig.runtime, other, rig.level.getGameTime());
+        Supplier<String> reserveField = () -> "\"id\":\"reserve:" + rig.id + "\",\"label\":\"Reserve in the source\",\"value\":";
+        List<String> answers = new CopyOnWriteArrayList<>();
+        String[] button = new String[1];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> UnoView.act(server, player, "ask", "{\"request\":\"Lascia solo 5 nel " + rig.from + "\"}"))
+            .thenWaitUntil(() -> check(action(view.get(), "confirm") != null, "no proposal in the view yet: " + view.get()))
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_change_through_the_view: {}", view.get());
+                button[0] = action(view.get(), "confirm");
+                check(button[0].equals("confirm:" + Uno.proposal(player).number()), button[0]);
+                check(view.get().contains("Waiting for your confirmation: change job " + rig.job().id + " on robot #" + rig.id
+                    + " (carry minecraft:coal from '" + rig.from + "' to '" + rig.to + "'). Quantity to carry: 24, unchanged. Reserve to leave in '"
+                    + rig.from + "': from 0 to 5."), view.get());
+                check(view.get().contains(reserveField.get() + "0"), "the number field shows the value of the proposal: " + view.get());
+                // T19: the other player.
+                check(action(otherView.get(), "confirm") == null && !otherView.get().contains(rig.from), otherView.get());
+                UnoView.act(server, other, button[0], "{}");
+                String command = Uno.confirm(server, other);
+                check(command.startsWith("I have no pending proposal"), command);
+                check(rig.job().reserve == 0 && rig.job().revision == 0 && Uno.hasProposal(player), "the other player confirmed: " + rig.describe());
+            });
+        sequence = ask(sequence, server, other, "x", gives(() -> modelAction("change", "", "robot", rig.id, "reserve", 2)), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals("You have no job on robot #" + rig.id + ". Tell me the robot number of the job. I did nothing."), answers.get(0));
+                check(!Uno.hasProposal(other) && Uno.hasProposal(player) && rig.job().reserve == 0, rig.describe());
+                // The owner presses the button.
+                UnoView.act(server, player, button[0], "{}");
+                check(rig.job().reserve == 5 && rig.job().quantity == 24 && rig.job().revision == 1, rig.describe());
+                check(action(view.get(), "confirm") == null && view.get().contains("Uno › Job " + rig.job().id + " on robot #" + rig.id + " changed.")
+                    && view.get().contains(reserveField.get() + "5"), view.get());
+            });
+        sequence.thenSucceed();
     }
 
     /**

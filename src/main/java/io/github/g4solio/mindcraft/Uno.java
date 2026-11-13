@@ -31,8 +31,8 @@ import java.util.regex.Pattern;
 
 /**
  * Uno, the central intelligence. In this increment Uno does three things.
- * It changes a written request into one action. The action "start" becomes a proposed order.
- * It starts the order only when the player confirms. It reports on jobs with data from the runtime only.
+ * It changes a written request into one action. A pause and a report run immediately. Each other action becomes a proposal.
+ * It sends the request of a proposal to the runtime only when the player confirms. It reports on jobs with data from the runtime only.
  * <p>
  * Uno has no authority of its own. Each order goes through the ordinary validation of the runtime.
  * Uno speaks English to the player.
@@ -72,8 +72,67 @@ public final class Uno {
     private static final int MAX_REASON_LENGTH = 200;
     private static final String INVALID = "I did not get a valid configuration. I created no proposal.";
 
-    /** A proposal that waits for a confirmation. The number tells it from the other proposals of the session. */
-    record Proposal(int number, Order order) {
+    /**
+     * A proposal that waits for a confirmation. The number tells it from the other proposals of the session.
+     * The server writes its text. The confirmation sends the request of the proposal, and nothing else.
+     */
+    record Proposal(int number, String text, Request request) {
+    }
+
+    /**
+     * What a confirmation asks the runtime: its ordinary request, with the values of the proposal. The runtime validates again.
+     * A request about a job names the robot and the job ID. Thus a confirmation never reaches a different job.
+     */
+    sealed interface Request permits Start, Change, Control {
+        /** Sends the request. A refusal of the runtime is a Refusal. The answer is the sentence of Uno. */
+        String send(MindRuntime runtime, Actor actor);
+
+        /** What the request does, for the sentence of a refusal: "I cannot (what): (reason)". */
+        String what();
+    }
+
+    /** A new job. */
+    record Start(Order order) implements Request {
+        @Override
+        public String send(MindRuntime runtime, Actor actor) {
+            return "Job " + runtime.start(actor, order).id + " started on robot #" + order.robot() + ".";
+        }
+
+        @Override
+        public String what() {
+            return "start the job";
+        }
+    }
+
+    /** New values of a job. The request also names the revision of the job: a confirmation never sends values about an older state. */
+    record Change(int robot, int job, int revision, int quantity, int reserve) implements Request {
+        @Override
+        public String send(MindRuntime runtime, Actor actor) {
+            runtime.update(actor, robot, job, revision, quantity, reserve);
+            Job changed = runtime.jobs.get(robot);
+            return "Job " + job + " on robot #" + robot + " changed. " + quantityName(changed) + ": " + quantity + ". "
+                + reserveName(changed) + ": " + reserve + ". The robot uses the new values at its next step.";
+        }
+
+        @Override
+        public String what() {
+            return "change the job";
+        }
+    }
+
+    /** A resume or a cancellation of a job: "resume" or "cancel". */
+    record Control(String action, int robot, int job) implements Request {
+        @Override
+        public String send(MindRuntime runtime, Actor actor) {
+            runtime.control(actor, robot, job, action);
+            return action.equals("resume") ? "I resume job " + job + " on robot #" + robot + "."
+                : "Job " + job + " on robot #" + robot + " is cancelled. The cargo stays on board the robot.";
+        }
+
+        @Override
+        public String what() {
+            return action + " the job";
+        }
     }
 
     /**
@@ -178,8 +237,7 @@ public final class Uno {
 
     /**
      * The sentence of Uno for the answer of a provider. Uno reads the answer and does not trust it: a provider can give anything.
-     * "Start" becomes a proposal. "Pause" and "report" run immediately (D29). "None" gives its reason.
-     * Each other action gets a fixed sentence and changes nothing.
+     * "Pause" and "report" run immediately (D29). "Start", "change", "resume" and "cancel" become a proposal. "None" gives its reason.
      */
     private static String act(Session mine, MindRuntime runtime, Actor actor, Answer answer, long now) {
         JsonObject json;
@@ -192,13 +250,12 @@ public final class Uno {
             return INVALID;
         }
         return switch (action) {
-            case START -> propose(mine, runtime, actor, json);
+            case START -> start(mine, runtime, actor, json);
             case NONE -> none(json);
             case PAUSE -> pause(runtime, actor, json);
             case REPORT -> report(runtime, actor, json, now);
-            case CHANGE -> notYet("change a job");
-            case RESUME -> notYet("resume a job");
-            case CANCEL -> notYet("cancel a job");
+            case CHANGE -> change(mine, runtime, actor, json);
+            case RESUME, CANCEL -> control(mine, runtime, actor, json, action);
         };
     }
 
@@ -288,9 +345,91 @@ public final class Uno {
         return found.problem() != null ? found.problem() : report(found.robot(), found.job(), now);
     }
 
-    // ponytail: a fixed sentence for each action that Uno does not handle yet. The next parts of increment A replace it.
-    private static String notYet(String what) {
-        return "I cannot " + what + " from a written request yet. Use the buttons of the screen or the commands. I changed nothing.";
+    /**
+     * A change becomes a proposal (D29). It holds the robot, the job ID and the revision, as the "Apply" button does (D19).
+     * A value that the request does not give stays as it is. The runtime checks the change now, and again at the confirmation.
+     */
+    private static String change(Session mine, MindRuntime runtime, Actor actor, JsonObject json) {
+        Target target;
+        Integer quantity, reserve;
+        try {
+            target = Target.of(json);
+            quantity = integer(json, "quantity");
+            reserve = integer(json, "reserve");
+        } catch (RuntimeException e) {
+            return INVALID;
+        }
+        if (quantity == null && reserve == null) {
+            return "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal.";
+        }
+        Found found = find(runtime, actor, target);
+        if (found.problem() != null) return found.problem();
+        Job job = found.job();
+        Change change = new Change(found.robot(), job.id, job.revision, quantity == null ? job.quantity : quantity, reserve == null ? job.reserve : reserve);
+        try {
+            runtime.checkUpdate(actor, change.robot(), change.job(), change.revision(), change.quantity(), change.reserve());
+        } catch (Refusal refusal) {
+            return "I cannot propose this change: " + refusal.getMessage();
+        }
+        return propose(mine, actor, "change " + name(found.robot(), job) + ". " + value(quantityName(job), job.quantity, change.quantity())
+            + ". " + value(reserveName(job), job.reserve, change.reserve()), change);
+    }
+
+    /**
+     * A resume or a cancellation becomes a proposal (D29). It holds the robot and the job ID, as the buttons of the screen do (D19).
+     * The runtime checks the request now, and again at the confirmation.
+     */
+    private static String control(Session mine, MindRuntime runtime, Actor actor, JsonObject json, Action action) {
+        Target target;
+        try {
+            target = Target.of(json);
+        } catch (RuntimeException e) {
+            return INVALID;
+        }
+        Found found = find(runtime, actor, target);
+        if (found.problem() != null) return found.problem();
+        Job job = found.job();
+        String verb = action.name().toLowerCase(Locale.ROOT);
+        try {
+            runtime.checkControl(actor, found.robot(), job.id, verb);
+        } catch (Refusal refusal) {
+            return "I cannot propose to " + verb + " the job: " + refusal.getMessage();
+        }
+        String text = verb + " " + name(found.robot(), job);
+        if (action == Action.CANCEL) {
+            text += ". The cargo stays on board the robot";
+        } else if (job.state == State.RECOVERY) {
+            // The confirmation accepts the load in the robot as the truth. The player must know this before.
+            text += ". The job needs a check: the runtime accepts the load that it observes in the robot, and the totals can be inexact";
+        }
+        return propose(mine, actor, text, new Control(verb, found.robot(), job.id));
+    }
+
+    /** A whole number of an answer, or null if the answer does not give it. A value of a wrong type is a RuntimeException. */
+    private static Integer integer(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        return value == null || value.isJsonNull() ? null : value.getAsInt();
+    }
+
+    /** A job in a proposal: its ID, its robot and what it does. */
+    private static String name(int robot, Job job) {
+        String item = MindRuntime.itemName(job.item), from = "'" + job.from + "'", to = "'" + job.to + "'";
+        return "job " + job.id + " on robot #" + robot + " ("
+            + (job.keepStock() ? "keep " + item + " in " + to + ", taken from " + from : "carry " + item + " from " + from + " to " + to) + ")";
+    }
+
+    /** The names of the two values of a job, as the screen gives them. */
+    private static String quantityName(Job job) {
+        return job.keepStock() ? "Level to keep in '" + job.to + "'" : "Quantity to carry";
+    }
+
+    private static String reserveName(Job job) {
+        return "Reserve to leave in '" + job.from + "'";
+    }
+
+    /** One value of a change: the old and the new value, or the value that stays. */
+    private static String value(String name, int old, int now) {
+        return name + ": " + (old == now ? old + ", unchanged" : "from " + old + " to " + now);
     }
 
     /** A request without an action is not a failure of the provider. The player must see the difference. */
@@ -306,7 +445,8 @@ public final class Uno {
         return "I cannot propose a job: " + reason + (reason.endsWith(".") ? "" : ".");
     }
 
-    private static String propose(Session mine, MindRuntime runtime, Actor actor, JsonObject o) {
+    /** A start becomes a proposal, after the ordinary validation of the order. */
+    private static String start(Session mine, MindRuntime runtime, Actor actor, JsonObject o) {
         Order order;
         try {
             JsonElement reserve = o.get("reserve");
@@ -321,11 +461,16 @@ public final class Uno {
         } catch (Refusal refusal) {
             return "I cannot propose this job: " + refusal.getMessage();
         }
-        mine.proposals.put(actor.id(), new Proposal(++mine.proposalCount, order));
-        return "Proposal: " + describe(order) + ". I have done nothing yet. Confirm with /uno confirm.";
+        return propose(mine, actor, describe(order), new Start(order));
     }
 
-    /** An order in words. The proposal and the screen use the same text. */
+    /** The proposal of the actor: one for each player, the newest (D23). The server writes its text. The screen shows the same text. */
+    private static String propose(Session mine, Actor actor, String text, Request request) {
+        mine.proposals.put(actor.id(), new Proposal(++mine.proposalCount, text, request));
+        return "Proposal: " + text + ". I have done nothing yet. Confirm with /uno confirm.";
+    }
+
+    /** An order in words. */
     static String describe(Order order) {
         String item = MindRuntime.itemName(order.item());
         String what = order.module().equals(MindRuntime.KEEP_STOCK)
@@ -341,8 +486,8 @@ public final class Uno {
     }
 
     /**
-     * Starts the proposal with this number. A screen sends the number of the proposal that it showed.
-     * Thus a button of an older proposal starts nothing. The runtime validates the order again: the world can be different now.
+     * Confirms the proposal with this number. A screen sends the number of the proposal that it showed.
+     * Thus a button of an older proposal starts nothing. The runtime validates the request again: the world can be different now.
      */
     static String confirm(MinecraftServer server, Actor actor, int number) {
         Session mine = session;
@@ -353,12 +498,11 @@ public final class Uno {
         }
         if (proposal.number() != number) return "That is not my current proposal. I started nothing. Read the proposal again.";
         mine.proposals.remove(actor.id());
-        Order order = proposal.order();
+        Request request = proposal.request();
         try {
-            Job job = MindRuntime.get(server).start(actor, order);
-            return "Job " + job.id + " started on robot #" + order.robot() + ".";
+            return request.send(MindRuntime.get(server), actor);
         } catch (Refusal refusal) {
-            return "I cannot start the job: " + refusal.getMessage();
+            return "I cannot " + request.what() + ": " + refusal.getMessage();
         }
     }
 
@@ -462,13 +606,21 @@ public final class Uno {
     // ponytail: a few fixed word patterns in Italian and English. A language model replaces this for free text.
     static final class RuleProvider implements Provider {
         private static final Pattern RESERVE = Pattern.compile("(?:lascia|riserva|leave|reserve)\\D*(\\d+)");
+        private static final Pattern QUANTITY = Pattern.compile("(?:quantity|level|quantità|livello)\\D*(\\d+)");
         private static final Pattern NUMBER = Pattern.compile("\\b\\d+\\b");
         private static final Pattern ROBOT = Pattern.compile("robot\\D{0,2}(\\d+)");
         private static final Pattern SOURCE_WORD = Pattern.compile("\\b(?:da|dal|dalla|dallo|from)\\s+(?:il\\s+|la\\s+|the\\s+)?$");
         private static final Map<String, String> ITEM_WORDS = Map.of("carbone", "minecraft:coal");
-        /** The words of the actions that name a job, in English and in Italian. The first action that fits decides. */
+        /**
+         * The words of the actions that name a job, in English and in Italian. The first action that fits decides.
+         * A resume comes before a pause: "riprendi il lavoro in pausa" is a resume.
+         * A change needs a new value: a number after a word of the quantity or of the reserve.
+         */
         private static final List<Map.Entry<Action, Pattern>> ACTION_WORDS = List.of(
+            Map.entry(Action.RESUME, Pattern.compile("\\b(?:resume|continue|riprendi|continua)\\b")),
+            Map.entry(Action.CANCEL, Pattern.compile("\\b(?:cancel|annulla|cancella)\\b")),
             Map.entry(Action.PAUSE, Pattern.compile("\\b(?:pause|pausa|sospendi)\\b")),
+            Map.entry(Action.CHANGE, Pattern.compile(QUANTITY.pattern() + "|" + RESERVE.pattern())),
             Map.entry(Action.REPORT, Pattern.compile("\\b(?:report|status|rapporto|stato|how(?:'s|’s| is| are)|come (?:va|vanno|sta|stanno))\\b")));
 
         /**
@@ -500,18 +652,34 @@ public final class Uno {
             return Pattern.compile("\\b" + Pattern.quote(station.toLowerCase(Locale.ROOT)) + "\\b").matcher(text);
         }
 
-        /** The action of the first word that fits, with "robot N" and the one station of the text. Null if no word fits. */
+        /**
+         * The action of the first word that fits, with "robot N" and the one station of the text. Null if no word fits.
+         * A change also has the new quantity and the new reserve. A value that the text does not give is null.
+         */
         private static JsonObject target(String text, List<String> stations) {
+            // "robot N" names the job. Its number is not a new value.
+            Matcher robot = ROBOT.matcher(text);
+            JsonElement robotId = robot.find() ? new JsonPrimitive(Integer.parseInt(robot.group(1))) : JsonNull.INSTANCE;
+            String rest = robot.reset().replaceFirst(" ");
             for (Map.Entry<Action, Pattern> word : ACTION_WORDS) {
-                if (!word.getValue().matcher(text).find()) continue;
+                if (!word.getValue().matcher(rest).find()) continue;
                 JsonObject action = new JsonObject();
                 action.addProperty("action", word.getKey().name().toLowerCase(Locale.ROOT));
-                Matcher robot = ROBOT.matcher(text);
-                action.add("robot", robot.find() ? new JsonPrimitive(Integer.parseInt(robot.group(1))) : JsonNull.INSTANCE);
+                action.add("robot", robotId);
                 action.add("station", stations.isEmpty() ? JsonNull.INSTANCE : new JsonPrimitive(stations.get(0)));
+                if (word.getKey() == Action.CHANGE) {
+                    action.add("quantity", number(QUANTITY, rest));
+                    action.add("reserve", number(RESERVE, rest));
+                }
                 return action;
             }
             return null;
+        }
+
+        /** The first number after the word of the pattern, or null. */
+        private static JsonElement number(Pattern word, String text) {
+            Matcher matcher = word.matcher(text);
+            return matcher.find() ? new JsonPrimitive(Integer.parseInt(matcher.group(1))) : JsonNull.INSTANCE;
         }
 
         /** The action "start" with the order of the request. An IllegalArgumentException says what is missing. */

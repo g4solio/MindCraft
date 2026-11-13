@@ -44,7 +44,7 @@ final class UnoView {
         // "Confirm" has one meaning only: the proposal is in words next to the button, and the action names that proposal.
         // The last sentence of Uno can be about something else, for example a report.
         Uno.Proposal proposal = Uno.proposal(actor);
-        if (proposal != null) widgets.add(text("Waiting for your confirmation: " + Uno.describe(proposal.order()) + ".", "normal"));
+        if (proposal != null) widgets.add(text("Waiting for your confirmation: " + proposal.text() + ".", "normal"));
 
         JsonObject input = new JsonObject();
         input.addProperty("type", "input");

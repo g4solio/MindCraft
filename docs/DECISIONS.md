@@ -313,6 +313,7 @@ Example of a report produced in the test, with the real data of the job:
 - **A request without a complete order is not a failure:** a provider signals it with `IllegalArgumentException`. Uno answers "I cannot propose a job: …". Each other error of a provider is a failure: "I cannot interpret the request now (…)". Evidence: tests `t18_provider_failures` and `t18_claude_provider`.
 - **Decided by the project owner on 2026-11-12:** the first provider with a language model is Claude. See D21.
 - **Decided on 2026-11-13, not implemented:** a provider will give an action from a closed list, not only an order (D29). Uno will speak first to warn (D30). The model will write the answers to written requests, and this fixed template stays as the fallback (D32).
+- **Changed on 2026-11-13, increment A:** the interface is `answer(request, context) → action and tokens`. The action `none` with a reason replaces the `IllegalArgumentException`. Each exception is now a failure. See D29.1.
 
 ## D18 — Contact points: tablet and projector, one native screen
 
@@ -404,6 +405,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Not verified:** the load of the `-all` jar on an installed Forge. The coexistence with other mods that bring Kotlin or Jackson. A favourable sign: in the development game the same libraries load as modules together with those of Forge.
 - **Not done:** a check of the license notices of the 25 libraries inside the `-all` jar. The repository does not contain those libraries. Only a built `-all` jar does.
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
+- **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is not verified with the real service. See D29.1.
 - **Decided on 2026-11-13, not implemented:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). By default only an operator will use Claude, with a session limit and a counter on the screen (D33).
 
 ## D22 — License: MIT
@@ -545,7 +547,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D29 — Uno acts on words through a closed list of actions
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented in part: the contract of a provider is verified with automatic in-game tests (D29.1). The actions change, pause, resume, cancel and report are not implemented.
 
 - **Problem:** with the code of S2, three requests fail.
   - "Leave only 16 in the depot", for an open job. The provider can only give a new order, and the robot is busy. Uno refuses.
@@ -557,6 +559,35 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Buttons and commands stay.** They are the control surface when the provider fails.
 - **Cost:** each change needs two steps. D17 already names this friction.
 - **Change:** in D17 a provider gives only an order. D23 holds: one proposal for each player, the newest.
+- **Implemented in part:** the contract of a provider. See D29.1. Uno acts on `start` and `none` only. The other five actions are not implemented.
+
+### D29.1 — The contract of a provider: one action and its tokens
+
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules, with providers written in the tests and with a false server in place of the API. Not verified with the real Claude service (D33). Increment A, ticket #2. The flat schema of the Claude provider is a choice of the implementation: **proposed**, not confirmed by the project owner.
+
+- **Contract:** a provider answers `answer(request, context) → Answer`. The answer holds one action as JSON, the input tokens and the output tokens. The context does not change: the station names of the player, the robot numbers and the "free" flag (D21).
+- **Actions:** the closed list of D29. Each action has its parameters. A field that the action does not use is null or absent.
+
+| Action | Parameters |
+| --- | --- |
+| `start` | The order of S2: module, robot, from, to, item, quantity, reserve |
+| `change` | A target, and a new quantity, a new reserve or both. Null is a value that does not change |
+| `pause`, `resume`, `cancel`, `report` | A target: a robot number, a station name, or nothing |
+| `none` | One short reason for the player |
+
+- **Tokens:** the Claude provider reads them from the usage data of the answer. The fixed rules report zero. Uno does not use them yet: the counter is a later part of increment A (D33).
+- **What Uno does in this part:** `start` becomes a proposal, as in S2. `none` gives its reason: "I cannot propose a job: …". Each other action gets a fixed sentence, for example "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing." Uno creates no proposal for it.
+- **Validation in Uno:** Uno reads each answer and does not trust it. An action outside the list, a `start` without a complete order and a `none` without a reason get "I did not get a valid configuration. I created no proposal." Uno ignores the case of the action name: structured outputs do not guarantee the case of an enum value.
+- **Length limit:** 200 characters for the reason, as in S2. The limit moved from the Claude provider to Uno. Thus it applies to each provider.
+- **Failures:** each exception of a provider is a failure: "I cannot interpret the request now (…)". Before, an `IllegalArgumentException` meant a request without a complete order. This corrects a counterexample of D21: an internal error of that type looked like an incomplete request.
+- **Fixed rules:** they give `start` or `none`, with the same orders and the same reasons as before. The word patterns of the other actions are later parts of increment A.
+- **Claude provider:** a new system text for the seven actions and a new output schema. The model stays `claude-opus-5-5` with a low effort (D21).
+- **Proposed, the flat schema:** one object with ten fields. Each field is required, thus the model writes each one. A field that the action does not use is null: eight fields have the type "value or null". The documentation of structured outputs permits 16 parameters with such a union type.
+- **Alternative not chosen:** one object for each action, with `anyOf`. It is more exact, but its grammar is more complex to compile.
+- **Evidence:** tests `s2_uno_reference_sentence`, `t18_provider_failures`, `t18_claude_provider` and the new test `a_provider_answers_with_an_action`. The four failed before the implementation (run 34) and passed after it (run 35). The tests of the S2 flow pass with the same sentences as before: `s2_uno_request`, `s2_tablet_view`, `t22_confirm_only_the_shown_proposal`, `t22_t23_proposals_and_contact_points`, `t23_state_of_an_earlier_session`.
+- **Not verified:** the new schema and the new system text with the real service. The test `t18_claude_live` compiles with the new contract. It was not run: a run costs money and needs the consent of the project owner. Its four requests are the requests of S2: they test only `start` and `none`.
+- **Counterexample:** the real service can refuse the schema, for example with "Schema is too complex for compilation". Then each request to Claude fails, and Uno says that the model service answered with error 400. The fixed rules do not take over.
+- **Counterexample:** until the next parts, "pause the furnace job" gets two different answers. With Claude it gets the fixed sentence of `pause`. With the fixed rules it gets "I cannot propose a job: the quantity is missing."
 
 ## D30 — Initiative: Uno warns
 

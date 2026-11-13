@@ -181,6 +181,7 @@ The server log says which provider is active: look for the line `Uno interprets 
 - The answer of Claude is only a proposal. It goes through the same validation as the commands and starts only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
+- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. In this version Uno acts only on a new job and on "none". For the other actions Uno says that it cannot do them from a written request yet, and changes nothing.
 
 Details and limits: [D21](docs/DECISIONS.md).
 

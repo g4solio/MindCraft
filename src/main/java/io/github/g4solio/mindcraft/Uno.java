@@ -29,8 +29,8 @@ import java.util.regex.Pattern;
 
 /**
  * Uno, the central intelligence. In this increment Uno does three things.
- * It changes a text request into a proposed order. It starts the order only when the player confirms.
- * It reports on jobs with data from the runtime only.
+ * It changes a written request into one action. The action "start" becomes a proposed order.
+ * It starts the order only when the player confirms. It reports on jobs with data from the runtime only.
  * <p>
  * Uno has no authority of its own. Each order goes through the ordinary validation of the runtime.
  * Uno speaks English to the player.
@@ -38,21 +38,37 @@ import java.util.regex.Pattern;
 // ponytail: English text in the code. Use translation keys when a second language is necessary.
 public final class Uno {
     /**
-     * Changes a request into an order. An implementation can call a language model.
-     * The context is JSON: the stations and robots of the player. The answer is JSON:
-     * {"module": "keep_stock" or "transport", "robot": 0, "from": "...", "to": "...", "item": "minecraft:coal",
-     * "quantity": 64, "reserve": 32}.
-     * An IllegalArgumentException says that the request has no complete order. Its message is the reason, for the player.
-     * Any other exception is a failure of the provider.
+     * Changes a written request into one action from a closed list (D29). An implementation can call a language model.
+     * The context is JSON: the stations and robots of the player. The answer is the action as JSON, with its parameters.
+     * A field that the action does not use is null or absent.
+     * <ul>
+     * <li>start, with the order: {"action": "start", "module": "keep_stock" or "transport", "robot": 0, "from": "...", "to": "...",
+     * "item": "minecraft:coal", "quantity": 64, "reserve": 32}.</li>
+     * <li>change, pause, resume, cancel, report, with the target: a robot number, a station name, or nothing.
+     * {"action": "pause", "robot": 3, "station": null}. A change also has "quantity", "reserve" or both. Null is a value that does not change.</li>
+     * <li>none, with one short reason for the player: {"action": "none", "reason": "the quantity is missing"}.</li>
+     * </ul>
+     * The answer also has the input tokens and the output tokens of the model. A provider without a model reports zero.
+     * Each exception is a failure of the provider. Only the action "none" says that the request gives no action.
      */
     public interface Provider {
-        String propose(String request, String context) throws Exception;
+        Answer answer(String request, String context) throws Exception;
     }
+
+    /** The answer of a provider: the action as JSON, and the tokens that the answer used. */
+    public record Answer(String json, long inputTokens, long outputTokens) {
+    }
+
+    /** The closed list of the actions of a provider (D29). */
+    enum Action { START, CHANGE, PAUSE, RESUME, CANCEL, REPORT, NONE }
 
     /** The provider of the /uno command and of the screen. A different provider can replace it. See MindCraft.chooseProvider. */
     static volatile Provider provider = new RuleProvider();
     static final long TIMEOUT_MS = 20_000;
     private static final int SILENT_TICKS = 300;
+    /** The limit of the reason of a "none" action. A provider writes the reason, and the screen has little room. */
+    private static final int MAX_REASON_LENGTH = 200;
+    private static final String INVALID = "I did not get a valid configuration. I created no proposal.";
 
     /** A proposal that waits for a confirmation. The number tells it from the other proposals of the session. */
     record Proposal(int number, Order order) {
@@ -122,18 +138,18 @@ public final class Uno {
         CompletableFuture
             .supplyAsync(() -> {
                 try {
-                    return provider.propose(request, context);
+                    return provider.answer(request, context);
                 } catch (Exception e) {
                     throw new CompletionException(e);
                 }
             })
             .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .whenComplete((json, error) -> server.execute(() -> {
+            .whenComplete((answer, error) -> server.execute(() -> {
                 // The answer belongs to the session of its request. An answer for an earlier session changes nothing.
                 // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
                 if (server.isStopped() || mine != session) return;
                 mine.open.remove(actor.id());
-                reply.accept(error == null ? propose(mine, MindRuntime.get(server), actor, json) : failure(error));
+                reply.accept(error == null ? act(mine, MindRuntime.get(server), actor, answer) : failure(error));
             }));
     }
 
@@ -158,15 +174,58 @@ public final class Uno {
         return context.toString();
     }
 
-    private static String propose(Session mine, MindRuntime runtime, Actor actor, String json) {
+    /**
+     * The sentence of Uno for the answer of a provider. Uno reads the answer and does not trust it: a provider can give anything.
+     * In this increment Uno acts on "start" and "none". Each other action gets a fixed sentence and changes nothing.
+     */
+    private static String act(Session mine, MindRuntime runtime, Actor actor, Answer answer) {
+        JsonObject json;
+        Action action;
+        try {
+            json = JsonParser.parseString(answer.json()).getAsJsonObject();
+            // A model does not guarantee the case of a value of its schema.
+            action = Action.valueOf(json.get("action").getAsString().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException e) {
+            return INVALID;
+        }
+        return switch (action) {
+            case START -> propose(mine, runtime, actor, json);
+            case NONE -> none(json);
+            case CHANGE -> notYet("change a job");
+            case PAUSE -> notYet("pause a job");
+            case RESUME -> notYet("resume a job");
+            case CANCEL -> notYet("cancel a job");
+            case REPORT -> notYet("report on a job");
+        };
+    }
+
+    // ponytail: a fixed sentence for each action that Uno does not handle yet. The next parts of increment A replace it.
+    private static String notYet(String what) {
+        return "I cannot " + what + " from a written request yet. Use the buttons of the screen or the commands. I changed nothing.";
+    }
+
+    /** A request without an action is not a failure of the provider. The player must see the difference. */
+    private static String none(JsonObject json) {
+        String reason;
+        try {
+            reason = json.get("reason").getAsString().trim();
+        } catch (RuntimeException e) {
+            return INVALID;
+        }
+        if (reason.isEmpty()) return INVALID;
+        reason = reason.substring(0, Math.min(reason.length(), MAX_REASON_LENGTH));
+        return "I cannot propose a job: " + reason + (reason.endsWith(".") ? "" : ".");
+    }
+
+    private static String propose(Session mine, MindRuntime runtime, Actor actor, JsonObject o) {
         Order order;
         try {
-            JsonObject o = JsonParser.parseString(json).getAsJsonObject();
+            JsonElement reserve = o.get("reserve");
             order = new Order(o.get("module").getAsString(), o.get("robot").getAsInt(), o.get("from").getAsString(),
                 o.get("to").getAsString(), ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(o.get("item").getAsString())),
-                o.get("quantity").getAsInt(), o.has("reserve") ? o.get("reserve").getAsInt() : 0);
+                o.get("quantity").getAsInt(), reserve == null || reserve.isJsonNull() ? 0 : reserve.getAsInt());
         } catch (RuntimeException e) {
-            return "I did not get a valid configuration. I created no proposal.";
+            return INVALID;
         }
         try {
             runtime.check(actor, order);
@@ -285,13 +344,10 @@ public final class Uno {
         return count == MindRuntime.UNKNOWN ? "never observed" : count + " items, " + (now - at) / 20 + " seconds ago";
     }
 
-    /** A request without a complete order is not a failure of the provider. The player must see the difference. */
+    /** A failure of the provider: an exception or the time limit. It is not an answer, thus each exception gets this sentence. */
     private static String failure(Throwable error) {
         Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
         String reason = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        if (cause instanceof IllegalArgumentException) {
-            return "I cannot propose a job: " + reason + (reason.endsWith(".") ? "" : ".");
-        }
         return "I cannot interpret the request now (" + reason + "). The jobs in progress continue.";
     }
 
@@ -307,11 +363,23 @@ public final class Uno {
         private static final Pattern SOURCE_WORD = Pattern.compile("\\b(?:da|dal|dalla|dallo|from)\\s+(?:il\\s+|la\\s+|the\\s+)?$");
         private static final Map<String, String> ITEM_WORDS = Map.of("carbone", "minecraft:coal");
 
+        /** The action "start", or "none" with the reason. The fixed rules call no model, thus they report zero tokens. */
         @Override
-        public String propose(String request, String context) {
+        public Answer answer(String request, String context) {
             JsonObject known = JsonParser.parseString(context).getAsJsonObject();
-            String text = request.toLowerCase(Locale.ROOT);
+            JsonObject action;
+            try {
+                action = start(request.toLowerCase(Locale.ROOT), known);
+            } catch (IllegalArgumentException missing) {
+                action = new JsonObject();
+                action.addProperty("action", "none");
+                action.addProperty("reason", missing.getMessage());
+            }
+            return new Answer(action.toString(), 0, 0);
+        }
 
+        /** The action "start" with the order of the request. An IllegalArgumentException says what is missing. */
+        private static JsonObject start(String text, JsonObject known) {
             Matcher reserveMatch = RESERVE.matcher(text);
             int reserve = reserveMatch.find() ? Integer.parseInt(reserveMatch.group(1)) : 0;
             String rest = reserveMatch.reset().replaceFirst(" ");
@@ -361,6 +429,7 @@ public final class Uno {
             }
 
             JsonObject order = new JsonObject();
+            order.addProperty("action", "start");
             order.addProperty("module", text.matches("(?s).*\\b(mantieni|mantenere|almeno|keep)\\b.*") ? MindRuntime.KEEP_STOCK : MindRuntime.TRANSPORT);
             order.addProperty("robot", robot);
             order.addProperty("from", from);
@@ -368,7 +437,7 @@ public final class Uno {
             order.addProperty("item", item);
             order.addProperty("quantity", quantity);
             order.addProperty("reserve", reserve);
-            return order.toString();
+            return order;
         }
     }
 }

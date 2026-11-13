@@ -62,6 +62,8 @@ x:  0          1      2        3    4      5
 | 29, 30 | 42 of 42, two times | None |
 | 31 | 42 of 43 | With the new test `t23_robots_of_an_earlier_session`, before its correction: it failed as expected |
 | 32, 33 | **43 of 43**, two times | None. Current code. Server line: `All 43 required tests passed :)` |
+| 34 | 40 of 44, expected | Increment A, ticket #2: the new and changed tests of the provider contract, with the old code. The four tests failed. See "Increment A — The provider answers with an action" |
+| 35 | **44 of 44** | None. The code of ticket #2. Server line: `All 44 required tests passed :)` |
 
 Lesson from run 2: the exit code is not sufficient. The log must contain the line `GAME TESTS COMPLETE`.
 Lesson from run 14: that line is not sufficient either. The number of tests and the line `Enabled Gametest Namespaces` say which tests ran.
@@ -302,6 +304,31 @@ Changes to the older tests:
 - `s1_transfer` and `s2_keep_stock`: the module versions are `transport@2` and `keep_stock@2`.
 - `t18_claude_provider`, second change: the first of two requests in the same tick now has a provider that waits for the test. See run 28.
 
+## Increment A — The provider answers with an action
+
+Ticket #2 of spec #1, on 2026-11-13. See D29.1.
+All tests of this section are in the game and automatic. They use the fixed rules, providers written in the tests, or the Claude provider with a false server in place of the API.
+No test called the real Claude service.
+Run 34 is the run of the new and changed tests with the old code. Run 35 is the run with the new code.
+
+| Test | What it does | Run 34, old code | Run 35, new code |
+| --- | --- | --- | --- |
+| `s2_uno_reference_sentence` | The reference request of S2 in English and in Italian, and a transport, to the fixed rules. Then a request without a quantity | Failed: the answer was an order without an action | Passed. Each answer is the action `start` with the same order as in S2, and zero tokens. The request without a quantity gives the action `none` with the reason "the quantity is missing", and zero tokens |
+| `t18_provider_failures` | The cases of S2, and two more: an action outside the list, and a provider that throws an `IllegalArgumentException` | Failed: the exception gave "I cannot propose a job: a defect of the provider." | Passed. The exception gives "I cannot interpret the request now (a defect of the provider)." The action `dig` gives "I did not get a valid configuration". The fixed rules still give "I cannot propose a job: the quantity is missing." |
+| `t18_claude_provider` | The false API answers with actions in the shape of the new schema. The test calls the provider directly one time, then through Uno | Failed: the provider reported 0 input tokens and 0 output tokens. The later checks of the test did not run | Passed. The direct call gives the action of the answer, with 1234 input tokens and 56 output tokens. Through Uno: `none` gives its reason, `pause` gives the fixed sentence, `start` gives the proposal "carry 8 x minecraft:coal". A refusal, a cut answer, error 401, error 500 and a stopped API give their failure sentences, as before |
+| `t18_claude_provider` | Reads the request that went to the false API | Not reached | Passed. The schema has the seven actions and ten required fields. The system text names the seven actions. The context is the same as before: exactly the two stations of the player and its robot with the "free" flag |
+| `a_provider_answers_with_an_action` | A job waits for materials. A provider answers `change`, `pause`, `resume`, `cancel` and `report`. Then three answers with `none` | Failed: `change` gave "I did not get a valid configuration" | Passed. Each of the five actions gives its fixed sentence, for example "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing." No proposal. The job keeps its ID, the state `WAITING`, quantity 24, reserve 0 and its revision. A reason of 300 characters is cut to 200. `None` with a capital letter works. A `none` with a blank reason gives "I did not get a valid configuration" |
+| `s2_uno_request`, `s2_tablet_view`, `t22_confirm_only_the_shown_proposal`, `t22_t23_proposals_and_contact_points`, `t23_state_of_an_earlier_session` | The S2 flow, with the action `start` of the fixed rules or of providers of the tests | Passed | Passed. The same proposal, confirmation and job as before |
+
+Code examination, not a test: `LiveTests.java` compiles with the new contract. Its check "the fixed rules cannot read this request" now reads the action `none`. Before, it waited for an exception.
+
+Changes to the older tests:
+
+- `s2_uno_reference_sentence`: it expects the action `start` and zero tokens. It also asks for a request without a quantity.
+- `t18_provider_failures` and the providers written in the other tests: they answer the action `start` with the order.
+- `t18_provider_failures`: two more cases. A provider that throws an `IllegalArgumentException` now expects the sentence of a failure.
+- `t18_claude_provider`: the false API answers with actions. Two more cases: a direct call for the tokens, and a `pause`. The check of the schema and of the system text is new. The check of the context is exact now.
+
 ## Design discussion of 2026-11-13 — code examinations, no test
 
 No test ran in this discussion. The facts below come from code examinations. They support D28, D33, D34, D36 and the proposals D06.1 and D13.1.
@@ -366,6 +393,7 @@ Third manual test, on the projector and its hologram:
 | S2: Claude with requests different from the four of the test `t18_claude_live` | Other languages, ambiguous station names, more than one free robot, a simple transport. Each request costs money to the key owner |
 | S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person |
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
+| Increment A: the schema and the system text of the seven actions with the real service | A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none`. The new schema is tested only with the false API |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |

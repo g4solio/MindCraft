@@ -62,6 +62,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -1202,6 +1204,10 @@ public class MindCraftTests {
         api.start();
         Uno.Provider claude = new ClaudeProvider(AnthropicOkHttpClient.builder().apiKey("not-a-key")
             .baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build());
+        // Only an operator uses a provider with a model (D33). The player of this test is not an operator: an operator owns
+        // each station of the server, and the check of the context below needs the stations of one player only.
+        // Thus the requests through Uno use the code of the provider without its model flag. The limits have their own tests.
+        Uno.Provider claudeCode = claude::answer;
 
         String request = "Carry eight pieces of coal to the destination";
         String none = modelAction("none", "You did not give the source.");
@@ -1216,8 +1222,8 @@ public class MindCraftTests {
             new ClaudeCase(200, () -> claudeMessage("max_tokens", "{\"action\":"), "(the answer of the model is incomplete)"),
             new ClaudeCase(401, () -> error, "(the API key is not valid or has no permission)"),
             new ClaudeCase(500, () -> error, "(the model service answered with error 500)"),
-            // An action that Uno does not handle yet: a fixed sentence and no proposal.
-            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "I cannot pause a job from a written request yet."),
+            // A pause of the robot, which has no job: Uno asks for the robot number of a job and creates no proposal.
+            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "You have no job on robot #"),
             new ClaudeCase(200, () -> claudeMessage("end_turn", start.get()), "Proposal: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"),
             new ClaudeCase(-1, () -> "", "(the model service is not reachable)"));
         int proposalCase = 6;
@@ -1263,7 +1269,7 @@ public class MindCraftTests {
                     if (test.status() < 0) api.stop(0);
                     status.set(test.status());
                     body.set(test.body().get());
-                    Uno.ask(server, player, request, claude, 15_000, answers::add);
+                    Uno.ask(server, player, request, claudeCode, 15_000, answers::add);
                 })
                 .thenWaitUntil(() -> check(answers.size() > index, "Uno did not answer yet"))
                 .thenExecute(() -> {
@@ -1302,7 +1308,7 @@ public class MindCraftTests {
 
     /**
      * Increment A: a provider answers with one action from the closed list of D29.
-     * In this part Uno acts on "start" and "none" only. Each other action gets a fixed sentence: Uno creates no proposal,
+     * Uno does not act on "change", "resume" and "cancel" yet. Each gets a fixed sentence: Uno creates no proposal,
      * and the job does not change. A "none" action gives its reason with the length limit.
      * During the test the job waits for materials: its state does not change by itself.
      */
@@ -1315,14 +1321,10 @@ public class MindCraftTests {
         Map<String, String> cases = new LinkedHashMap<>();
         cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":8,\"reserve\":4}",
             "I cannot change a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
-        cases.put("{\"action\":\"pause\",\"robot\":null,\"station\":\"a_actions_source\"}",
-            "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
         cases.put("{\"action\":\"resume\",\"robot\":%d,\"station\":null}",
             "I cannot resume a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
         cases.put("{\"action\":\"cancel\",\"robot\":%d,\"station\":null}",
             "I cannot cancel a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
-        cases.put("{\"action\":\"report\",\"robot\":null,\"station\":null}",
-            "I cannot report on a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing.");
         // The reason of "none" has a limit of 200 characters.
         cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}",
             "I cannot propose a job: " + "a".repeat(150) + "b".repeat(50) + ".");
@@ -1353,6 +1355,247 @@ public class MindCraftTests {
                 });
         }
         sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A: the fixed rules read a simple form of a report and of a pause, in English and in Italian.
+     * The action names the job with a robot number ("robot N"), with one station of the player, or with nothing.
+     * A request that names two stations stays a start. The fixed rules call no model, thus they report zero tokens.
+     */
+    @GameTest(template = EMPTY)
+    public static void a_fixed_rules_report_and_pause(GameTestHelper helper) {
+        String robots = "\"robots\":[{\"id\":7,\"free\":false},{\"id\":8,\"free\":true}]}";
+        String english = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
+        String italian = "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots;
+        String report = "{\"action\":\"report\",\"robot\":%s,\"station\":%s}", pause = "{\"action\":\"pause\",\"robot\":%s,\"station\":%s}";
+        // A request, its context and the answer of the fixed rules.
+        List<String[]> cases = List.of(
+            new String[]{"How is the furnace?", english, report.formatted("null", "\"furnace\"")},
+            new String[]{"Report", english, report.formatted("null", "null")},
+            new String[]{"What is the status of robot 8?", english, report.formatted("8", "null")},
+            new String[]{"Pause the furnace job", english, pause.formatted("null", "\"furnace\"")},
+            new String[]{"pause", english, pause.formatted("null", "null")},
+            new String[]{"Pause robot 7.", english, pause.formatted("7", "null")},
+            new String[]{"Come vanno le fornaci?", italian, report.formatted("null", "\"fornaci\"")},
+            new String[]{"Rapporto", italian, report.formatted("null", "null")},
+            new String[]{"Come sta il robot 8?", italian, report.formatted("8", "null")},
+            new String[]{"Metti in pausa il lavoro del deposito", italian, pause.formatted("null", "\"deposito\"")},
+            new String[]{"Pausa", italian, pause.formatted("null", "null")},
+            new String[]{"Sospendi il robot 7", italian, pause.formatted("7", "null")},
+            // Two stations: a start, as before. The action word does not decide.
+            new String[]{"Pause, then carry 24 coal from depot to furnace with robot 8", english,
+                "{\"action\":\"start\",\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
+                    + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"});
+        List<String> wrong = new ArrayList<>();
+        for (String[] test : cases) {
+            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], test[1]);
+            if (!answer.json().equals(test[2]) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
+                wrong.add("'" + test[0] + "' -> " + answer);
+            }
+        }
+        check(wrong.isEmpty(), wrong.toString());
+        helper.succeed();
+    }
+
+    /** Two rigs of one player, side by side. The second is 3 blocks to the south of the first. */
+    private static Rig[] twoRigs(GameTestHelper helper, String name, Actor actor) {
+        Rig first = new Rig(helper, name, actor, new BlockPos(0, 1, 1));
+        Rig second = new Rig(helper, name + "2", actor, new BlockPos(0, 1, 4));
+        first.build(0, 1000);
+        second.build(0, 1000);
+        return new Rig[]{first, second};
+    }
+
+    /** A provider of the test that always gives this answer. */
+    private static Uno.Provider gives(Supplier<String> json) {
+        return (request, context) -> answer(json.get());
+    }
+
+    /**
+     * Increment A: report and pause by words, through the conversation with a provider of the test.
+     * Two jobs of one player wait for materials. Both use the destination of the first rig: two robots bring coal to one furnace.
+     * Uno finds the job from the robot number, from a station of exactly one open job, or from the only open job.
+     * In each other case Uno says how many jobs fit, asks for the robot number and changes nothing.
+     * A pause runs immediately through the ordinary request of the runtime. Uno creates no proposal.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_report_and_pause_by_words(GameTestHelper helper) {
+        Actor player = player("a_words");
+        Rig[] rigs = twoRigs(helper, "a_words", player);
+        Rig a = rigs[0], b = rigs[1];
+        MinecraftServer server = a.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        String ask = " Tell me the robot number of the job. I did nothing.";
+        // The jobs before each request that must change nothing: robot, job ID, state and revision.
+        Runnable unchanged = () -> {
+            check(!Uno.hasProposal(player), "Uno created a proposal: " + last.get());
+            check(a.job().state == State.WAITING && a.job().revision == 0 && b.job().state == State.WAITING && b.job().revision == 0,
+                "a request changed a job: " + a.describe() + "\n" + b.describe());
+        };
+        GameTestSequence sequence = helper.startSequence()
+            .thenWaitUntil(a::enroll).thenWaitUntil(a::restarted)
+            .thenWaitUntil(b::enroll).thenWaitUntil(b::restarted)
+            .thenExecute(() -> {
+                a.startJob(24, 0);
+                a.runtime.start(player, new Order(MindRuntime.TRANSPORT, b.id, b.from, a.to, Items.COAL, 16, 0));
+            })
+            .thenWaitUntil(() -> {
+                a.state(State.WAITING);
+                b.state(State.WAITING);
+            });
+
+        // A report by a station of one job: the report of that job only.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "", "station", a.from)), 5000, answers)
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_report_and_pause_by_words report by station: {}", last.get());
+                check(last.get().startsWith("Job " + a.job().id + ", robot #" + a.id + ": carry 24 items from '" + a.from + "' to '" + a.to + "'"), last.get());
+                check(!last.get().contains("\n") && !last.get().contains("robot #" + b.id + ":"), "the report is not about one job: " + last.get());
+                unchanged.run();
+            });
+        // A report by a robot number: the report of the job of that robot only.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "", "robot", b.id)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Job " + b.job().id + ", robot #" + b.id + ": carry 16 items from '" + b.from + "' to '" + a.to + "'"), last.get());
+                check(!last.get().contains("\n") && !last.get().contains("robot #" + a.id + ":"), "the report is not about one job: " + last.get());
+                unchanged.run();
+            });
+        // A report without a target: the report on all jobs, as the "Report" button gives it.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("report", "")), 5000, answers)
+            .thenExecute(() -> {
+                String[] lines = last.get().split("\n");
+                check(lines.length == 2 && Stream.of(lines).anyMatch(line -> line.startsWith("Job " + a.job().id + ", robot #" + a.id + ":"))
+                    && Stream.of(lines).anyMatch(line -> line.startsWith("Job " + b.job().id + ", robot #" + b.id + ":")), last.get());
+                unchanged.run();
+            });
+        // A station of two open jobs, no target with two open jobs, a station and a robot of no job: Uno asks and changes nothing.
+        Map<Supplier<String>, Supplier<String>> doubts = new LinkedHashMap<>();
+        doubts.put(() -> modelAction("report", "", "station", a.to), () -> "2 of your open jobs use the station '" + a.to + "'." + ask);
+        doubts.put(() -> modelAction("pause", "", "station", a.to), () -> "2 of your open jobs use the station '" + a.to + "'." + ask);
+        doubts.put(() -> modelAction("pause", ""), () -> "You have 2 open jobs." + ask);
+        doubts.put(() -> modelAction("pause", "", "station", "a_words_nothing"), () -> "None of your open jobs uses the station 'a_words_nothing'." + ask);
+        doubts.put(() -> modelAction("pause", "", "robot", 999_999), () -> "You have no job on robot #999999." + ask);
+        doubts.put(() -> modelAction("report", "", "robot", 999_999), () -> "You have no job on robot #999999." + ask);
+        for (Map.Entry<Supplier<String>, Supplier<String>> doubt : doubts.entrySet()) {
+            sequence = ask(sequence, server, player, "x", gives(doubt.getKey()), 5000, answers)
+                .thenExecute(() -> {
+                    check(last.get().equals(doubt.getValue().get()), last.get());
+                    unchanged.run();
+                });
+        }
+        // A pause by a station of one job: immediately, without a proposal. The other job continues to wait.
+        int[] jobB = new int[1];
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("pause", "", "station", b.from)), 5000, answers)
+            .thenExecute(() -> {
+                jobB[0] = b.job().id;
+                check(last.get().equals("Job " + jobB[0] + " on robot #" + b.id + " is paused. The cargo stays on board."), last.get());
+                check(!Uno.hasProposal(player), "a pause became a proposal");
+                check(b.job().state == State.PAUSED && b.job().reason.equals("paused by the owner") && b.job().id == jobB[0], b.describe());
+                a.state(State.WAITING);
+            });
+        // A pause of a job that is not running: the refusal of the runtime.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("pause", "", "robot", b.id)), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot pause the job: Job " + jobB[0] + " is not running (PAUSED)."), last.get());
+                b.state(State.PAUSED);
+                // The second job ends. The player has one open job now.
+                a.runtime.control(player, b.id, "cancel");
+            });
+        // A pause without a target, with one open job: Uno pauses that job.
+        sequence = ask(sequence, server, player, "x", gives(() -> modelAction("pause", "")), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("Job " + a.job().id + " on robot #" + a.id + " is paused. The cargo stays on board."), last.get());
+                check(!Uno.hasProposal(player), "a pause became a proposal");
+                a.state(State.PAUSED);
+                b.state(State.CANCELLED);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Increment A and T19: a different player names the job of the owner, by its robot number, by its stations or with nothing.
+     * The other player cannot pause the job and gets no data of it: each sentence is the one for a job that does not exist.
+     * The job of the owner does not change.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_t19_words_of_another_player(GameTestHelper helper) {
+        Actor owner = player("a_t19_owner"), other = player("a_t19_other");
+        Rig rig = new Rig(helper, "a_t19", 0, 1000, owner);
+        MinecraftServer server = rig.level.getServer();
+        String ask = " Tell me the robot number of the job. I did nothing.";
+        List<String> answers = new CopyOnWriteArrayList<>();
+        // An answer of the provider and the sentence for the other player.
+        Map<Supplier<String>, Supplier<String>> cases = new LinkedHashMap<>();
+        for (String action : List.of("pause", "report")) {
+            cases.put(() -> modelAction(action, "", "robot", rig.id), () -> "You have no job on robot #" + rig.id + "." + ask);
+            cases.put(() -> modelAction(action, "", "station", rig.from), () -> "None of your open jobs uses the station '" + rig.from + "'." + ask);
+            cases.put(() -> modelAction(action, "", "station", rig.to), () -> "None of your open jobs uses the station '" + rig.to + "'." + ask);
+        }
+        cases.put(() -> modelAction("pause", ""), () -> "You have no open job." + ask);
+        cases.put(() -> modelAction("report", ""), () -> "I have no record of a job of yours.");
+        int[] job = new int[1];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> job[0] = rig.startJob(24, 0).id)
+            .thenWaitUntil(() -> rig.state(State.WAITING));
+        for (Map.Entry<Supplier<String>, Supplier<String>> test : cases.entrySet()) {
+            sequence = ask(sequence, server, other, "x", gives(test.getKey()), 5000, answers)
+                .thenExecute(() -> check(answers.get(answers.size() - 1).equals(test.getValue().get()), answers.get(answers.size() - 1)));
+        }
+        // The same request through the fixed rules: the context of the other player has no station and no robot.
+        // The text is built when the step runs: the robot has its number only after the enrollment.
+        sequence
+            .thenExecute(() -> Uno.ask(server, other, "Pause robot " + rig.id, new Uno.RuleProvider(), 5000, answers::add))
+            .thenWaitUntil(() -> check(answers.size() == cases.size() + 1, "Uno did not answer yet"))
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_t19_words_of_another_player: {}", answers);
+                check(answers.get(answers.size() - 1).equals("You have no job on robot #" + rig.id + "." + ask), answers.get(answers.size() - 1));
+                check(answers.stream().noneMatch(a -> a.contains("Job " + job[0]) || a.contains("delivered") || a.contains("paused")), answers.toString());
+                check(rig.job().id == job[0] && rig.job().state == State.WAITING, rig.describe());
+                check(!Uno.hasProposal(other), "the other player has a proposal");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Increment A: the same behaviour through the "ask" action of the screen, with the fixed rules of the server.
+     * A report by a station, a pause in Italian without a target, a pause of a job that is not running, a report of all jobs.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_report_and_pause_through_the_view(GameTestHelper helper) {
+        Actor player = player("a_view");
+        Rig rig = new Rig(helper, "a_view", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        String[] job = new String[1];
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                job[0] = "Job " + rig.job().id;
+                UnoView.act(server, player, "ask", "{\"request\":\"How is " + rig.to + "?\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("Uno › " + job[0] + ", robot #" + rig.id + ": carry 24 items"), view.get()))
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("a_report_and_pause_through_the_view report: {}", view.get());
+                rig.state(State.WAITING);
+                UnoView.act(server, player, "ask", "{\"request\":\"Metti in pausa\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("Uno › " + job[0] + " on robot #" + rig.id + " is paused. The cargo stays on board."), view.get()))
+            .thenExecute(() -> {
+                rig.state(State.PAUSED);
+                check(action(view.get(), "confirm") == null, "a pause became a proposal: " + view.get());
+                check(action(view.get(), "resume") != null && view.get().contains(" · paused"), view.get());
+                UnoView.act(server, player, "ask", "{\"request\":\"Pause robot " + rig.id + "\"}");
+            })
+            .thenWaitUntil(() -> check(view.get().contains("Uno › I cannot pause the job: " + job[0] + " is not running (PAUSED)."), view.get()))
+            .thenExecute(() -> UnoView.act(server, player, "ask", "{\"request\":\"Rapporto\"}"))
+            .thenWaitUntil(() -> check(view.get().contains("Uno › " + job[0] + ", robot #" + rig.id + ":")
+                && view.get().contains("I am paused at your request."), view.get()))
+            .thenExecute(() -> {
+                rig.state(State.PAUSED);
+                check(action(view.get(), "confirm") == null, view.get());
+            })
+            .thenSucceed();
     }
 
     /** T21: the robot is off and the last observation is old. Uno gives the last known data and says that it is old. */
@@ -1703,6 +1946,316 @@ public class MindCraftTests {
                 check(wrong.isEmpty(), wrong.toString());
             })
             .thenSucceed();
+    }
+
+    // --- Increment A: limits on the model calls (D33) ----------------------------------------------------------------
+
+    /** The answer of the fixed rules to the request "x": it has no quantity. */
+    private static final String RULES_X = "I cannot propose a job: the quantity is missing.";
+    /** The answer of Uno to the action "none" of a CountingModel made with {@link CountingModel#none}. */
+    private static final String MODEL_X = "I cannot propose a job: the model read it.";
+
+    static Actor operator(String name) {
+        return new Actor(UUID.nameUUIDFromBytes(name.getBytes(StandardCharsets.UTF_8)), true);
+    }
+
+    /**
+     * A provider of the tests that counts as a provider with a model. Thus the operator rule and the session limit apply to it.
+     * It calls no model and costs nothing. It counts its calls, and gives the answer of the provider inside it.
+     */
+    static final class CountingModel implements Uno.Provider {
+        final AtomicInteger calls = new AtomicInteger();
+        private final Uno.Provider inner;
+
+        CountingModel(Uno.Provider inner) {
+            this.inner = inner;
+        }
+
+        /** A model that answers "none" with the reason "the model read it", and reports these tokens. */
+        static CountingModel none(long inputTokens, long outputTokens) {
+            return new CountingModel((request, context) ->
+                new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", inputTokens, outputTokens));
+        }
+
+        @Override
+        public Uno.Answer answer(String request, String context) throws Exception {
+            calls.incrementAndGet();
+            return inner.answer(request, context);
+        }
+
+        @Override
+        public boolean callsModel() {
+            return true;
+        }
+    }
+
+    /** Sends the request "x" the given number of times. Each request leaves after the answer to the one before it. */
+    private static void askTimes(MinecraftServer server, Actor actor, Uno.Provider provider, int times, List<String> answers) {
+        if (times <= 0) return;
+        Uno.ask(server, actor, "x", provider, 5000, answer -> {
+            answers.add(answer);
+            askTimes(server, actor, provider, times - 1, answers);
+        });
+    }
+
+    /** The counter of the actor in this server session: the requests to a model, the input tokens and the output tokens. */
+    private static void usage(Actor actor, int requests, long inputTokens, long outputTokens) {
+        Uno.Usage usage = Uno.usage(actor);
+        check(usage.equals(new Uno.Usage(requests, inputTokens, outputTokens)), "expected " + requests + " requests, "
+            + inputTokens + " input tokens and " + outputTokens + " output tokens, but: " + usage);
+    }
+
+    /**
+     * Uno counts, for each actor in one server session, the requests that it sent to a model, and their tokens.
+     * A request counts when Uno sends it: before its answer. A failure and the time limit count with zero tokens.
+     * A request that finds an open request is not sent, thus it does not count. The fixed rules do not count.
+     * The console is an actor too, with a counter of its own.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_model_requests_count(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("a_count"), other = operator("a_count_other");
+        CountingModel model = CountingModel.none(120, 30);
+        CountDownLatch held = new CountDownLatch(1);
+        CountingModel slow = new CountingModel((request, context) -> {
+            held.await(10, TimeUnit.SECONDS);
+            return new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", 5, 5);
+        });
+        CountingModel broken = new CountingModel((request, context) -> {
+            throw new IOException("model offline");
+        });
+        AtomicReference<Boolean> lateReturned = new AtomicReference<>(false);
+        CountingModel late = new CountingModel((request, context) -> {
+            Thread.sleep(2000);
+            lateReturned.set(true);
+            return new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", 999, 999);
+        });
+        List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
+        Uno.Usage[] console = new Uno.Usage[1];
+
+        GameTestSequence sequence = ask(helper.startSequence(), server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals(MODEL_X), answers.toString());
+                usage(operator, 1, 120, 30);
+                // The provider of this request waits for the test. Thus the request is open when the second one arrives.
+                Uno.ask(server, operator, "x", slow, 15_000, answers::add);
+                Uno.ask(server, operator, "x", model, 5000, busy::add);
+                check(busy.equals(List.of("I am still working on your previous request.")), "a second request did not wait: " + busy);
+                check(model.calls.get() == 1, "the refused request went to the model");
+                // The open request counts already, with zero tokens until its answer.
+                usage(operator, 2, 120, 30);
+                held.countDown();
+            })
+            .thenWaitUntil(() -> check(answers.size() == 2, "Uno did not answer yet"))
+            .thenExecute(() -> usage(operator, 2, 125, 35));
+        sequence = ask(sequence, server, operator, "x", broken, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(2).startsWith("I cannot interpret the request now (model offline)"), answers.get(2));
+                usage(operator, 3, 125, 35);
+            });
+        sequence = ask(sequence, server, operator, "x", late, 300, answers)
+            .thenExecute(() -> {
+                check(answers.get(3).contains("TimeoutException"), answers.get(3));
+                usage(operator, 4, 125, 35);
+            })
+            // The provider answers after the time limit, with tokens. Uno does not use that answer.
+            .thenWaitUntil(() -> check(lateReturned.get(), "the late provider did not return yet"))
+            .thenIdle(5)
+            .thenExecute(() -> usage(operator, 4, 125, 35));
+        // The fixed rules call no model. Thus they do not count.
+        sequence = ask(sequence, server, operator, "x", new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(4).equals(RULES_X), answers.get(4));
+                usage(operator, 4, 125, 35);
+                usage(other, 0, 0, 0);
+                check(slow.calls.get() == 1 && broken.calls.get() == 1 && late.calls.get() == 1, "a provider got a wrong number of calls");
+                console[0] = Uno.usage(ADMIN);
+            });
+        sequence = ask(sequence, server, ADMIN, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(5).equals(MODEL_X), answers.get(5));
+                usage(ADMIN, console[0].requests() + 1, console[0].inputTokens() + 120, console[0].outputTokens() + 30);
+                usage(operator, 4, 125, 35);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * The limit is 100 requests to a model for each actor in one server session. The request after the limit goes to the
+     * fixed rules. Its answer says one time that the limit is reached. Each actor has a limit of its own.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_model_limit(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("a_limit"), other = operator("a_limit_other");
+        CountingModel model = CountingModel.none(10, 2);
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = helper.startSequence()
+            .thenExecute(() -> askTimes(server, operator, model, 100, answers))
+            .thenWaitUntil(() -> check(answers.size() == 100, "answers so far: " + answers.size()))
+            .thenExecute(() -> {
+                check(answers.stream().allMatch(MODEL_X::equals), "an answer below the limit is not the answer of the model: " + answers);
+                check(model.calls.get() == 100, "calls: " + model.calls.get());
+                usage(operator, 100, 1000, 200);
+            });
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                String said = answers.get(100);
+                MindCraft.LOGGER.info("a_model_limit, the request after the limit: {}", said);
+                check(model.calls.get() == 100, "the request after the limit went to the model");
+                check(said.startsWith("You reached the limit of 100 model requests in this server session.") && said.endsWith(" " + RULES_X), said);
+                usage(operator, 100, 1000, 200);
+            });
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(101).equals(RULES_X), "the second answer after the limit: " + answers.get(101));
+                check(model.calls.get() == 100, "a request after the limit went to the model");
+            });
+        sequence = ask(sequence, server, other, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(102).equals(MODEL_X) && model.calls.get() == 101, "the limit of one operator stopped a different operator");
+                usage(other, 1, 10, 2);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * Only an operator uses a provider that calls a model. Each other player gets the fixed rules, and has no counter.
+     * A provider of the tests without a model still serves each player: the rule is only for a provider with a model.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_model_only_for_operators(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor guest = player("a_guest");
+        CountingModel model = CountingModel.none(10, 2);
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = ask(helper.startSequence(), server, guest, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals(RULES_X), answers.get(0));
+                check(model.calls.get() == 0, "the request of a player who is not an operator went to the model");
+                usage(guest, 0, 0, 0);
+            });
+        sequence = ask(sequence, server, guest, "x", (request, context) -> answer("{\"action\":\"none\",\"reason\":\"the test read it\"}"), 5000, answers)
+            .thenExecute(() -> check(answers.get(1).equals("I cannot propose a job: the test read it."), answers.get(1)));
+        sequence.thenSucceed();
+    }
+
+    /**
+     * A new server session starts the counters again: an operator at the limit uses the model again.
+     * The test calls the function that each server start calls. It does not start a second server.
+     * It has its own batch: a new session also removes the proposals and the counters of the tests that run at the same time.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "a_model_session")
+    public static void a_new_session_restarts_the_counters(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("a_session");
+        CountingModel model = CountingModel.none(10, 2);
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = helper.startSequence()
+            .thenExecute(() -> askTimes(server, operator, model, 100, answers))
+            .thenWaitUntil(() -> check(answers.size() == 100, "answers so far: " + answers.size()));
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(100).startsWith("You reached the limit") && model.calls.get() == 100, "the limit is not reached: " + answers.get(100));
+                Uno.newSession();
+                usage(operator, 0, 0, 0);
+            });
+        sequence = ask(sequence, server, operator, "x", model, 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(101).equals(MODEL_X) && model.calls.get() == 101, "the new session did not use the model: " + answers.get(101));
+                usage(operator, 1, 10, 2);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
+     * The screen and the provider of the server. With Claude on the server, the screen of each player says where the written
+     * requests of that player go. The counter is on the screen of an operator, also at the limit. It is not on the screen of a
+     * player who is not an operator. With the fixed rules on the server, the screen has no counter and no line about a provider.
+     * A local stand-in is in the place of the API: no request reaches the real service.
+     * It has its own batch, because it changes the provider of the server. It changes it only inside a step, and puts the
+     * provider of before back at the end of that step, also when a check fails. A screen reads the provider of the server
+     * when it builds a view and when it sends a request.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "a_server_provider")
+    public static void a_screen_model_lines(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        MindRuntime runtime = MindRuntime.get(server);
+        Actor operator = operator("a_screen"), guest = player("a_screen_guest"), spent = operator("a_screen_spent");
+        AtomicInteger calls = new AtomicInteger();
+        HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        api.createContext("/", exchange -> {
+            calls.incrementAndGet();
+            exchange.getRequestBody().readAllBytes();
+            byte[] bytes = claudeMessage("end_turn", modelAction("none", "You did not give the source."), 1234, 56).getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        api.start();
+        Uno.Provider claude = new ClaudeProvider(AnthropicOkHttpClient.builder().apiKey("not-a-key")
+            .baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build());
+        // A view and a request through the screen with Claude as the provider of the server.
+        Function<Actor, String> view = actor -> withServerProvider(claude, () -> UnoView.build(runtime, actor, helper.getLevel().getGameTime()));
+        BiConsumer<Actor, String> write = (actor, request) -> withServerProvider(claude, () -> {
+            UnoView.act(server, actor, "ask", "{\"request\":\"" + request + "\"}");
+            return null;
+        });
+        String claudeLine = "Written requests go to Claude, a model of Anthropic.", rulesLine = "Uno uses the fixed rules for you";
+        List<String> answers = new CopyOnWriteArrayList<>();
+        helper.startSequence()
+            .thenExecute(() -> {
+                for (Actor actor : List.of(operator, guest)) {
+                    String rules = UnoView.build(runtime, actor, helper.getLevel().getGameTime());
+                    check(!rules.contains("model requests") && !rules.contains("Claude") && !rules.contains("fixed rules"),
+                        "the fixed rules are on the server, but the view has a counter or a line about a provider: " + rules);
+                }
+                String mine = view.apply(operator);
+                check(mine.contains(claudeLine) && mine.contains("Your model requests in this session: 0 of 100. Tokens: 0 in, 0 out.")
+                    && !mine.contains(rulesLine), "the view of an operator: " + mine);
+                String theirs = view.apply(guest);
+                check(!theirs.contains(claudeLine) && !theirs.contains("model requests")
+                    && theirs.contains(rulesLine + ": only an operator uses Claude."), "the view of a player who is not an operator: " + theirs);
+                write.accept(operator, "x");
+            })
+            .thenWaitUntil(() -> check(view.apply(operator).contains("You did not give the source."), "Claude did not answer yet"))
+            .thenExecute(() -> {
+                String mine = view.apply(operator);
+                check(calls.get() == 1 && mine.contains("Your model requests in this session: 1 of 100. Tokens: 1234 in, 56 out."), mine);
+                write.accept(guest, "x");
+            })
+            .thenWaitUntil(() -> check(view.apply(guest).contains(RULES_X), view.apply(guest)))
+            .thenExecute(() -> {
+                check(calls.get() == 1, "the request of a player who is not an operator went to Claude");
+                // The counter belongs to the actor, not to the provider: a model of the test brings this operator to the limit.
+                askTimes(server, spent, CountingModel.none(10, 2), 100, answers);
+            })
+            .thenWaitUntil(() -> check(answers.size() == 100, "answers so far: " + answers.size()))
+            .thenExecute(() -> {
+                String atLimit = view.apply(spent);
+                check(atLimit.contains("Your model requests in this session: 100 of 100. Tokens: 1000 in, 200 out.") && !atLimit.contains(claudeLine)
+                    && atLimit.contains(rulesLine + ": you reached the limit of model requests in this session."), "the view at the limit: " + atLimit);
+                write.accept(spent, "x");
+            })
+            .thenWaitUntil(() -> check(view.apply(spent).contains(RULES_X), view.apply(spent)))
+            .thenExecute(() -> {
+                String atLimit = view.apply(spent);
+                check(calls.get() == 1 && atLimit.contains("You reached the limit of 100 model requests in this server session."), atLimit);
+                api.stop(0);
+            })
+            .thenSucceed();
+    }
+
+    /** Runs the action with this provider of the server, then puts the provider of before back, also after a failed check. */
+    private static <T> T withServerProvider(Uno.Provider provider, Supplier<T> action) {
+        Uno.Provider before = Uno.provider;
+        Uno.provider = provider;
+        try {
+            return action.get();
+        } finally {
+            Uno.provider = before;
+        }
     }
 
     /**

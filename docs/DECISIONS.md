@@ -410,6 +410,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
 - **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is not verified with the real service. See D29.1.
 - **Decided on 2026-11-13, not implemented:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). By default only an operator will use Claude, with a session limit and a counter on the screen (D33).
+- **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
 
 ## D22 — License: MIT
 
@@ -557,7 +558,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D29 — Uno acts on words through a closed list of actions
 
-**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented in part: the contract of a provider is verified with automatic in-game tests (D29.1). The actions change, pause, resume, cancel and report are not implemented.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented in part: the contract of a provider (D29.1), and the pause and the report (D29.2), are verified with automatic in-game tests. The actions change, resume and cancel are not implemented.
 
 - **Problem:** with the code of S2, three requests fail.
   - "Leave only 16 in the depot", for an open job. The provider can only give a new order, and the robot is busy. Uno refuses.
@@ -570,6 +571,7 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Cost:** each change needs two steps. D17 already names this friction.
 - **Change:** in D17 a provider gives only an order. D23 holds: one proposal for each player, the newest.
 - **Implemented in part:** the contract of a provider. See D29.1. Uno acts on `start` and `none` only. The other five actions are not implemented.
+- **Implemented in part, ticket #3:** Uno also acts on `pause` and `report`, and finds the job on the server. See D29.2. The actions `change`, `resume` and `cancel` are not implemented.
 
 ### D29.1 — The contract of a provider: one action and its tokens
 
@@ -598,6 +600,40 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Not verified:** the new schema and the new system text with the real service. The test `t18_claude_live` compiles with the new contract. It was not run: a run costs money and needs the consent of the project owner. Its four requests are the requests of S2: they test only `start` and `none`.
 - **Counterexample:** the real service can refuse the schema, for example with "Schema is too complex for compilation". Then each request to Claude fails, and Uno says that the model service answered with error 400. The fixed rules do not take over.
 - **Counterexample:** until the next parts, "pause the furnace job" gets two different answers. With Claude it gets the fixed sentence of `pause`. With the fixed rules it gets "I cannot propose a job: the quantity is missing."
+- **Changed on 2026-11-13, ticket #3:** `pause` and `report` do not get the fixed sentence any more. The fixed rules read them. The counterexample above holds now only for `change`, `resume` and `cancel`. See D29.2.
+
+### D29.2 — Report and pause by words
+
+**Status:** the rules below marked "decided" are decided by the project owner on 2026-11-13: spec #1, sections "How Uno finds the job" and "Immediate actions and proposals", and its further note 2. They are implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules and with providers written in the tests. Not verified with the real Claude service. Increment A, ticket #3. The choices marked "proposed" are choices of the implementation, not confirmed by the project owner.
+
+- **Decided, the search of the job:** Uno finds the job on the server. It looks only at the jobs that the actor owns, with the same check of the actor as each other request.
+  - From the robot number, if the request gives one.
+  - From a station name, if exactly one open job of the actor uses that station as source or as destination.
+  - With no target, if the actor has exactly one open job.
+- **Decided, each other case:** Uno says how many jobs fit and asks for the robot number. It does nothing and creates no proposal. The sentences:
+
+| Case | Sentence of Uno |
+| --- | --- |
+| A station of two open jobs | "2 of your open jobs use the station 'furnace'. Tell me the robot number of the job. I did nothing." |
+| A station of no open job | "None of your open jobs uses the station 'mine'. Tell me the robot number of the job. I did nothing." |
+| No target, two open jobs | "You have 2 open jobs. Tell me the robot number of the job. I did nothing." |
+| No target, no open job | "You have no open job. Tell me the robot number of the job. I did nothing." |
+| A robot without a job of the actor | "You have no job on robot #9. Tell me the robot number of the job. I did nothing." |
+
+- **Decided, the report:** it runs immediately. A request about one job gives the report sentence of that job only: the same line as in the report on all jobs. A report request without a target gives the report on all jobs of the actor, as the "Report" button does.
+- **Decided, the pause:** it runs immediately, without a proposal. It is the ordinary request of the runtime, with the robot and the job ID. Uno says: "Job 3 on robot #5 is paused. The cargo stays on board." A refusal of the runtime becomes the sentence of Uno: "I cannot pause the job: Job 3 is not running (PAUSED)."
+- **Decided, T19:** a different player cannot pause the job and gets no data of it. The search looks only at the jobs of the actor. Thus the sentence for the job of a different player is the sentence for a job that does not exist, and it does not say whether the robot or the station exists.
+- **Proposed, a robot number names the job that the robot has now, open or not.** Thus "how is robot 5?" also reports a job that is `DONE` or `CANCELLED`. A pause of such a job gets the refusal of the runtime: "Robot #5 has no open job." A station name and a request without a target look only at open jobs, as the spec says.
+- **Proposed, the robot number wins:** if a request gives a robot number and a station, Uno uses the robot number and ignores the station.
+- **Proposed, the search ignores the case of a station name.** A model does not guarantee the case of a value. An empty station name is the same as no station.
+- **Proposed, the words of the fixed rules:** a request that names two stations of the player stays a start (decided in the spec). With one station or none, the first action that fits decides: first the pause, then the report. Pause: `pause`, `pausa`, `sospendi`. Report: `report`, `status`, `how is`, `how's`, `how are`, `rapporto`, `stato`, `come va`, `come vanno`, `come sta`, `come stanno`. The job: "robot N", or the name of one station. A request without these words goes to the rules of a start, as before. Thus the reasons of "none" do not change. The README lists the words.
+- **The provider calls:** a written report request goes to the provider, as each written request. With Claude it is a paid call. The "Report" button and `/uno report` call no provider.
+- **No change of the runtime and of the Lua modules.** The pause uses `MindRuntime.control` with the job ID, as the "Pause" button does.
+- **Evidence:** tests `a_fixed_rules_report_and_pause`, `a_report_and_pause_by_words`, `a_t19_words_of_another_player`, `a_report_and_pause_through_the_view`, and the changed test `t18_claude_provider`. Each failed with the code before the change and passed after it. See "Increment A — Report and pause by words" in TEST_RESULTS.md.
+- **Not verified:** the real Claude service with a pause or a report. The schema and the system text of the Claude provider did not change in this ticket. A run of `t18_claude_live` costs money and needs the consent of the project owner. Its requests test only `start` and `none`.
+- **Counterexample:** "How is the furnace?" after the furnace job is `DONE` gets "None of your open jobs uses the station 'furnace'." The player must give the robot number.
+- **Counterexample:** the fixed rules read a robot number only after the word "robot". "Pause 5" is a pause without a target. With one open job, Uno pauses that job, also if it is not on robot #5. A pause is reversible with `resume`.
+- **Counterexample:** a start request with one station and a word of an action is that action. "Report the coal from the depot" is a report about the depot job.
 
 ## D30 — Initiative: Uno warns
 
@@ -684,7 +720,7 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 
 ## D33 — The model and its cost
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
+**Status:** decided by the project owner on 2026-11-13. The limits on the calls of increment A are implemented: see D33.1. The rest is not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
 
 The model. Increment B.
 
@@ -715,6 +751,28 @@ Limits on the calls. Increment A.
 - **Reason:** `/uno ask` needs no permission, and has no counter and no limit other than one request at a time (code examination). A command block that repeats the command as a player can make one request after the other. This is deduced from the code. It was not tried.
 - **Cost:** a fixed session limit can stop a long session. It becomes a setting when multiplayer opens.
 - **Not decided:** the number of the session limit.
+
+### D33.1 — Limits on the model calls in increment A
+
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with providers written in the tests and with a local stand-in in place of the API. Not verified with the real Claude service or in a client. Increment A, ticket #11. The choices of the spec are decided by the project owner (spec #1, 2026-11-13). The limit of 100 is an initial value of the spec: **proposed**, to review after the play session. Two points are choices of the implementation: **proposed**, see below.
+
+- **Counter:** for each actor in one server session, Uno counts the requests that it sent to a model, the input tokens and the output tokens. The console is an actor too. The counters are in memory and are not saved. A new server session starts them again.
+- **When a request counts:** when Uno sends it, before the answer. The tokens arrive with the answer. A request that fails or reaches the time limit counts with zero tokens. A request that finds an open request of the same player is not sent, thus it does not count.
+- **Limit:** 100 requests to a model for each actor in one server session. The number is fixed in the code (`Uno.MODEL_REQUESTS`).
+- **At the limit:** the fixed rules read each later request of that actor until the session ends. The first answer after the limit starts with "You reached the limit of 100 model requests in this server session." The later answers do not repeat it. The fixed rules have no limit.
+- **Operators only:** a provider with a model serves only an operator. "Operator" is the `admin` flag that the server already puts in the actor: permission level 2, or the console. Each other player gets the fixed rules, without a counter and without the sentence about the limit.
+- **Screen:** with a model on the server, an operator sees "Your model requests in this session: N of 100. Tokens: X in, Y out.", also at the limit. A player who is not an operator sees no counter. With Claude on the server, the line "Written requests go to Claude, a model of Anthropic." appears only when the requests of this player go to Claude. Otherwise one line says "Uno uses the fixed rules for you", with the reason: only an operator uses Claude, or the limit. With the fixed rules on the server the screen has none of these lines.
+- **Unchanged:** one request at a time for each player. The report, the confirmation and the buttons do not call `Uno.ask`, thus they call no provider (code examination). The test of this with a provider that counts its calls belongs to the notices and the summary (tickets #8 and #10).
+- **Proposed, which provider has a model:** the provider says so (`Uno.Provider.callsModel`). The default is no. The Claude provider says yes. Reason: the providers written in the older tests serve players who are not operators. Cost: a new provider with a model that forgets to say so has no limit and no operator rule.
+- **Proposed, the request after the limit:** the limit sentence comes before the answer of the fixed rules to the same request. Thus the player gets an answer, not only a refusal.
+- **Evidence:** automatic in-game tests `a_model_requests_count`, `a_model_limit`, `a_model_only_for_operators`, `a_new_session_restarts_the_counters` and `a_screen_model_lines`. The five failed before the implementation and passed after it: normal run 50 of 50, and 58 of 58 after the merge with tickets #2, #3, #5, #6 and #7 of increment A. See "Increment A — Limits on the model calls" in [TEST_RESULTS.md](TEST_RESULTS.md).
+- **Not verified:** the counter with the tokens of the real service. The test `t18_claude_live` now uses an operator and checks the counter after its four requests. It compiles. It was not run: a run costs money and needs the consent of the project owner. The screen in a client.
+- **Counterexample:** an operator owns each station and each robot (D11). Thus the context that goes to Claude holds the station names and the robot numbers of each player of the server, not only of the operator. With one player these are the data of D21.
+- **Counterexample:** the limit counts requests, not tokens or money. The estimate of D33 holds only for its token numbers. The counter shows the tokens, not a price.
+- **Counterexample:** the limit is for each session, not for each day. A restart of the server starts the counters again. In a single-player game each opening of the world is a new session.
+- **Counterexample:** the server builds the actor from the command source. A command block has the permission level 2, thus `/uno ask` from a command block counts as a request of an operator: the console, or the player of `execute as`. Only an operator can write a command block. This is deduced from the code and from the permission level of a command block. It was not tried.
+- **Counterexample:** a request that reaches the time limit can still reach the service and cost tokens. The counter shows zero tokens for it. Thus the counter of the tokens can be lower than the real use. The counter of the requests is not.
+- **Still open (D33):** a spending limit that the server operator can set. The gate of D33 stays.
 
 ## D34 — Waits, blocks and a load on board
 

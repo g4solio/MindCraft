@@ -337,6 +337,38 @@ Changes to the older tests:
 - `t18_provider_failures`: two more cases. A provider that throws an `IllegalArgumentException` now expects the sentence of a failure.
 - `t18_claude_provider`: the false API answers with actions. Two more cases: a direct call for the tokens, and a `pause`. The check of the schema and of the system text is new. The check of the context is exact now.
 
+## Increment A — Report and pause by words
+
+Ticket #3 of spec #1, on 2026-11-13. See D29.2.
+All tests of this section are in the game and automatic. They use the fixed rules, providers written in the tests, or the Claude provider with a false server in place of the API.
+No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+Rig: two tests use one rig. `a_report_and_pause_by_words` uses two rigs of one player, side by side: the second is 3 blocks to the south of the first.
+The sources are empty. Thus each job waits for materials, and its state does not change by itself during the test.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new and changed tests, with the code before the change of Uno | 44 of 49. The five tests below failed as expected. The other 44 passed. Server line: `5 required tests failed :(` |
+| Green, first | The code of ticket #3 | 48 of 49. `a_t19_words_of_another_player` failed for an error of the test, not of the mod. The test built the text "Pause robot N" before the enrollment, when the rig had no robot number yet: the text was "Pause robot -1". The fixed rules read it as robot 1, and the sentence named robot #1. The test now builds the text when its step runs |
+| Green | The code of ticket #3, with the corrected test | **49 of 49**. Server line: `All 49 required tests passed :)` |
+| After the merge | The code of ticket #3, merged with tickets #2, #5, #6 and #7 of increment A | **53 of 53**. Server line: `All 53 required tests passed :)` |
+
+| Test | What it does | Red run, old code | Green run, new code |
+| --- | --- | --- | --- |
+| `a_fixed_rules_report_and_pause` | Twelve requests to the fixed rules: a report and a pause in English and in Italian, with a station, with "robot N" and with no target. Then a request with a pause word and two stations | Failed: each of the twelve requests gave `none` with "the quantity is missing" | Passed. Each request gives the expected action and target, for example "How is the furnace?" gives `{"action":"report","robot":null,"station":"furnace"}` and "Sospendi il robot 7" gives `{"action":"pause","robot":7,"station":null}`. Zero tokens. The request with two stations stays a `start` |
+| `a_report_and_pause_by_words` | Two jobs of one player wait. Both use one destination. A provider of the test gives reports and pauses with each kind of target | Failed: the first report gave "I cannot report on a job from a written request yet" | Passed. A report by a station of one job and a report by a robot number give the line of that job only. A report without a target gives the two lines. A station of two jobs, no target with two jobs, a station of no job and a robot of no job give the count and the question, for example "2 of your open jobs use the station '…'. Tell me the robot number of the job. I did nothing." No job changed and no proposal. A pause by a station pauses that job only: "Job … on robot #… is paused. The cargo stays on board." Its state is `PAUSED` with the reason "paused by the owner". A second pause gives "I cannot pause the job: Job … is not running (PAUSED)." After the cancel of the second job, a pause without a target pauses the first job |
+| `a_t19_words_of_another_player` | A different player names the job of the owner by its robot number, by its two stations and with no target, in a report and in a pause. Then "Pause robot N" through the fixed rules | Failed: the first pause gave "I cannot pause a job from a written request yet" | Passed. Each sentence is the sentence for a job that does not exist, for example "You have no job on robot #…". A report without a target gives "I have no record of a job of yours." No sentence contains the job ID, a delivery or a pause. The job of the owner stays `WAITING`. No proposal |
+| `a_report_and_pause_through_the_view` | The "ask" action of the screen, with the fixed rules of the server: "How is a_view_destination?", "Metti in pausa", "Pause robot N", "Rapporto" | Failed: the screen showed "I cannot propose a job: the quantity is missing." | Passed. The screen shows the report of the job, then "Job … on robot #… is paused. The cargo stays on board." The job is `PAUSED`, the screen has the "Resume" button and no "Confirm" button. The second pause gives the refusal of the runtime. "Rapporto" gives the report: "I am paused at your request." |
+| `t18_claude_provider` | The false API answers `pause` for the robot of the test, which has no job | Failed: "I cannot pause a job from a written request yet." | Passed: "You have no job on robot #…. Tell me the robot number of the job. I did nothing." No proposal. The other cases give the same sentences as before |
+
+Ticket #3 changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it. The merge brought the runtime and the Lua modules of ticket #5. Ticket #5 ran the four phases on its merged code. This merge did not repeat them.
+
+Changes to the older tests:
+
+- `a_provider_answers_with_an_action`: the cases `pause` and `report` are gone. The new tests check them. The cases `change`, `resume` and `cancel` keep their fixed sentence.
+- `t18_claude_provider`: the case `pause` expects the sentence of the search, not the fixed sentence.
+
 ## Design discussion of 2026-11-13 — code examinations, no test
 
 No test ran in this discussion. The facts below come from code examinations. They support D28, D33, D34, D36 and the proposals D06.1 and D13.1.
@@ -515,6 +547,53 @@ Changes to the older tests:
 
 - `t04_destination_removed`, `t04_source_removed`, `t16_quantity_lowered_with_load` and `t06_impediment_of_an_unknown_kind`: one more check, the notice of the `BLOCKED` state.
 - `t11_server_restart`: it checks the diary after the restart and at the end.
+
+## Increment A — Limits on the model calls
+
+Ticket #11 of spec #1, on 2026-11-13. See D33.1.
+All tests of this section are in the game and automatic. They use providers written in the tests. One test uses the Claude provider with a local stand-in in place of the API.
+No test called the real Claude service.
+The runs of this ticket are not numbered in the table "Runs": other tickets of increment A ran at the same time.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| Red | The new tests, with the old behaviour of Uno and of the screen. The provider interface already had the model flag, and Uno had a counter that always gave zero | 44 of 50. The five new tests failed as expected. `t23_state_of_an_earlier_session` failed too, as a consequence of an error of a new test: see below |
+| Green | The code of ticket #11 | **50 of 50**. Server line: `All 50 required tests passed :)` |
+| After the merge | The code of ticket #11, merged with tickets #2, #5, #6 and #7 of increment A | **54 of 54**. Server line: `All 54 required tests passed :)` |
+| After the second merge | The same, merged also with ticket #3 | **58 of 58**. Server line: `All 58 required tests passed :)` |
+
+The error of the test in the red run: the first version of `a_screen_model_lines` made the Claude stand-in the provider of the server, and put the provider of before back only at its end. It failed before its end. Thus the stand-in stayed the provider of the server. `t23_state_of_an_earlier_session` runs in a later batch: its request through the screen went to the stand-in, and it got no proposal ("no proposal yet"). The test now changes the provider of the server only inside each step, and puts the provider of before back in a `finally`. The green run used this version.
+
+| Test | Batch | What it does | Red run, old code | Green run, new code |
+| --- | --- | --- | --- | --- |
+| `a_model_requests_count` | Normal | An operator sends requests to a provider of the test with a model: an answer with 120 and 30 tokens, a request held open while a second one arrives, an exception, a time limit of 300 ms. Then a request to the fixed rules, and one request of the console | Failed: "expected 1 requests, 120 input tokens and 30 output tokens, but: Usage[requests=0, inputTokens=0, outputTokens=0]" | Passed. The open request counts before its answer. The second request gets "I am still working on your previous request.", does not reach the provider and does not count. The exception and the time limit count with zero tokens. The late provider returns 999 and 999 tokens after the time limit: the counter does not change. The fixed rules do not count. A different operator has zero. The console gets a counter of its own |
+| `a_model_limit` | Normal | An operator sends 100 requests to the provider of the test, then three more requests: two of the same operator, one of a different operator | Failed: "the request after the limit went to the model" | Passed. 100 calls, counter 100 requests, 1000 and 200 tokens. Request 101 does not reach the provider. Its answer: "You reached the limit of 100 model requests in this server session. Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." Request 102 gets only the answer of the fixed rules. The different operator still reaches the provider |
+| `a_model_only_for_operators` | Normal | A player who is not an operator sends a request to the provider of the test with a model, then to a provider of the test without a model | Failed: the answer came from the provider with a model | Passed. The provider with a model gets no call. The answer is the answer of the fixed rules. No counter. The provider without a model answers as before |
+| `a_new_session_restarts_the_counters` | Its own: `a_model_session` | An operator reaches the limit. Then the function that each server start calls | Failed: request 101 still went to the model | Passed. After the new session the counter is zero, and the next request goes to the model |
+| `a_screen_model_lines` | Its own: `a_server_provider` | Views with the fixed rules on the server, then with the Claude provider against a local stand-in. An operator, a player who is not an operator, and an operator at the limit. Each one writes through the screen | Failed: the view of the operator had the line about Claude and no counter | Passed. With the fixed rules: no counter and no line about a provider. With Claude: the operator sees "Written requests go to Claude, a model of Anthropic." and "Your model requests in this session: 0 of 100. Tokens: 0 in, 0 out.", then "1 of 100. Tokens: 1234 in, 56 out." after one request to the stand-in. The other player sees no counter and "Uno uses the fixed rules for you: only an operator uses Claude." The operator at the limit sees "100 of 100", no line about Claude, and the line about the limit. The requests of the other player and of the operator at the limit do not reach the stand-in |
+| `t18_claude_provider` | Normal | Changed: the requests through Uno use the code of the provider without its model flag | Passed | Passed |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases were not repeated for it. The merges brought the runtime and the Lua modules of ticket #5 without a change: ticket #5 ran the four phases on them. Ticket #3 changed no runtime and no Lua module.
+
+Changes to the older tests:
+
+- `t18_claude_provider`: its player is not an operator. With the rule of this ticket, its requests through Uno would go to the fixed rules. An operator owns each station of the server, and the exact check of the context needs the stations of one player. Thus the requests through Uno use `claude::answer`: the code of the provider, without its model flag. The direct call of the provider did not change.
+- `t18_claude_live` (`LiveTests.java`): its player is an operator now. At the end it checks the counter: four requests, and more than zero tokens in and out. It compiles. It was not run: a run costs money and needs the consent of the project owner.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The report, the confirmation and the buttons of a job do not call `Uno.ask`. Only the "ask" action of the screen and `/uno ask` do | `UnoView.act`, `MindCraft.registerCommands` | A test with a provider that counts its calls. It belongs to tickets #8 and #10 |
+| At the time limit, `orTimeout` completes the request with an exception. The thread of the provider continues, and Uno does not read its answer | `Uno.ask` | The tokens that the real service bills for such a request. The counter shows zero for them |
+| The actor of a command source has the operator flag of the source. A command block has the permission level 2 | `MindCraft.actor(CommandSourceStack)`. The level of a command block is general knowledge, not read in the sources | That `/uno ask` from a command block counts as a request of an operator. Not tried |
+
+Not covered:
+
+- The counter with the tokens of the real service.
+- The screen in a client: the counter, the lines about the provider, and their length on the screen.
+- A real client with permission level 0, and a single-player world without commands. The tests build the actors.
+- The limit of the console: one test counts one request of the console. The limit itself is tested with an operator.
 
 ## Manual test in the game
 

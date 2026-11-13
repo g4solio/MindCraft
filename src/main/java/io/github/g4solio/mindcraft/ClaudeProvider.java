@@ -91,6 +91,12 @@ final class ClaudeProvider implements Uno.Provider {
         return new ClaudeProvider(AnthropicOkHttpClient.builder().fromEnv().timeout(Duration.ofMillis(Uno.TIMEOUT_MS)).build());
     }
 
+    /** Each request is a paid call on the account of the key. Thus the operator rule and the session limit apply (D33). */
+    @Override
+    public boolean callsModel() {
+        return true;
+    }
+
     @Override
     public Uno.Answer answer(String request, String context) {
         BetaJsonOutputFormat.Schema.Builder schema = BetaJsonOutputFormat.Schema.builder();

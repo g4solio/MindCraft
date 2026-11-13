@@ -37,9 +37,7 @@ final class UnoView {
         long places = runtime.places.stream().filter(place -> actor.id().equals(place.owner())).count();
         if (places > 0) widgets.add(text("Places of the base with a projector: " + places, "muted"));
         widgets.add(text("Uno › " + Uno.said(actor), "uno"));
-        // The player must know that the text of a request leaves the server.
-        // ponytail: the view knows the Claude provider. Put this notice in the provider interface when a second real provider exists.
-        if (Uno.provider instanceof ClaudeProvider) widgets.add(text("Written requests go to Claude, a model of Anthropic.", "muted"));
+        provider(widgets, actor);
 
         // "Confirm" has one meaning only: the proposal is in words next to the button, and the action names that proposal.
         // The last sentence of Uno can be about something else, for example a report.
@@ -62,6 +60,29 @@ final class UnoView {
         view.addProperty("title", "Uno");
         view.add("widgets", widgets);
         return view.toString();
+    }
+
+    /**
+     * Where the written requests of the player go, and what they cost (D33).
+     * The counter is on the screen of each player whose requests count: an operator, with a model on the server. Also at the limit.
+     * The player must know whether the text of a request leaves the server.
+     */
+    private static void provider(JsonArray widgets, Actor actor) {
+        Uno.Provider server = Uno.provider;
+        Uno.Route route = Uno.route(actor, server);
+        if (route == Uno.Route.MODEL || route == Uno.Route.AT_LIMIT) {
+            Uno.Usage usage = Uno.usage(actor);
+            widgets.add(text("Your model requests in this session: " + usage.requests() + " of " + Uno.MODEL_REQUESTS + ". Tokens: "
+                + usage.inputTokens() + " in, " + usage.outputTokens() + " out.", "muted"));
+        }
+        // ponytail: the view knows the Claude provider. Put this notice in the provider interface when a second real provider exists.
+        if (!(server instanceof ClaudeProvider)) return;
+        widgets.add(text(switch (route) {
+            case MODEL -> "Written requests go to Claude, a model of Anthropic.";
+            case AT_LIMIT -> "Uno uses the fixed rules for you: you reached the limit of model requests in this session. "
+                + "Your written requests stay on this server.";
+            case NOT_OPERATOR, NO_MODEL -> "Uno uses the fixed rules for you: only an operator uses Claude. Your written requests stay on this server.";
+        }, "muted"));
     }
 
     private static void job(JsonArray widgets, int robotId, Job job, long now) {

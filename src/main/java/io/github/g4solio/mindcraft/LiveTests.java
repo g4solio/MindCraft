@@ -44,7 +44,8 @@ public class LiveTests {
     public static void t18_claude_live(GameTestHelper helper) {
         String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
         check(key != null && !key.isBlank(), "this check needs " + ClaudeProvider.KEY_VARIABLE + " in the environment");
-        Actor player = MindCraftTests.player("live");
+        // Only an operator uses Claude (D33). This test runs alone: the operator sees only the stations of this test.
+        Actor player = MindCraftTests.operator("live");
         Rig rig = new Rig(helper, "live", 0, 1000, player);
         MinecraftServer server = rig.level.getServer();
         rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 64));
@@ -91,6 +92,13 @@ public class LiveTests {
                     check(answers.get(index).startsWith("I cannot propose a job: "), answers.get(index));
                 });
         }
-        sequence.thenSucceed();
+        sequence
+            .thenExecute(() -> {
+                // The counter of the session: four requests to Claude, with the tokens that the service reported.
+                Uno.Usage usage = Uno.usage(player);
+                MindCraft.LOGGER.info("t18_claude_live counter: {}", usage);
+                check(usage.requests() == 4 && usage.inputTokens() > 0 && usage.outputTokens() > 0, "the counter: " + usage);
+            })
+            .thenSucceed();
     }
 }

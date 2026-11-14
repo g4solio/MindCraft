@@ -106,8 +106,12 @@ x:  0          1      2        3    4      5
 | 73 | 81 of 81 | None. The corrections of the code review |
 | 74 | 81 of 81 | None. The same, with one more check in `a_diary_of_a_job` |
 | 75 | **81 of 81** | None. Ticket #12: the final code of increment A. Server line: `All 81 required tests passed :)` |
+| 76 | 0 of 1, with `-Plive` | Test `t18_claude_live` with the real Claude service, on 2026-11-14, with the consent of the project owner. Log line: `Enabled Gametest Namespaces: [mindcraft_live]`. The service answered the first request with error 400. The log did not show the body of the error. Then the test stopped the server with a `NullPointerException`: a later check read a job that did not exist |
+| 77 | 81 of 81 | None. The provider writes the body of an error of the service in the server log. The log of `t18_claude_provider` shows it for the error 500 of the false API: `The model service answered with error 500: {type=error, error={type=api_error, message=test}}` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
+
+Run 76 is the first run of the schema of increment A with the real service. See D29.1.
 
 - The tickets ran at the same time, each in a working folder of its own. Thus the numbers do not give the order in time.
 - The numbers follow the order of the merges into the branch `increment-a`: tickets #7, #6, #2, #5, #3, #11, #8, #4, #9 and #10, then the code review and ticket #12. Inside a ticket they follow the order of its section below.
@@ -904,7 +908,9 @@ Ticket #12 of spec #1, on 2026-11-13. It changed only documents. The code of its
 
 After the four phases the data folder has `mindcraft.dat` and no temporary file.
 
-No test of increment A called the real Claude service. No run used `-Plive`. `LiveTests.java` compiles with the code of increment A: each run compiles it. It did not run.
+Until run 75 no test of increment A called the real Claude service. No run used `-Plive`. `LiveTests.java` compiles with the code of increment A: each run compiles it.
+
+Run 76, on 2026-11-14, used `-Plive` with the consent of the project owner. The real service refused the first request with error 400. See D29.1.
 
 The evidence of increment A, by kind:
 
@@ -991,7 +997,7 @@ Third manual test, on the projector and its hologram:
 | S2: Claude with requests different from the four of the test `t18_claude_live` | Other languages, ambiguous station names, more than one free robot, a simple transport. Each request costs money to the key owner |
 | S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person. The play session of increment A uses the key |
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
-| Increment A: the schema and the system text of the seven actions with the real service | A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none`. The new schema is tested only with the false API. The play session sends the first real requests of this schema, unless the project owner runs `t18_claude_live` before it (point B1 of the checklist) |
+| Increment A: the schema and the system text of the seven actions with the real service | Run 76 sent the first real request of this schema. The service refused it with error 400, so no answer of the model was read. The cause is not known yet. Since then the provider writes the body of such an error in the server log. A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none` |
 | Increment A: the counter with the tokens of the real service | The same reason. Steps 1 and 11 of the checklist read it |
 | Increment A: a stop of the process during a write of the record | No test can stop the process at that moment. The protection rests on a code examination (D37) |
 | Increment A: a notice to an owner who is not connected, in a client | In a single-player game the server stops when the player leaves. The exit is a code examination (`Notices.CHAT`). The tests replace the exit |

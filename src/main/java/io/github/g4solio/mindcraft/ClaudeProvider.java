@@ -125,6 +125,8 @@ final class ClaudeProvider implements Uno.Provider {
         } catch (RateLimitException e) {
             throw new IllegalStateException("the model service reached its request limit");
         } catch (AnthropicServiceException e) {
+            // The player gets only the code. The body says why, for example a schema that the service rejects. It holds no key.
+            MindCraft.LOGGER.warn("The model service answered with error {}: {}", e.statusCode(), e.body());
             throw new IllegalStateException("the model service answered with error " + e.statusCode());
         } catch (AnthropicIoException e) {
             throw new IllegalStateException("the model service is not reachable");

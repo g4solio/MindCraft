@@ -77,7 +77,8 @@ public class LiveTests {
                 Job job = rig.job();
                 check(job.keepStock() && job.quantity == 64 && job.reserve == 32 && job.owner.equals(player.id()), rig.describe());
             })
-            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 48, rig.describe()))
+            // A failed check above does not stop the sequence. Without a job, this check fails instead of a crash of the server.
+            .thenWaitUntil(() -> check(rig.job() != null && rig.job().state == State.WAITING && rig.job().delivered == 48, rig.describe()))
             .thenExecute(() -> check(rig.coal(rig.dest) == 58 && rig.coal(rig.source) == 32, rig.describe()));
         for (int i = 0; i < NO_ORDER.size(); i++) {
             int index = i + 1;

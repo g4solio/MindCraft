@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
-import io.github.g4solio.mindcraft.MindRuntime.Refusal;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.server.MinecraftServer;
 
@@ -150,24 +149,15 @@ final class UnoView {
                         Uno.ask(server, actor, request, answer -> Uno.say(actor, answer));
                     }
                 }
-                case "pause", "resume", "cancel" -> {
-                    runtime.control(actor, Integer.parseInt(part[1]), Integer.parseInt(part[2]), part[0]);
-                    Uno.say(actor, switch (part[0]) {
-                        case "pause" -> "Job paused. The cargo stays on board.";
-                        case "resume" -> "I resume the job.";
-                        default -> "Job cancelled. The cargo stays on board the robot.";
-                    });
-                }
+                // The buttons of a job build the requests of the words, and get their sentences (D41).
+                case "pause", "resume", "cancel" -> Uno.say(actor, Uno.button(runtime, actor, part[0], Integer.parseInt(part[1]), Integer.parseInt(part[2])));
                 case "apply" -> {
                     int robotId = Integer.parseInt(part[1]);
-                    runtime.update(actor, robotId, Integer.parseInt(part[2]), Integer.parseInt(part[3]),
-                        values.get("quantity:" + robotId).getAsInt(), values.get("reserve:" + robotId).getAsInt());
-                    Uno.say(actor, "I updated the quantity and the reserve.");
+                    Uno.say(actor, Uno.send(runtime, actor, new Uno.Change(robotId, Integer.parseInt(part[2]), Integer.parseInt(part[3]),
+                        values.get("quantity:" + robotId).getAsInt(), values.get("reserve:" + robotId).getAsInt())));
                 }
                 default -> throw new IllegalArgumentException(action);
             }
-        } catch (Refusal refusal) {
-            Uno.say(actor, "I cannot: " + refusal.getMessage());
         } catch (RuntimeException e) {
             Uno.say(actor, "I did not understand the action. Check the values and try again.");
         }

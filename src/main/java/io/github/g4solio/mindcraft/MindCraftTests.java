@@ -2781,6 +2781,40 @@ public class MindCraftTests {
     }
 
     /**
+     * D41, decision 4: the buttons of a job build the requests of the words, and get the same sentences.
+     * "Pause" and "Resume" act at once. "Cancel" gives a proposal: the job stays open until the confirmation (D40).
+     * During the test the job waits for materials: its state does not change by itself.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void a_cancel_button_asks_a_confirmation(GameTestHelper helper) {
+        Actor player = player("a_cancel_button");
+        Rig rig = new Rig(helper, "a_cancel_button", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                String name = "Job " + job.id + " on robot #" + rig.id;
+                UnoView.act(server, player, action(view.get(), "pause"), "{}");
+                check(job.state == State.PAUSED && Uno.said(player).equals(name + " is paused. The cargo stays on board."), Uno.said(player));
+                UnoView.act(server, player, action(view.get(), "resume"), "{}");
+                check(job.state.active() && Uno.said(player).equals("I resume job " + job.id + " on robot #" + rig.id + "."), Uno.said(player));
+                UnoView.act(server, player, action(view.get(), "cancel"), "{}");
+                check(job.state.open() && Uno.hasProposal(player), "the button cancelled the job without a confirmation: " + rig.describe());
+                check(Uno.said(player).startsWith("Proposal: cancel job " + job.id + " on robot #" + rig.id)
+                    && Uno.said(player).contains("The cargo stays on board the robot."), Uno.said(player));
+                String confirm = action(view.get(), "confirm");
+                check(confirm != null && view.get().contains("Waiting for your confirmation: cancel job " + job.id), view.get());
+                UnoView.act(server, player, confirm, "{}");
+                check(job.state == State.CANCELLED && Uno.said(player).equals(name + " is cancelled. The cargo stays on board the robot."),
+                    Uno.said(player) + " " + rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
      * T16, a stale view: the screen shows job A. Job A ends and job B starts on the same robot.
      * The actions of the view of job A must not change job B: Apply, Pause, Resume and Cancel.
      */

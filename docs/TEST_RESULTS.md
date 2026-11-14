@@ -117,10 +117,11 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 81 | 1 of 1, with `-Plive` | None. Test `t18_claude_live` with the real Claude service and the corrected schema, on 2026-11-14, with the consent of the project owner. Log line: `Enabled Gametest Namespaces: [mindcraft_live]`. The counter: 4 requests, 5708 input tokens, 309 output tokens |
 | 82 | 81 of 81 | None. D41: the account and the behaviour of a job. Server line: `All 81 required tests passed :)` |
 | 83 | 82 of 82 | None. D41, decision 3: the typed seam of the provider. One new test: `a_parse_of_an_answer` |
+| 84 | 83 of 83 | None. D41, decision 4: the buttons of a job go through the requests of the words. One new test: `a_cancel_button_asks_a_confirmation` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
-Runs 82 and 83 are the runs of the architecture review after increment A (D41).
+Runs 82 to 84 are the runs of the architecture review after increment A (D41).
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -157,6 +158,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 73, code review | All four | Passed |
 | Run 75, ticket #12 | All four | **Passed**. See "Increment A — final runs and evidence" |
 | Run 82, D41 | All four | Passed. See "The architecture review after increment A" |
+| Run 84, D41, decision 4 | All four | Passed |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1014,6 +1016,8 @@ Date: 2026-11-14. Type: in the game, automatic. Code: the branch `increment-a` a
 - Not tested: a record of an older version with a module that the runtime does not know. The load makes it a transport, as before (code examination).
 - Run 83, decision 3: `All 82 required tests passed :)`. The new test `a_parse_of_an_answer` checks the one reader of the JSON of an action, without a robot. The cases of answers that Uno cannot read moved there from `a_provider_answers_with_an_action` and `t18_provider_failures`. The tests of the fixed rules compare typed actions, not JSON text. The log line of the provider is the same: `Uno interprets requests with the fixed rules, without a language model.`
 - Not run for decision 3: the restart phases, because the runtime and the Lua modules did not change. `-Plive`, because the schema and the system text of the Claude provider did not change. The JSON of the context is the same: `t18_claude_provider` compares it with the text of S2.
+- Run 84, decision 4: `All 83 required tests passed :)`. The new test `a_cancel_button_asks_a_confirmation` presses "Pause", "Resume" and "Cancel" of a job. "Pause" and "Resume" act at once, with the sentences of the words. "Cancel" gives a proposal: the job stays open until "Confirm #N", then it is `CANCELLED`. The tests of an old view and of another player still get a refusal. The four restart phases passed after run 84.
+- Not verified for decision 4: the proposal of "Cancel" on the screen of a client. The project owner decided that these changes get no manual test.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

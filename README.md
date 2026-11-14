@@ -198,6 +198,7 @@ Use it with the right mouse button: it opens the screen of Uno at any distance.
 
 The screen shows your jobs, with state, observed stocks and cargo on board.
 You can change the quantity and the reserve and press "Apply". You can pause, resume or cancel.
+"Apply", "Pause" and "Resume" act at once. "Cancel" is a proposal: the job ends only after "Confirm #N".
 At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the button "Confirm #N" appears. N is the number of the proposal.
 Above the button the screen repeats the proposal in words: the button confirms that proposal and no other.
 The number fields keep the values of the job until you confirm a change.

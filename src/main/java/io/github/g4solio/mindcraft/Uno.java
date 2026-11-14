@@ -210,9 +210,9 @@ public final class Uno {
     }
 
     /**
-     * A resume or a cancellation of a job: "resume" or "cancel". It also holds the state of the job at the proposal.
+     * A pause, a resume or a cancellation of a job: "pause", "resume" or "cancel". It also holds the state of the job when Uno read it.
      * The text of a resume proposal says what the resume accepts in that state (story 12). Thus a resume in a different state is refused.
-     * A cancellation means the same in each state: the cargo stays on board.
+     * A pause and a cancellation mean the same in each state: the cargo stays on board.
      */
     record Control(String action, int robot, int job, State state) implements Request {
         @Override
@@ -222,8 +222,11 @@ public final class Uno {
                 if (now != state) throw new Refusal("Job " + job + " changed: its state is " + now + " now, not " + state + ". Read it again.");
             }
             runtime.control(actor, robot, job, action);
-            return action.equals("resume") ? "I resume " + Notices.job(job, robot) + "."
-                : Notices.capital(Notices.job(job, robot)) + " is cancelled. The cargo stays on board the robot.";
+            return switch (action) {
+                case "pause" -> Notices.capital(Notices.job(job, robot)) + " is paused. The cargo stays on board.";
+                case "resume" -> "I resume " + Notices.job(job, robot) + ".";
+                default -> Notices.capital(Notices.job(job, robot)) + " is cancelled. The cargo stays on board the robot.";
+            };
         }
 
         @Override
@@ -495,12 +498,32 @@ public final class Uno {
         Found found = find(runtime, actor, target);
         if (found.problem() != null) return found.problem();
         Job job = found.job();
+        return send(runtime, actor, new Control("pause", job.robot, job.id, job.state));
+    }
+
+    /**
+     * An action of a button of a job on the screen: "pause", "resume" or "cancel" (D41). The button names the job, as the words do.
+     * A button acts at once: the player sees the job and clicks. "Cancel" is the exception: it becomes a proposal, as for the words (D40).
+     * The sentences are the sentences of the words.
+     */
+    static String button(MindRuntime runtime, Actor actor, String action, int robot, int jobId) {
+        Job job;
         try {
-            runtime.control(actor, job.robot, job.id, "pause");
+            job = runtime.checkControl(actor, robot, jobId, action);
         } catch (Refusal refusal) {
-            return "I cannot pause the job: " + refusal.getMessage();
+            return "I cannot " + action + " the job: " + refusal.getMessage();
         }
-        return Notices.capital(Notices.job(job.id, job.robot)) + " is paused. The cargo stays on board.";
+        if (action.equals("cancel")) return proposeControl(session, runtime, actor, job, Kind.CANCEL);
+        return send(runtime, actor, new Control(action, robot, jobId, job.state));
+    }
+
+    /** Sends a request at once. A refusal of the runtime becomes the sentence of Uno. */
+    static String send(MindRuntime runtime, Actor actor, Request request) {
+        try {
+            return request.send(runtime, actor);
+        } catch (Refusal refusal) {
+            return "I cannot " + request.what() + ": " + refusal.getMessage();
+        }
     }
 
     /** A report runs immediately. Without a target it is the report on all jobs of the actor, as the "Report" button gives it. */
@@ -538,8 +561,11 @@ public final class Uno {
      */
     private static String control(Session mine, MindRuntime runtime, Actor actor, Target target, Kind action) {
         Found found = find(runtime, actor, target);
-        if (found.problem() != null) return found.problem();
-        Job job = found.job();
+        return found.problem() != null ? found.problem() : proposeControl(mine, runtime, actor, found.job(), action);
+    }
+
+    /** The proposal of a resume or a cancellation of this job, after the check of the runtime. The words and the button "Cancel" use it. */
+    private static String proposeControl(Session mine, MindRuntime runtime, Actor actor, Job job, Kind action) {
         String verb = action.name().toLowerCase(Locale.ROOT);
         try {
             runtime.checkControl(actor, job.robot, job.id, verb);
@@ -627,12 +653,7 @@ public final class Uno {
         }
         if (proposal.number() != number) return "That is not my current proposal. I started nothing. Read the proposal again.";
         mine.proposals.remove(actor.id());
-        Request request = proposal.request();
-        try {
-            return request.send(MindRuntime.get(server), actor);
-        } catch (Refusal refusal) {
-            return "I cannot " + request.what() + ": " + refusal.getMessage();
-        }
+        return send(MindRuntime.get(server), actor, proposal.request());
     }
 
     public static String report(MinecraftServer server, Actor actor) {

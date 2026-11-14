@@ -966,7 +966,7 @@ Date: 2026-11-14. See D39.
 | --- | --- | --- |
 | `gradlew checkRules` on the files of the repository | Static check | Passed |
 | `gradlew checkRules` with probe files made for the check, then deleted: a tracked file in `run-gametest`, a text in the form of an API key, an email address, an import of `dan200.computercraft.shared`, an assignment of `Uno.provider` in a test class, and a local path in three forms (a drive with a backslash, a drive with a slash, a home folder) | Static check | Each rule failed on its probe, as expected |
-| The workflow `.github/workflows/check.yml` | Not executed | The workflow runs on GitHub after a push. It did not run yet |
+| The workflow `.github/workflows/check.yml`, first run, on the commit `1e83bf4` | Static check, then in the game, automatic, on a GitHub runner (Ubuntu, Temurin 17) | Passed in about 7 minutes. `check` passed. The normal run: "All 81 required tests passed". The four restart phases passed |
 
 ## Manual test in the game
 

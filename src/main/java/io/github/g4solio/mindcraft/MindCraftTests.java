@@ -1021,9 +1021,48 @@ public class MindCraftTests {
             + "\",\"item\":\"minecraft:coal\",\"quantity\":" + quantity + ",\"reserve\":0}";
     }
 
-    /** The answer of a provider of the test. It calls no model, thus it uses no tokens. */
+    /** The answer of a provider of the test, from the JSON that a model would write. It calls no model, thus it uses no tokens. */
     private static Uno.Answer answer(String json) {
-        return new Uno.Answer(json, 0, 0);
+        return new Uno.Answer(Uno.parse(json), 0, 0);
+    }
+
+    /** A context of the fixed rules: these stations, and robots 7 and 8. Only one of the two robots is free. */
+    private static Uno.Context context(boolean sevenFree, String... stations) {
+        return new Uno.Context(List.of(stations), List.of(new Uno.Context.Robot(7, sevenFree), new Uno.Context.Robot(8, !sevenFree)));
+    }
+
+    /**
+     * Increment A, D41: the one reader of the JSON of an action. It needs no robot and no world.
+     * Text that is not an action of the list, a value of a wrong type and a "none" without a reason are Unreadable.
+     * The case of the action does not matter. The reason of "none" has a limit of 200 characters.
+     */
+    @GameTest(template = EMPTY)
+    public static void a_parse_of_an_answer(GameTestHelper helper) {
+        Map<String, Uno.Action> cases = new LinkedHashMap<>();
+        Uno.Action unreadable = new Uno.Action.Unreadable();
+        cases.put("this is not JSON", unreadable);
+        cases.put("{\"action\":\"dig\",\"robot\":null,\"station\":null}", unreadable);
+        cases.put("{\"action\":\"pause\",\"robot\":\"seven\",\"station\":null}", unreadable);
+        cases.put("{\"action\":\"change\",\"robot\":3,\"station\":null,\"quantity\":\"many\",\"reserve\":null}", unreadable);
+        cases.put("{\"action\":\"none\",\"reason\":\" \"}", unreadable);
+        cases.put("{\"action\":\"start\",\"module\":\"transport\",\"robot\":3,\"from\":\"a\",\"item\":\"minecraft:coal\",\"quantity\":8}", unreadable);
+        cases.put("{\"action\":\"PAUSE\",\"robot\":7,\"station\":null}", new Uno.Action.OnJob(Uno.Kind.PAUSE, new Uno.Target(7, null), null, null));
+        // An empty station is no station. A pause has no new values, also when the answer gives them.
+        cases.put("{\"action\":\"pause\",\"robot\":null,\"station\":\" \",\"quantity\":5}", new Uno.Action.OnJob(Uno.Kind.PAUSE, new Uno.Target(null, null), null, null));
+        cases.put("{\"action\":\"change\",\"robot\":null,\"station\":\"depot\",\"quantity\":null,\"reserve\":2}",
+            new Uno.Action.OnJob(Uno.Kind.CHANGE, new Uno.Target(null, "depot"), null, 2));
+        cases.put("{\"action\":\"None\",\"reason\":\"The request names no station.\"}", new Uno.Action.None("The request names no station."));
+        cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}", new Uno.Action.None("a".repeat(150) + "b".repeat(50)));
+        // A reserve that is null is 0. The module is not checked here: the runtime refuses an unknown module.
+        cases.put("{\"action\":\"start\",\"module\":\"dig_a_mine\",\"robot\":3,\"from\":\"a\",\"to\":\"b\",\"item\":\"minecraft:coal\",\"quantity\":8,\"reserve\":null}",
+            new Uno.Action.Start(new Order("dig_a_mine", 3, "a", "b", Items.COAL, 8, 0)));
+        List<String> wrong = new ArrayList<>();
+        cases.forEach((json, expected) -> {
+            Uno.Action action = Uno.parse(json);
+            if (!action.equals(expected)) wrong.add(json + " -> " + action);
+        });
+        check(wrong.isEmpty(), wrong.toString());
+        helper.succeed();
     }
 
     /**
@@ -1073,21 +1112,17 @@ public class MindCraftTests {
      */
     @GameTest(template = EMPTY)
     public static void s2_uno_reference_sentence(GameTestHelper helper) {
-        String robots = "\"robots\":[{\"id\":7,\"free\":true},{\"id\":8,\"free\":false}]}";
-        String context = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
+        Uno.Context context = context(true, "depot", "furnace", "mine");
         Uno.Answer order = new Uno.RuleProvider().answer("Keep at least 64 pieces of coal in the furnace chest, "
             + "taking them from the depot. Leave at least 32 pieces in the depot.", context);
-        check(order.json().equals("{\"action\":\"start\",\"module\":\"keep_stock\",\"robot\":7,\"from\":\"depot\",\"to\":\"furnace\","
-            + "\"item\":\"minecraft:coal\",\"quantity\":64,\"reserve\":32}"), order.json());
+        check(order.action().equals(new Uno.Action.Start(new Order(MindRuntime.KEEP_STOCK, 7, "depot", "furnace", Items.COAL, 64, 32))), order.toString());
         Uno.Answer transport = new Uno.RuleProvider().answer("Move 24 coal from depot to furnace with robot 8", context);
-        check(transport.json().equals("{\"action\":\"start\",\"module\":\"transport\",\"robot\":8,\"from\":\"depot\",\"to\":\"furnace\","
-            + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"), transport.json());
+        check(transport.action().equals(new Uno.Action.Start(new Order(MindRuntime.TRANSPORT, 8, "depot", "furnace", Items.COAL, 24, 0))), transport.toString());
         Uno.Answer italian = new Uno.RuleProvider().answer("Mantieni almeno 64 pezzi di carbone nel baule delle fornaci, "
-            + "prendendoli dal deposito. Lascia almeno 32 pezzi nel deposito.", "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots);
-        check(italian.json().equals("{\"action\":\"start\",\"module\":\"keep_stock\",\"robot\":7,\"from\":\"deposito\",\"to\":\"fornaci\","
-            + "\"item\":\"minecraft:coal\",\"quantity\":64,\"reserve\":32}"), italian.json());
+            + "prendendoli dal deposito. Lascia almeno 32 pezzi nel deposito.", context(true, "deposito", "fornaci", "miniera"));
+        check(italian.action().equals(new Uno.Action.Start(new Order(MindRuntime.KEEP_STOCK, 7, "deposito", "fornaci", Items.COAL, 64, 32))), italian.toString());
         Uno.Answer none = new Uno.RuleProvider().answer("Move coal from depot to furnace", context);
-        check(none.json().equals("{\"action\":\"none\",\"reason\":\"the quantity is missing\"}"), none.json());
+        check(none.action().equals(new Uno.Action.None("the quantity is missing")), none.toString());
         for (Uno.Answer answer : List.of(order, transport, italian, none)) {
             check(answer.inputTokens() == 0 && answer.outputTokens() == 0, "the fixed rules reported tokens: " + answer);
         }
@@ -1123,9 +1158,8 @@ public class MindCraftTests {
             Thread.sleep(3000);
             return answer("{}");
         }, 300, failed);
+        // An answer that Uno cannot read. The other kinds of such an answer are in a_parse_of_an_answer.
         sequence = ask(sequence, server, player, "x", (r, c) -> answer("this is not JSON"), 5000, failed);
-        // An action outside the closed list is not a valid answer.
-        sequence = ask(sequence, server, player, "x", (r, c) -> answer("{\"action\":\"dig\",\"robot\":null,\"station\":null}"), 5000, failed);
         // An exception is always a failure, also an IllegalArgumentException. Only the action "none" says that a value is missing.
         sequence = ask(sequence, server, player, "x", (r, c) -> {
             throw new IllegalArgumentException("a defect of the provider");
@@ -1138,7 +1172,7 @@ public class MindCraftTests {
                 check(failed.stream().filter(a -> a.startsWith("I cannot interpret the request now")).count() == 3, failed.toString());
                 check(failed.stream().anyMatch(a -> a.contains("provider offline")) && failed.stream().anyMatch(a -> a.contains("TimeoutException"))
                     && failed.contains("I cannot interpret the request now (a defect of the provider). The jobs in progress continue."), failed.toString());
-                check(failed.stream().filter(a -> a.startsWith("I did not get a valid configuration")).count() == 2, failed.toString());
+                check(failed.stream().filter(a -> a.startsWith("I did not get a valid configuration")).count() == 1, failed.toString());
                 check(failed.contains("I cannot propose a job: the quantity is missing."), failed.toString());
                 check(Uno.confirm(server, player).startsWith("I have no pending proposal"), "a failure became a proposal");
             })
@@ -1273,7 +1307,7 @@ public class MindCraftTests {
                 // The provider runs off the server thread, as in Uno.ask. The first request also loads the classes of the SDK.
                 status.set(200);
                 body.set(claudeMessage("end_turn", start.get(), 1234, 56));
-                String context = Uno.context(rig.runtime, player);
+                Uno.Context context = Uno.context(rig.runtime, player);
                 CompletableFuture.supplyAsync(() -> {
                     try {
                         return claude.answer(request, context);
@@ -1283,7 +1317,8 @@ public class MindCraftTests {
                 }).whenComplete((answer, failure) -> direct.set(failure == null ? answer : failure));
             })
             .thenWaitUntil(() -> check(direct.get() != null, "the provider did not answer yet"))
-            .thenExecute(() -> check(direct.get() instanceof Uno.Answer answer && answer.json().equals(start.get())
+            .thenExecute(() -> check(direct.get() instanceof Uno.Answer answer && answer.action().equals(Uno.parse(start.get()))
+                && answer.action() instanceof Uno.Action.Start
                 && answer.inputTokens() == 1234 && answer.outputTokens() == 56, "the answer of the provider: " + direct.get()));
         for (int i = 0; i < cases.size(); i++) {
             int index = i;
@@ -1335,8 +1370,8 @@ public class MindCraftTests {
 
     /**
      * Increment A: a provider answers with one action from the closed list of D29. Uno does not trust the answer.
-     * A change without a new value, with a value of a wrong type or with a negative quantity gives no proposal.
-     * A "none" action gives its reason with the length limit. In each case the job does not change.
+     * A change without a new value or with a negative quantity gives no proposal.
+     * A "none" action gives its reason. In each case the job does not change.
      * During the test the job waits for materials: its state does not change by itself.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
@@ -1348,17 +1383,10 @@ public class MindCraftTests {
         Map<String, String> cases = new LinkedHashMap<>();
         cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":null,\"reserve\":null}",
             "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal.");
-        cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":\"many\",\"reserve\":null}",
-            "I did not get a valid configuration. I created no proposal.");
         cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":-5,\"reserve\":null}",
             "I cannot propose this change: The quantity must be positive. The reserve must not be negative.");
-        // The reason of "none" has a limit of 200 characters.
-        cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}",
-            "I cannot propose a job: " + "a".repeat(150) + "b".repeat(50) + ".");
-        // A model does not guarantee the case of a value of the schema.
-        cases.put("{\"action\":\"None\",\"reason\":\"The request names no station.\"}", "I cannot propose a job: The request names no station.");
-        // A "none" action without a reason is not a valid answer.
-        cases.put("{\"action\":\"none\",\"reason\":\" \"}", "I did not get a valid configuration. I created no proposal.");
+        // The sentence of "none" ends with a full stop. The answers that Uno cannot read are in a_parse_of_an_answer.
+        cases.put("{\"action\":\"none\",\"reason\":\"the station is missing\"}", "I cannot propose a job: the station is missing.");
 
         List<String> answers = new CopyOnWriteArrayList<>();
         int[] job = new int[2];
@@ -1391,11 +1419,11 @@ public class MindCraftTests {
      */
     @GameTest(template = EMPTY)
     public static void a_fixed_rules_report_and_pause(GameTestHelper helper) {
-        String robots = "\"robots\":[{\"id\":7,\"free\":false},{\"id\":8,\"free\":true}]}";
-        String english = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
-        String italian = "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots;
+        String english = "english", italian = "italian";
+        Map<String, Uno.Context> contexts = Map.of(english, context(false, "depot", "furnace", "mine"),
+            italian, context(false, "deposito", "fornaci", "miniera"));
         String report = "{\"action\":\"report\",\"robot\":%s,\"station\":%s}", pause = "{\"action\":\"pause\",\"robot\":%s,\"station\":%s}";
-        // A request, its context and the answer of the fixed rules.
+        // A request, the name of its context and the answer of the fixed rules, as a model would write it.
         List<String[]> cases = List.of(
             new String[]{"How is the furnace?", english, report.formatted("null", "\"furnace\"")},
             new String[]{"Report", english, report.formatted("null", "null")},
@@ -1415,8 +1443,8 @@ public class MindCraftTests {
                     + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":0}"});
         List<String> wrong = new ArrayList<>();
         for (String[] test : cases) {
-            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], test[1]);
-            if (!answer.json().equals(test[2]) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
+            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], contexts.get(test[1]));
+            if (!answer.action().equals(Uno.parse(test[2])) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
                 wrong.add("'" + test[0] + "' -> " + answer);
             }
         }
@@ -1431,12 +1459,12 @@ public class MindCraftTests {
      */
     @GameTest(template = EMPTY)
     public static void a_fixed_rules_change_resume_cancel(GameTestHelper helper) {
-        String robots = "\"robots\":[{\"id\":7,\"free\":false},{\"id\":8,\"free\":true}]}";
-        String english = "{\"stations\":[\"depot\",\"furnace\",\"mine\"]," + robots;
-        String italian = "{\"stations\":[\"deposito\",\"fornaci\",\"miniera\"]," + robots;
+        String english = "english", italian = "italian";
+        Map<String, Uno.Context> contexts = Map.of(english, context(false, "depot", "furnace", "mine"),
+            italian, context(false, "deposito", "fornaci", "miniera"));
         String change = "{\"action\":\"change\",\"robot\":%s,\"station\":%s,\"quantity\":%s,\"reserve\":%s}";
         String resume = "{\"action\":\"resume\",\"robot\":%s,\"station\":%s}", cancel = "{\"action\":\"cancel\",\"robot\":%s,\"station\":%s}";
-        // A request, its context and the answer of the fixed rules.
+        // A request, the name of its context and the answer of the fixed rules, as a model would write it.
         List<String[]> cases = List.of(
             new String[]{"Leave only 16 in the depot", english, change.formatted("null", "\"depot\"", "null", "16")},
             new String[]{"Set the quantity of robot 7 to 30", english, change.formatted("7", "null", "30", "null")},
@@ -1461,8 +1489,8 @@ public class MindCraftTests {
                     + "\"item\":\"minecraft:coal\",\"quantity\":24,\"reserve\":8}"});
         List<String> wrong = new ArrayList<>();
         for (String[] test : cases) {
-            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], test[1]);
-            if (!answer.json().equals(test[2]) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
+            Uno.Answer answer = new Uno.RuleProvider().answer(test[0], contexts.get(test[1]));
+            if (!answer.action().equals(Uno.parse(test[2])) || answer.inputTokens() != 0 || answer.outputTokens() != 0) {
                 wrong.add("'" + test[0] + "' -> " + answer);
             }
         }
@@ -1941,7 +1969,7 @@ public class MindCraftTests {
                 check(answer.get().startsWith("Proposal: carry 24 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"), answer.get());
                 check(Uno.confirm(server, bob).startsWith("I have no pending proposal"), "Bob confirmed the proposal of Alice");
                 check(Uno.report(server, bob).equals("I have no record of a job of yours."), Uno.report(server, bob));
-                String bobContext = Uno.context(rig.runtime, bob);
+                String bobContext = Uno.context(rig.runtime, bob).toJson();
                 check(!bobContext.contains(rig.from) && !bobContext.contains("\"id\":" + rig.id), "the context of Bob has data of Alice: " + bobContext);
                 // The robot gets a different job before the confirmation.
                 rig.startJob(8, 0);
@@ -2274,11 +2302,11 @@ public class MindCraftTests {
         /** A model that answers "none" with the reason "the model read it", and reports these tokens. */
         static CountingModel none(long inputTokens, long outputTokens) {
             return new CountingModel((request, context) ->
-                new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", inputTokens, outputTokens));
+                new Uno.Answer(new Uno.Action.None("the model read it"), inputTokens, outputTokens));
         }
 
         @Override
-        public Uno.Answer answer(String request, String context) throws Exception {
+        public Uno.Answer answer(String request, Uno.Context context) throws Exception {
             calls.incrementAndGet();
             return inner.answer(request, context);
         }
@@ -2319,7 +2347,7 @@ public class MindCraftTests {
         CountDownLatch held = new CountDownLatch(1);
         CountingModel slow = new CountingModel((request, context) -> {
             held.await(10, TimeUnit.SECONDS);
-            return new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", 5, 5);
+            return new Uno.Answer(new Uno.Action.None("the model read it"), 5, 5);
         });
         CountingModel broken = new CountingModel((request, context) -> {
             throw new IOException("model offline");
@@ -2328,7 +2356,7 @@ public class MindCraftTests {
         CountingModel late = new CountingModel((request, context) -> {
             Thread.sleep(2000);
             lateReturned.set(true);
-            return new Uno.Answer("{\"action\":\"none\",\"reason\":\"the model read it\"}", 999, 999);
+            return new Uno.Answer(new Uno.Action.None("the model read it"), 999, 999);
         });
         List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
         Uno.Usage[] console = new Uno.Usage[1];

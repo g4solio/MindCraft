@@ -1053,7 +1053,7 @@ Gates before a second player:
 
 ## D41 — The architecture review after increment A: the account and the behaviour of a job
 
-**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 and 4 are not implemented yet. 5 and 6 wait for increments B and C.
+**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is not implemented yet. 5 and 6 wait for increments B and C.
 
 - **Problem:** one concept of a job was spread over many modules. Increments B and C change exactly these places (D32, D34, D35). The review weighted the files that changed most in increment A.
 - **Decision 1, the account of a job:** `JobAccount` reads a job with three explicit inputs: the record, whether the robot runs, and the game time. The report, the screen and the status command read a job through it. The ages have one unit, the second. The doubt about the robot is in one place. Increment B adds here the facts for the model and the check of its numbers (D32).

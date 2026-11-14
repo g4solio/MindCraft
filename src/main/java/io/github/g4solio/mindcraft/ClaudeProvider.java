@@ -98,7 +98,23 @@ final class ClaudeProvider implements Uno.Provider {
     }
 
     @Override
-    public Uno.Answer answer(String request, String context) {
+    public String name() {
+        return "Claude (" + MODEL + ")";
+    }
+
+    /** The text of a written request leaves the server only on the route of the model. The player must know which route is used. */
+    @Override
+    public String notice(Uno.Route route) {
+        return switch (route) {
+            case MODEL -> "Written requests go to Claude, a model of Anthropic.";
+            case AT_LIMIT -> "Uno uses the fixed rules for you: you reached the limit of model requests in this session. "
+                + "Your written requests stay on this server.";
+            case NOT_OPERATOR, NO_MODEL -> "Uno uses the fixed rules for you: only an operator uses Claude. Your written requests stay on this server.";
+        };
+    }
+
+    @Override
+    public Uno.Answer answer(String request, Uno.Context context) {
         BetaJsonOutputFormat.Schema.Builder schema = BetaJsonOutputFormat.Schema.builder();
         Map<?, ?> fields = new Gson().fromJson(SCHEMA, Map.class);
         fields.forEach((key, value) -> schema.putAdditionalProperty((String) key, JsonValue.from(value)));
@@ -114,7 +130,7 @@ final class ClaudeProvider implements Uno.Provider {
                 .effort(BetaOutputConfig.Effort.LOW)
                 .format(BetaJsonOutputFormat.builder().schema(schema.build()).build())
                 .build())
-            .addUserMessage("Context: " + context + "\nRequest: " + request)
+            .addUserMessage("Context: " + context.toJson() + "\nRequest: " + request)
             .build();
 
         BetaMessage message;
@@ -136,8 +152,8 @@ final class ClaudeProvider implements Uno.Provider {
         BetaStopReason stop = message.stopReason().orElse(null);
         if (BetaStopReason.REFUSAL.equals(stop)) throw new IllegalStateException("the model declined the request");
         if (!BetaStopReason.END_TURN.equals(stop)) throw new IllegalStateException("the answer of the model is incomplete");
-        // Uno reads and validates the action. The length limit of the reason is in Uno too: it applies to each provider.
+        // The one reader of the JSON of an action. Uno still checks the values against the world.
         String json = message.content().stream().flatMap(block -> block.text().stream()).map(text -> text.text()).collect(Collectors.joining());
-        return new Uno.Answer(json, message.usage().inputTokens(), message.usage().outputTokens());
+        return new Uno.Answer(Uno.parse(json), message.usage().inputTokens(), message.usage().outputTokens());
     }
 }

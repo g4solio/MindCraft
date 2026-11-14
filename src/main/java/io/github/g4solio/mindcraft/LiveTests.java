@@ -1,6 +1,5 @@
 package io.github.g4solio.mindcraft;
 
-import com.google.gson.JsonParser;
 import io.github.g4solio.mindcraft.MindCraftTests.Rig;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
@@ -60,9 +59,8 @@ public class LiveTests {
 
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> {
-                String rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player)).json();
-                check(JsonParser.parseString(rules).getAsJsonObject().get("action").getAsString().equals("none"),
-                    "the fixed rules read the request: it is too easy for this check");
+                Uno.Action rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player)).action();
+                check(rules instanceof Uno.Action.None, "the fixed rules read the request: it is too easy for this check: " + rules);
                 Uno.ask(server, player, REQUEST, claude, Uno.TIMEOUT_MS, answers::add);
             })
             .thenWaitUntil(() -> check(answers.size() == 1, "Claude did not answer yet"))

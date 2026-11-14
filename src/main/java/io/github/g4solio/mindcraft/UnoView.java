@@ -76,14 +76,8 @@ final class UnoView {
             widgets.add(text("Your model requests in this session: " + usage.requests() + " of " + Uno.MODEL_REQUESTS + ". Tokens: "
                 + usage.inputTokens() + " in, " + usage.outputTokens() + " out.", "muted"));
         }
-        // ponytail: the view knows the Claude provider. Put this notice in the provider interface when a second real provider exists.
-        if (!(server instanceof ClaudeProvider)) return;
-        widgets.add(text(switch (route) {
-            case MODEL -> "Written requests go to Claude, a model of Anthropic.";
-            case AT_LIMIT -> "Uno uses the fixed rules for you: you reached the limit of model requests in this session. "
-                + "Your written requests stay on this server.";
-            case NOT_OPERATOR, NO_MODEL -> "Uno uses the fixed rules for you: only an operator uses Claude. Your written requests stay on this server.";
-        }, "muted"));
+        String notice = server.notice(route);
+        if (notice != null) widgets.add(text(notice, "muted"));
     }
 
     private static void job(JsonArray widgets, int robotId, Job job, long now) {

@@ -102,11 +102,12 @@ public class MindCraft {
         REBOOTS.clear();
         String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
         boolean claude = key != null && !key.isBlank() && !(event.getServer() instanceof GameTestServer);
-        Uno.provider = claude ? ClaudeProvider.fromEnv() : new Uno.RuleProvider();
-        LOGGER.info("Uno interprets requests with {}.", claude
-            ? "Claude (" + ClaudeProvider.MODEL + ") for the operators, at most " + Uno.MODEL_REQUESTS + " requests for each of them in this session. "
+        Uno.Provider chosen = claude ? ClaudeProvider.fromEnv() : new Uno.RuleProvider();
+        Uno.provider = chosen;
+        LOGGER.info("Uno interprets requests with {}.", chosen.callsModel()
+            ? chosen.name() + " for the operators, at most " + Uno.MODEL_REQUESTS + " requests for each of them in this session. "
                 + "The fixed rules read the requests of the other players"
-            : "the fixed rules, without a language model");
+            : chosen.name());
     }
 
     /**

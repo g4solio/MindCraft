@@ -2,10 +2,8 @@ package io.github.g4solio.mindcraft;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.JsonPrimitive;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
@@ -41,20 +39,13 @@ import java.util.regex.Pattern;
 public final class Uno {
     /**
      * Changes a written request into one action from a closed list (D29). An implementation can call a language model.
-     * The context is JSON: the stations and robots of the player. The answer is the action as JSON, with its parameters.
-     * A field that the action does not use is null or absent.
-     * <ul>
-     * <li>start, with the order: {"action": "start", "module": "keep_stock" or "transport", "robot": 0, "from": "...", "to": "...",
-     * "item": "minecraft:coal", "quantity": 64, "reserve": 32}.</li>
-     * <li>change, pause, resume, cancel, report, with the target: a robot number, a station name, or nothing.
-     * {"action": "pause", "robot": 3, "station": null}. A change also has "quantity", "reserve" or both. Null is a value that does not change.</li>
-     * <li>none, with one short reason for the player: {"action": "none", "reason": "the quantity is missing"}.</li>
-     * </ul>
+     * The context holds only the stations and the robots of the player. The answer is one Action, with typed values.
+     * A provider that reads JSON from a model uses parse(): the one reader of the JSON of an action.
      * The answer also has the input tokens and the output tokens of the model. A provider without a model reports zero.
      * Each exception is a failure of the provider. Only the action "none" says that the request gives no action.
      */
     public interface Provider {
-        Answer answer(String request, String context) throws Exception;
+        Answer answer(String request, Context context) throws Exception;
 
         /**
          * True if the provider calls a language model, thus each request can cost money. Then only an operator uses it, and
@@ -63,10 +54,73 @@ public final class Uno {
         default boolean callsModel() {
             return false;
         }
+
+        /** How the server log names the provider: "Uno interprets requests with (name)". */
+        default String name() {
+            return "the fixed rules, without a language model";
+        }
+
+        /**
+         * The line of the screen that says where the written requests of the player go on this route, or null for no line.
+         * A provider that sends the text out of the server must say so here (D33).
+         */
+        default String notice(Route route) {
+            return null;
+        }
     }
 
-    /** The answer of a provider: the action as JSON, and the tokens that the answer used. */
-    public record Answer(String json, long inputTokens, long outputTokens) {
+    /** The answer of a provider: one action, and the tokens that the answer used. */
+    public record Answer(Action action, long inputTokens, long outputTokens) {
+    }
+
+    /** What a provider knows: the names of the stations of the player, and the robots of the player, each with a "free" flag (D21). */
+    public record Context(List<String> stations, List<Robot> robots) {
+        public record Robot(int id, boolean free) {
+        }
+
+        /** The context as JSON, for a model. Its shape is the shape of S2. */
+        String toJson() {
+            JsonArray names = new JsonArray();
+            stations.forEach(names::add);
+            JsonArray list = new JsonArray();
+            for (Robot robot : robots) {
+                JsonObject item = new JsonObject();
+                item.addProperty("id", robot.id());
+                item.addProperty("free", robot.free());
+                list.add(item);
+            }
+            JsonObject context = new JsonObject();
+            context.add("stations", names);
+            context.add("robots", list);
+            return context.toString();
+        }
+    }
+
+    /**
+     * One action of the closed list (D29), with typed values. Uno still checks each value against the world: a provider can give anything.
+     * An answer that Uno cannot read is an action too: Unreadable. Its sentence says that the answer was not valid.
+     */
+    public sealed interface Action {
+        /** A new job, with its order. */
+        record Start(Order order) implements Action {
+        }
+
+        /** An action about one job: change, pause, resume, cancel or report. A change has the new values: null keeps a value. */
+        record OnJob(Kind kind, Target target, Integer quantity, Integer reserve) implements Action {
+        }
+
+        /** No action of the list, with one short reason for the player. The reason is not empty, and is cut at MAX_REASON_LENGTH. */
+        record None(String reason) implements Action {
+            public None {
+                reason = reason.trim();
+                if (reason.isEmpty()) throw new IllegalArgumentException("the reason of \"none\" is empty");
+                reason = reason.substring(0, Math.min(reason.length(), MAX_REASON_LENGTH));
+            }
+        }
+
+        /** An answer outside the closed list, or with a value of a wrong type. */
+        record Unreadable() implements Action {
+        }
     }
 
     /** The requests that Uno sent to a model for one actor in one server session, and the tokens of their answers. */
@@ -90,8 +144,8 @@ public final class Uno {
         NOT_OPERATOR
     }
 
-    /** The closed list of the actions of a provider (D29). */
-    enum Action { START, CHANGE, PAUSE, RESUME, CANCEL, REPORT, NONE }
+    /** The kinds of action of the closed list (D29). */
+    enum Kind { START, CHANGE, PAUSE, RESUME, CANCEL, REPORT, NONE }
 
     /** The provider of the /uno command and of the screen. A different provider can replace it. See MindCraft.chooseProvider. */
     static volatile Provider provider = new RuleProvider();
@@ -275,7 +329,7 @@ public final class Uno {
      */
     public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
         Session mine = session;
-        String context = context(MindRuntime.get(server), actor);
+        Context context = context(MindRuntime.get(server), actor);
         if (!mine.pending.add(actor.id())) {
             reply.accept("I am still working on your previous request.");
             return;
@@ -309,24 +363,50 @@ public final class Uno {
     }
 
     /** Only the data that the actor owns. A provider must not see the stations or robots of other players. */
-    static String context(MindRuntime runtime, Actor actor) {
-        JsonObject context = new JsonObject();
-        JsonArray stations = new JsonArray();
+    static Context context(MindRuntime runtime, Actor actor) {
+        List<String> stations = new ArrayList<>();
         runtime.stations.forEach((name, station) -> {
             if (actor.owns(station.owner())) stations.add(name);
         });
-        JsonArray robots = new JsonArray();
+        List<Context.Robot> robots = new ArrayList<>();
         runtime.robots.forEach((id, owner) -> {
             if (!actor.owns(owner)) return;
             Job job = runtime.jobs.get(id);
-            JsonObject robot = new JsonObject();
-            robot.addProperty("id", id);
-            robot.addProperty("free", job == null || !job.state.open());
-            robots.add(robot);
+            robots.add(new Context.Robot(id, job == null || !job.state.open()));
         });
-        context.add("stations", stations);
-        context.add("robots", robots);
-        return context.toString();
+        return new Context(List.copyOf(stations), List.copyOf(robots));
+    }
+
+    /**
+     * Reads the JSON of an action, as a model writes it (D29). Each provider that answers in JSON uses this function.
+     * <ul>
+     * <li>start, with the order: {"action": "start", "module": "keep_stock" or "transport", "robot": 0, "from": "...", "to": "...",
+     * "item": "minecraft:coal", "quantity": 64, "reserve": 32}. A reserve that is null or absent is 0.</li>
+     * <li>change, pause, resume, cancel, report, with the target: a robot number, a station name, or nothing.
+     * {"action": "pause", "robot": 3, "station": null}. A change also has "quantity", "reserve" or both. Null is a value that does not change.</li>
+     * <li>none, with one short reason for the player: {"action": "none", "reason": "the quantity is missing"}.</li>
+     * </ul>
+     * A field that the action does not use is ignored. A model does not guarantee the case of a value of its schema.
+     * Text that is not such an action, a value of a wrong type, and a "none" without a reason give Unreadable.
+     */
+    static Action parse(String json) {
+        try {
+            JsonObject o = JsonParser.parseString(json).getAsJsonObject();
+            Kind kind = Kind.valueOf(o.get("action").getAsString().toUpperCase(Locale.ROOT));
+            if (kind == Kind.START) {
+                JsonElement reserve = o.get("reserve");
+                return new Action.Start(new Order(o.get("module").getAsString(), o.get("robot").getAsInt(), o.get("from").getAsString(),
+                    o.get("to").getAsString(), ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(o.get("item").getAsString())),
+                    o.get("quantity").getAsInt(), reserve == null || reserve.isJsonNull() ? 0 : reserve.getAsInt()));
+            }
+            if (kind == Kind.NONE) return new Action.None(o.get("reason").getAsString());
+            Target target = Target.of(o);
+            if (target == null) return new Action.Unreadable();
+            boolean change = kind == Kind.CHANGE;
+            return new Action.OnJob(kind, target, change ? integer(o, "quantity") : null, change ? integer(o, "reserve") : null);
+        } catch (RuntimeException e) {
+            return new Action.Unreadable();
+        }
     }
 
     /**
@@ -334,22 +414,18 @@ public final class Uno {
      * "Pause" and "report" run immediately (D29). "Start", "change", "resume" and "cancel" become a proposal. "None" gives its reason.
      */
     private static String act(Session mine, MindRuntime runtime, Actor actor, Answer answer, long now) {
-        JsonObject json;
-        Action action;
-        try {
-            json = JsonParser.parseString(answer.json()).getAsJsonObject();
-            // A model does not guarantee the case of a value of its schema.
-            action = Action.valueOf(json.get("action").getAsString().toUpperCase(Locale.ROOT));
-        } catch (RuntimeException e) {
-            return INVALID;
-        }
-        return switch (action) {
-            case START -> start(mine, runtime, actor, json);
-            case NONE -> none(json);
-            case PAUSE -> pause(runtime, actor, json);
-            case REPORT -> report(runtime, actor, json, now);
-            case CHANGE -> change(mine, runtime, actor, json);
-            case RESUME, CANCEL -> control(mine, runtime, actor, json, action);
+        Action action = answer.action();
+        if (action instanceof Action.Start start) return start(mine, runtime, actor, start.order());
+        if (action instanceof Action.None none) return "I cannot propose a job: " + none.reason() + (none.reason().endsWith(".") ? "" : ".");
+        // An Unreadable answer, or no action at all.
+        if (!(action instanceof Action.OnJob job) || job.target() == null) return INVALID;
+        return switch (job.kind()) {
+            case PAUSE -> pause(runtime, actor, job.target());
+            case REPORT -> report(runtime, actor, job.target(), now);
+            case CHANGE -> change(mine, runtime, actor, job);
+            case RESUME, CANCEL -> control(mine, runtime, actor, job.target(), job.kind());
+            // A start and a "none" have actions of their own.
+            case START, NONE -> INVALID;
         };
     }
 
@@ -415,8 +491,8 @@ public final class Uno {
      * A pause runs immediately, without a proposal: it only stops the robot (D29).
      * It is the ordinary request of the runtime, with the job ID. A refusal of the runtime becomes the sentence of Uno.
      */
-    private static String pause(MindRuntime runtime, Actor actor, JsonObject json) {
-        Found found = find(runtime, actor, Target.of(json));
+    private static String pause(MindRuntime runtime, Actor actor, Target target) {
+        Found found = find(runtime, actor, target);
         if (found.problem() != null) return found.problem();
         Job job = found.job();
         try {
@@ -428,9 +504,8 @@ public final class Uno {
     }
 
     /** A report runs immediately. Without a target it is the report on all jobs of the actor, as the "Report" button gives it. */
-    private static String report(MindRuntime runtime, Actor actor, JsonObject json, long now) {
-        Target target = Target.of(json);
-        if (target != null && target.none()) return report(runtime, actor, now);
+    private static String report(MindRuntime runtime, Actor actor, Target target, long now) {
+        if (target.none()) return report(runtime, actor, now);
         Found found = find(runtime, actor, target);
         return found.problem() != null ? found.problem() : JobAccount.of(found.job(), now).report();
     }
@@ -439,20 +514,12 @@ public final class Uno {
      * A change becomes a proposal (D29). It holds the robot, the job ID and the revision, as the "Apply" button does (D19).
      * A value that the request does not give stays as it is. The runtime checks the change now, and again at the confirmation.
      */
-    private static String change(Session mine, MindRuntime runtime, Actor actor, JsonObject json) {
-        Target target = Target.of(json);
-        Integer quantity, reserve;
-        try {
-            quantity = integer(json, "quantity");
-            reserve = integer(json, "reserve");
-        } catch (RuntimeException e) {
-            return INVALID;
-        }
-        if (target == null) return INVALID;
+    private static String change(Session mine, MindRuntime runtime, Actor actor, Action.OnJob action) {
+        Integer quantity = action.quantity(), reserve = action.reserve();
         if (quantity == null && reserve == null) {
             return "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal.";
         }
-        Found found = find(runtime, actor, target);
+        Found found = find(runtime, actor, action.target());
         if (found.problem() != null) return found.problem();
         Job job = found.job();
         Change change = new Change(job.robot, job.id, job.revision, quantity == null ? job.quantity : quantity, reserve == null ? job.reserve : reserve);
@@ -469,8 +536,8 @@ public final class Uno {
      * A resume or a cancellation becomes a proposal (D29). It holds the robot and the job ID, as the buttons of the screen do (D19),
      * and the state of the job. The runtime checks the request now, and again at the confirmation.
      */
-    private static String control(Session mine, MindRuntime runtime, Actor actor, JsonObject json, Action action) {
-        Found found = find(runtime, actor, Target.of(json));
+    private static String control(Session mine, MindRuntime runtime, Actor actor, Target target, Kind action) {
+        Found found = find(runtime, actor, target);
         if (found.problem() != null) return found.problem();
         Job job = found.job();
         String verb = action.name().toLowerCase(Locale.ROOT);
@@ -480,7 +547,7 @@ public final class Uno {
             return "I cannot propose to " + verb + " the job: " + refusal.getMessage();
         }
         String text = verb + " " + name(job);
-        if (action == Action.CANCEL) {
+        if (action == Kind.CANCEL) {
             text += ". The cargo stays on board the robot";
         } else if (job.state == State.RECOVERY) {
             // The confirmation accepts the load in the robot as the truth. The player must know this before.
@@ -516,30 +583,8 @@ public final class Uno {
         return name + ": " + (before == after ? before + ", unchanged" : "from " + before + " to " + after);
     }
 
-    /** A request without an action is not a failure of the provider. The player must see the difference. */
-    private static String none(JsonObject json) {
-        String reason;
-        try {
-            reason = json.get("reason").getAsString().trim();
-        } catch (RuntimeException e) {
-            return INVALID;
-        }
-        if (reason.isEmpty()) return INVALID;
-        reason = reason.substring(0, Math.min(reason.length(), MAX_REASON_LENGTH));
-        return "I cannot propose a job: " + reason + (reason.endsWith(".") ? "" : ".");
-    }
-
     /** A start becomes a proposal, after the ordinary validation of the order. */
-    private static String start(Session mine, MindRuntime runtime, Actor actor, JsonObject o) {
-        Order order;
-        try {
-            JsonElement reserve = o.get("reserve");
-            order = new Order(o.get("module").getAsString(), o.get("robot").getAsInt(), o.get("from").getAsString(),
-                o.get("to").getAsString(), ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(o.get("item").getAsString())),
-                o.get("quantity").getAsInt(), reserve == null || reserve.isJsonNull() ? 0 : reserve.getAsInt());
-        } catch (RuntimeException e) {
-            return INVALID;
-        }
+    private static String start(Session mine, MindRuntime runtime, Actor actor, Order order) {
         try {
             runtime.check(actor, order);
         } catch (Refusal refusal) {
@@ -628,35 +673,32 @@ public final class Uno {
          * A resume comes before a pause: "riprendi il lavoro in pausa" is a resume.
          * A change needs a new value: a number after a word of the quantity or of the reserve.
          */
-        private static final List<Map.Entry<Action, Pattern>> ACTION_WORDS = List.of(
-            Map.entry(Action.RESUME, Pattern.compile("\\b(?:resume|continue|riprendi|continua)\\b")),
-            Map.entry(Action.CANCEL, Pattern.compile("\\b(?:cancel|annulla|cancella)\\b")),
-            Map.entry(Action.PAUSE, Pattern.compile("\\b(?:pause|pausa|sospendi)\\b")),
-            Map.entry(Action.CHANGE, Pattern.compile(QUANTITY.pattern() + "|" + RESERVE.pattern())),
-            Map.entry(Action.REPORT, Pattern.compile("\\b(?:report|status|rapporto|stato|how(?:'s|’s| is| are)|come (?:va|vanno|sta|stanno))\\b")));
+        private static final List<Map.Entry<Kind, Pattern>> ACTION_WORDS = List.of(
+            Map.entry(Kind.RESUME, Pattern.compile("\\b(?:resume|continue|riprendi|continua)\\b")),
+            Map.entry(Kind.CANCEL, Pattern.compile("\\b(?:cancel|annulla|cancella)\\b")),
+            Map.entry(Kind.PAUSE, Pattern.compile("\\b(?:pause|pausa|sospendi)\\b")),
+            Map.entry(Kind.CHANGE, Pattern.compile(QUANTITY.pattern() + "|" + RESERVE.pattern())),
+            Map.entry(Kind.REPORT, Pattern.compile("\\b(?:report|status|rapporto|stato|how(?:'s|’s| is| are)|come (?:va|vanno|sta|stanno))\\b")));
 
         /**
          * The action "start", an action that names a job, or "none" with the reason.
          * The fixed rules call no model, thus they report zero tokens.
          */
         @Override
-        public Answer answer(String request, String context) {
-            JsonObject known = JsonParser.parseString(context).getAsJsonObject();
+        public Answer answer(String request, Context context) {
             String text = request.toLowerCase(Locale.ROOT);
             List<String> stations = new ArrayList<>();
-            for (JsonElement element : known.getAsJsonArray("stations")) {
-                if (mention(text, element.getAsString()).find()) stations.add(element.getAsString());
+            for (String station : context.stations()) {
+                if (mention(text, station).find()) stations.add(station);
             }
-            JsonObject action;
+            Action action;
             try {
                 action = stations.size() < 2 ? jobAction(text, stations) : null;
-                if (action == null) action = start(text, known);
+                if (action == null) action = start(text, context);
             } catch (IllegalArgumentException missing) {
-                action = new JsonObject();
-                action.addProperty("action", "none");
-                action.addProperty("reason", missing.getMessage());
+                action = new Action.None(missing.getMessage());
             }
-            return new Answer(action.toString(), 0, 0);
+            return new Answer(action, 0, 0);
         }
 
         /** The name of a station as a whole word of the text. */
@@ -668,34 +710,28 @@ public final class Uno {
          * The action about a job: the action of the first word that fits, with "robot N" and the one station of the text as the target.
          * Null if no word fits. A change also has the new quantity and the new reserve. A value that the text does not give is null.
          */
-        private static JsonObject jobAction(String text, List<String> stations) {
+        private static Action.OnJob jobAction(String text, List<String> stations) {
             // "robot N" names the job. Its number is not a new value.
             Matcher robot = ROBOT.matcher(text);
-            JsonElement robotId = robot.find() ? new JsonPrimitive(Integer.parseInt(robot.group(1))) : JsonNull.INSTANCE;
+            Integer robotId = robot.find() ? Integer.valueOf(robot.group(1)) : null;
             String rest = robot.reset().replaceFirst(" ");
-            for (Map.Entry<Action, Pattern> word : ACTION_WORDS) {
+            for (Map.Entry<Kind, Pattern> word : ACTION_WORDS) {
                 if (!word.getValue().matcher(rest).find()) continue;
-                JsonObject action = new JsonObject();
-                action.addProperty("action", word.getKey().name().toLowerCase(Locale.ROOT));
-                action.add("robot", robotId);
-                action.add("station", stations.isEmpty() ? JsonNull.INSTANCE : new JsonPrimitive(stations.get(0)));
-                if (word.getKey() == Action.CHANGE) {
-                    action.add("quantity", number(QUANTITY, rest));
-                    action.add("reserve", number(RESERVE, rest));
-                }
-                return action;
+                Target target = new Target(robotId, stations.isEmpty() ? null : stations.get(0));
+                boolean change = word.getKey() == Kind.CHANGE;
+                return new Action.OnJob(word.getKey(), target, change ? number(QUANTITY, rest) : null, change ? number(RESERVE, rest) : null);
             }
             return null;
         }
 
         /** The first number after the word of the pattern, or null. */
-        private static JsonElement number(Pattern word, String text) {
+        private static Integer number(Pattern word, String text) {
             Matcher matcher = word.matcher(text);
-            return matcher.find() ? new JsonPrimitive(Integer.parseInt(matcher.group(1))) : JsonNull.INSTANCE;
+            return matcher.find() ? Integer.valueOf(matcher.group(1)) : null;
         }
 
         /** The action "start" with the order of the request. An IllegalArgumentException says what is missing. */
-        private static JsonObject start(String text, JsonObject known) {
+        private static Action.Start start(String text, Context known) {
             Matcher reserveMatch = RESERVE.matcher(text);
             int reserve = reserveMatch.find() ? Integer.parseInt(reserveMatch.group(1)) : 0;
             String rest = reserveMatch.reset().replaceFirst(" ");
@@ -706,8 +742,7 @@ public final class Uno {
             int quantity = Integer.parseInt(quantityMatch.group());
 
             String from = null, to = null;
-            for (JsonElement element : known.getAsJsonArray("stations")) {
-                String name = element.getAsString();
+            for (String name : known.stations()) {
                 Matcher mention = mention(text, name);
                 boolean mentioned = false, source = false;
                 while (mention.find()) {
@@ -736,24 +771,13 @@ public final class Uno {
             if (item == null) throw new IllegalArgumentException("I do not know the item");
 
             if (robot == null) {
-                List<Integer> free = new ArrayList<>();
-                for (JsonElement element : known.getAsJsonArray("robots")) {
-                    if (element.getAsJsonObject().get("free").getAsBoolean()) free.add(element.getAsJsonObject().get("id").getAsInt());
-                }
+                List<Integer> free = known.robots().stream().filter(Context.Robot::free).map(Context.Robot::id).toList();
                 if (free.size() != 1) throw new IllegalArgumentException("you have " + free.size() + " free robots: write 'robot N'");
                 robot = free.get(0);
             }
 
-            JsonObject order = new JsonObject();
-            order.addProperty("action", "start");
-            order.addProperty("module", text.matches("(?s).*\\b(mantieni|mantenere|almeno|keep)\\b.*") ? MindRuntime.KEEP_STOCK : MindRuntime.TRANSPORT);
-            order.addProperty("robot", robot);
-            order.addProperty("from", from);
-            order.addProperty("to", to);
-            order.addProperty("item", item);
-            order.addProperty("quantity", quantity);
-            order.addProperty("reserve", reserve);
-            return order;
+            String module = text.matches("(?s).*\\b(mantieni|mantenere|almeno|keep)\\b.*") ? MindRuntime.KEEP_STOCK : MindRuntime.TRANSPORT;
+            return new Action.Start(new Order(module, robot, from, to, ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(item)), quantity, reserve));
         }
     }
 }

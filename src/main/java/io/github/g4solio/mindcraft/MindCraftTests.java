@@ -1311,6 +1311,9 @@ public class MindCraftTests {
                 schema.getAsJsonArray("required").forEach(field -> required.add(field.getAsString()));
                 check(required.equals(Set.of("action", "reason", "robot", "station", "module", "from", "to", "item", "quantity", "reserve"))
                     && schema.getAsJsonObject("properties").keySet().equals(required), schema.toString());
+                // The real service refuses an enum next to a list of types (run 76 of TEST_RESULTS.md). A nullable enum uses anyOf.
+                check(schema.getAsJsonObject("properties").entrySet().stream().map(field -> field.getValue().getAsJsonObject())
+                    .noneMatch(field -> field.has("enum") && field.has("type") && field.get("type").isJsonArray()), schema.toString());
                 String system = message.get("system").getAsString();
                 check(Stream.of("start", "change", "pause", "resume", "cancel", "report", "none").allMatch(action -> system.contains("\"" + action + "\"")), system);
                 // The context is the same as before the actions: the station names of the player, the robot numbers and the "free" flag (D21).

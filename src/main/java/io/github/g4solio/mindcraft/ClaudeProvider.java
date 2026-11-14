@@ -73,7 +73,7 @@ final class ClaudeProvider implements Uno.Provider {
           "reason": {"type": "string"},
           "robot": {"type": ["integer", "null"]},
           "station": {"type": ["string", "null"]},
-          "module": {"type": ["string", "null"], "enum": ["transport", "keep_stock", null]},
+          "module": {"anyOf": [{"type": "string", "enum": ["transport", "keep_stock"]}, {"type": "null"}]},
           "from": {"type": ["string", "null"]},
           "to": {"type": ["string", "null"]},
           "item": {"type": ["string", "null"]},

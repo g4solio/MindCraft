@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
-import io.github.g4solio.mindcraft.MindRuntime.Refusal;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.server.MinecraftServer;
 
@@ -37,14 +36,12 @@ final class UnoView {
         long places = runtime.places.stream().filter(place -> actor.id().equals(place.owner())).count();
         if (places > 0) widgets.add(text("Places of the base with a projector: " + places, "muted"));
         widgets.add(text("Uno › " + Uno.said(actor), "uno"));
-        // The player must know that the text of a request leaves the server.
-        // ponytail: the view knows the Claude provider. Put this notice in the provider interface when a second real provider exists.
-        if (Uno.provider instanceof ClaudeProvider) widgets.add(text("Written requests go to Claude, a model of Anthropic.", "muted"));
+        providerLines(widgets, actor);
 
         // "Confirm" has one meaning only: the proposal is in words next to the button, and the action names that proposal.
         // The last sentence of Uno can be about something else, for example a report.
         Uno.Proposal proposal = Uno.proposal(actor);
-        if (proposal != null) widgets.add(text("Waiting for your confirmation: " + Uno.describe(proposal.order()) + ".", "normal"));
+        if (proposal != null) widgets.add(text("Waiting for your confirmation: " + proposal.text() + ".", "normal"));
 
         JsonObject input = new JsonObject();
         input.addProperty("type", "input");
@@ -54,7 +51,8 @@ final class UnoView {
 
         JsonArray buttons = new JsonArray();
         buttons.add(button("ask", "Send"));
-        if (proposal != null) buttons.add(button("confirm:" + proposal.number(), "Confirm"));
+        // The label names the proposal too (ticket #4).
+        if (proposal != null) buttons.add(button("confirm:" + proposal.number(), "Confirm #" + proposal.number()));
         buttons.add(button("report", "Report"));
         widgets.add(row(buttons));
 
@@ -64,13 +62,35 @@ final class UnoView {
         return view.toString();
     }
 
+    /**
+     * Where the written requests of the player go, and what they cost (D33).
+     * The counter is on the screen of each player whose requests count: an operator, with a model on the server. Also at the limit.
+     * The player must know whether the text of a request leaves the server.
+     */
+    private static void providerLines(JsonArray widgets, Actor actor) {
+        Uno.Provider server = Uno.provider;
+        Uno.Route route = Uno.route(actor, server);
+        if (route == Uno.Route.MODEL || route == Uno.Route.AT_LIMIT) {
+            Uno.Usage usage = Uno.usage(actor);
+            widgets.add(text("Your model requests in this session: " + usage.requests() + " of " + Uno.MODEL_REQUESTS + ". Tokens: "
+                + usage.inputTokens() + " in, " + usage.outputTokens() + " out.", "muted"));
+        }
+        String notice = server.notice(route);
+        if (notice != null) widgets.add(text(notice, "muted"));
+    }
+
     private static void job(JsonArray widgets, int robotId, Job job, long now) {
+        JobAccount account = JobAccount.of(job, now);
         String from = "'" + job.from + "'", to = "'" + job.to + "'";
         widgets.add(text("Job " + job.id + " · robot #" + robotId + " · " + STATES.get(job.state), "heading"));
         String what = job.quantity + " x " + MindRuntime.itemName(job.item);
         widgets.add(text(job.keepStock() ? "Keep at least " + what + " in " + to + ", taken from " + from
             : "Carry " + what + " from " + from + " to " + to, "normal"));
-        if (job.state == State.BLOCKED || job.state == State.RECOVERY) widgets.add(text("Recorded reason: " + job.reason, "muted"));
+        // The reason with the position helps the owner to find the robot. A wait for a free path has it too.
+        // The other waits do not show it: a stock job often changes between them, and a new line changes the shape of the screen.
+        if (job.state == State.BLOCKED || job.state == State.RECOVERY || job.cause == MindRuntime.Cause.PATH_OBSTRUCTED) {
+            widgets.add(text("Recorded reason: " + job.reason, "muted"));
+        }
         if (job.state.open()) {
             widgets.add(number("quantity:" + robotId, job.keepStock() ? "Level to keep" : "Quantity to carry", job.quantity));
             widgets.add(number("reserve:" + robotId, "Reserve in the source", job.reserve));
@@ -78,13 +98,13 @@ final class UnoView {
         if (!job.keepStock()) {
             widgets.add(bar("delivered", job.delivered, job.quantity, ""));
         } else if (job.toSeen != MindRuntime.UNKNOWN) {
-            widgets.add(bar(job.to, job.toSeen, job.quantity, "seen " + (now - job.toSeenAt) / 20 + " s ago"));
+            widgets.add(bar(job.to, job.toSeen, job.quantity, "seen " + account.seconds(job.toSeenAt) + " s ago"));
         }
-        widgets.add(text(from + ": " + Uno.seen(job.fromSeen, job.fromSeenAt, now) + " · delivered " + job.delivered
+        widgets.add(text(from + ": " + account.seen(job.fromSeen, job.fromSeenAt) + " · delivered " + job.delivered
             + " · on board " + job.carried, "muted"));
         if (!job.state.open()) return;
         // Old data must not look like current data.
-        if (RobotApi.live(robotId) == null) widgets.add(text("The robot is not running. These data are not the current state.", "muted"));
+        if (!account.running()) widgets.add(text("The robot is not running. These data are not the current state.", "muted"));
         JsonArray buttons = new JsonArray();
         // Each action names the job, not only the robot. The runtime refuses an action of a view that showed an earlier job.
         // "Apply" also carries the revision. The runtime refuses a change that comes from an old view of the same job.
@@ -93,6 +113,17 @@ final class UnoView {
         buttons.add(job.state.active() ? button("pause:" + target, "Pause") : button("resume:" + target, "Resume"));
         buttons.add(button("cancel:" + target, "Cancel"));
         widgets.add(row(buttons));
+    }
+
+    /**
+     * The actor opens a contact point: the use of the tablet or the click on a projector (D30). A new view after an action is not an opening.
+     * Uno says the summary of what needed attention since the last opening of the actor. It calls no provider.
+     * With nothing to say, Uno keeps its sentence, unless that sentence is the summary of an earlier opening. Returns the view.
+     */
+    static String open(MindRuntime runtime, Actor actor, long now) {
+        long since = runtime.recordOpening(actor);
+        Uno.sayAtOpening(actor, Notices.summary(runtime.diary(actor), runtime.forgotten(actor), since, now));
+        return build(runtime, actor, now);
     }
 
     /**
@@ -118,24 +149,15 @@ final class UnoView {
                         Uno.ask(server, actor, request, answer -> Uno.say(actor, answer));
                     }
                 }
-                case "pause", "resume", "cancel" -> {
-                    runtime.control(actor, Integer.parseInt(part[1]), Integer.parseInt(part[2]), part[0]);
-                    Uno.say(actor, switch (part[0]) {
-                        case "pause" -> "Job paused. The cargo stays on board.";
-                        case "resume" -> "I resume the job.";
-                        default -> "Job cancelled. The cargo stays on board the robot.";
-                    });
-                }
+                // The buttons of a job build the requests of the words, and get their sentences (D41).
+                case "pause", "resume", "cancel" -> Uno.say(actor, Uno.button(runtime, actor, part[0], Integer.parseInt(part[1]), Integer.parseInt(part[2])));
                 case "apply" -> {
                     int robotId = Integer.parseInt(part[1]);
-                    runtime.update(actor, robotId, Integer.parseInt(part[2]), Integer.parseInt(part[3]),
-                        values.get("quantity:" + robotId).getAsInt(), values.get("reserve:" + robotId).getAsInt());
-                    Uno.say(actor, "I updated the quantity and the reserve.");
+                    Uno.say(actor, Uno.send(runtime, actor, new Uno.Change(robotId, Integer.parseInt(part[2]), Integer.parseInt(part[3]),
+                        values.get("quantity:" + robotId).getAsInt(), values.get("reserve:" + robotId).getAsInt())));
                 }
                 default -> throw new IllegalArgumentException(action);
             }
-        } catch (Refusal refusal) {
-            Uno.say(actor, "I cannot: " + refusal.getMessage());
         } catch (RuntimeException e) {
             Uno.say(actor, "I did not understand the action. Check the values and try again.");
         }

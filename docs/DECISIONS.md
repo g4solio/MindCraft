@@ -91,8 +91,10 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Check of the station:** at the registration and at each transfer the runtime checks that an inventory is at the position. If it is missing, the job goes to `BLOCKED` (T04).
 - **Counterexample:** a chest that was replaced at the same position is the same station. The robot always knows its exact position, without GPS: this is a product choice to review for the survival progression.
 - **Discard condition:** a real path is not straight. Then a registered path with waypoints or a path search is necessary.
-- **Fact from a code examination, 2026-11-13:** the move step accepts each move that brings the robot nearer to the target. A path with one corner is possible. No test has one. See D28.
-- **Decided on 2026-11-13, not implemented:** an obstacle becomes a wait, not a block. See D34.
+- **Fact from a code examination, 2026-11-13:** the move step accepts each move that brings the robot nearer to the target. A path with one corner is possible. At that moment no test had one. See D28.
+- **Verified on 2026-11-13 with an automatic in-game test:** a path with one corner works in the two directions (`a_path_with_one_corner`). See D28.
+- **Decided on 2026-11-13:** an obstacle becomes a wait, not a block. See D34.
+- **Implemented and verified in increment A, 2026-11-13:** an obstacle is a wait. The job continues by itself when the path is free. The T05 evidence above describes the earlier behaviour. See D34 and test `t05_obstacle`.
 
 ### D06.1 — A computed route
 
@@ -135,9 +137,10 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Disproved assumption:** "a check at the first contact of the robot is sufficient". In the first version the state said `DONE` until the robot called the runtime. If the robot is not loaded, that false statement stayed.
 - **Not verified:** the statement "Minecraft writes chunks to disk more frequently than `SavedData`" comes from general knowledge of the game. The code of Minecraft 1.20.1 was not read. On the test server, 15 seconds after the delivery, the world on disk did not contain the delivery. The test server has no idle time in the tick and a normal server can behave differently.
 - **Counterexample:** the opposite case stays undetectable. If someone restores an old `mindcraft.dat` file on a new world, only the comparison of the cargo applies (T09).
-- **Limit:** the write of the file is not atomic, as for each `SavedData` of Minecraft. A stop during the write can corrupt the file. Then Minecraft creates empty data and the runtime loses stations, robots and jobs.
+- **Limit until increment A:** the write of the file was not atomic, as for each `SavedData` of Minecraft. A stop during the write could corrupt the file. Then Minecraft creates empty data and the runtime loses stations, robots and jobs. Since increment A the write is atomic. See D37.
 - **Cost:** one file write on the server thread for each transfer. Not measured.
 - **Changed in the review of 2026-11-12:** at `resume` the runtime now corrects the delivered total by the load that the robot still holds. See D16.1. The guarantees of this section are not larger than before. The tests cover the same specific cases. The save of the world and the save of the record are still not one atomic operation.
+- **Changed in increment A (D37):** the runtime writes the record to a temporary file and then moves that file in the place of `mindcraft.dat` in one step. This applies to the write after each transfer and to the save of the world. The order of the saves of this section does not change. The world and the record are still two separate writes.
 
 ## D09 — Pause, cancellation and forced stop
 
@@ -293,7 +296,7 @@ Definition of availability:
 
 ## D17 — Minimal Uno: proposal, confirmation, report
 
-**Status:** verified with the deterministic provider. Verified with the Claude provider and the real service. See D21. The review of 2026-11-12 found three defects in this decision. They are corrected: see D23, D24 and D25.
+**Status:** verified with the deterministic provider. Verified with the Claude provider and the real service. See D21. The review of 2026-11-12 found three defects in this decision. They are corrected: see D23, D24 and D25. Since increment A a provider gives an action (D29.1). The real service ran with that interface on 2026-11-14 for `start` and `none` (run 81 in TEST_RESULTS.md).
 
 - **Provisional choice:** Uno has no authority of its own. A replaceable provider changes the request into an order in JSON format. The order goes through the same validation as the commands. The result is a proposal. The player confirms it with `/uno confirm`. At the confirmation the runtime validates again.
 - **Provider:** the interface is `propose(request, context) → JSON`. The provider runs off the server thread, with a limit of 20 seconds. The context contains only the stations and the robots of the actor.
@@ -312,7 +315,8 @@ Example of a report produced in the test, with the real data of the job:
 - **One request at a time:** Uno accepts only one written request in progress for each player. To the second it answers "I am still working on your previous request." Reason: a provider can cost money for each request. The rule applies to each source of requests. It does not depend on a time limit any more: a request ends when its answer arrives, or when its own time limit gives the answer. Evidence: tests `t18_claude_provider` and `t22_confirm_only_the_shown_proposal`.
 - **A request without a complete order is not a failure:** a provider signals it with `IllegalArgumentException`. Uno answers "I cannot propose a job: …". Each other error of a provider is a failure: "I cannot interpret the request now (…)". Evidence: tests `t18_provider_failures` and `t18_claude_provider`.
 - **Decided by the project owner on 2026-11-12:** the first provider with a language model is Claude. See D21.
-- **Decided on 2026-11-13, not implemented:** a provider will give an action from a closed list, not only an order (D29). Uno will speak first to warn (D30). The model will write the answers to written requests, and this fixed template stays as the fallback (D32).
+- **Decided on 2026-11-13:** a provider gives an action from a closed list, not only an order (D29). Uno speaks first to warn (D30). Increment A implements both. The model will write the answers to written requests, and this fixed template stays as the fallback (D32). This part is not implemented: it is increment B.
+- **Changed on 2026-11-13, increment A:** the interface is `answer(request, context) → action and tokens`. The action `none` with a reason replaces the `IllegalArgumentException`. Each exception is now a failure. See D29.1.
 
 ## D18 — Contact points: tablet and projector, one native screen
 
@@ -377,7 +381,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 
 ## D21 — First real provider: Claude, with the official Anthropic SDK
 
-**Status:** decided by the project owner on 2026-11-12. The code of the provider is verified in the game against a false server in place of the API. The provider was verified two times with the real service, on 2026-11-12: four requests written in the test, first with the Italian text of Uno and then with the current English text. The production jar was not loaded on an installed Forge.
+**Status:** decided by the project owner on 2026-11-12. The code of the provider is verified in the game against a false server in place of the API. The provider was verified two times with the real service, on 2026-11-12: four requests written in the test, first with the Italian text of Uno and then with the current English text. Those runs used the schema of S2. The schema of increment A passed the same test on 2026-11-14, after a correction (D29.1). The production jar was not loaded on an installed Forge.
 
 - **Decision:** Claude is the first provider with a language model. The `Uno.Provider` interface does not change. The deterministic provider stays: it serves the tests and the players without a key.
 - **Activation:** at the server start, if the environment of the process contains `ANTHROPIC_API_KEY`, Uno uses Claude. Otherwise it uses the fixed rules. The server log says which provider is active. A test server (`runGameTestServer`) always uses the fixed rules.
@@ -398,13 +402,15 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Counterexample:** an internal error of type `IllegalArgumentException` in a provider would look like an incomplete request. The Claude provider changes the known errors of the SDK into a different type. An unexpected error is not covered.
 - **Counterexample:** the real test is two runs of the same four requests. It does not say how Claude answers other requests.
 - **Counterexample:** 43 MB for one HTTP call. A call written with the classes of Java adds no weight. Current choice: the official SDK, which follows the changes of the API without work in this project.
-- **Counterexample:** on a shared server, each player with a contact point spends on the account of the server operator. The mod has no spending limit.
+- **Counterexample, until increment A:** on a shared server, each player with a contact point spends on the account of the server operator. Since D33.1 only an operator uses Claude, with a limit for each server session. The mod still has no spending limit.
 - **Counterexample:** the key can be in the environment for other programs. The mod uses it without a second consent.
 - **Counterexample:** the model writes the sentence in `problem`. It does not come from the record of the runtime. The prompt limits it to the request and the context. No check in the code enforces this.
 - **Not verified:** the load of the `-all` jar on an installed Forge. The coexistence with other mods that bring Kotlin or Jackson. A favourable sign: in the development game the same libraries load as modules together with those of Forge.
 - **Not done:** a check of the license notices of the 25 libraries inside the `-all` jar. The repository does not contain those libraries. Only a built `-all` jar does.
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
-- **Decided on 2026-11-13, not implemented:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). By default only an operator will use Claude, with a session limit and a counter on the screen (D33).
+- **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is verified with the real service for `start` and `none` since 2026-11-14. See D29.1.
+- **Decided on 2026-11-13:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). These two points are not implemented: they are increment B. By default only an operator uses Claude, with a session limit and a counter on the screen (D33). Increment A implements this point: see the next line.
+- **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
 
 ## D22 — License: MIT
 
@@ -430,6 +436,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Counterexample:** the `/uno confirm` command carries no number. It starts the newest proposal of the player, also when a different contact point made it. The chat can still show an older proposal as its last line.
 - **Counterexample:** a wrong request removes a good proposal. This is the cost of one meaning for "Confirm".
 - **Not verified:** the new line and the new button in a client.
+- **Extended on 2026-11-13, ticket #4:** the rule holds for each kind of proposal: a start, a change, a resume and a cancellation. A different player confirms nothing, with the button of the owner or with the command. Evidence: `a_change_through_the_view`, `a_confirmation_of_older_values`. See D29.3.
 
 ## D24 — The temporary state of Uno and of the robots belongs to one server session
 
@@ -478,6 +485,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Artificial condition:** for the inventory that is not loaded, the test moves the inventory of the station record to a far position. The dock stays. The runtime refuses such a station at the registration. In a normal game the chunk next to a working turtle is loaded, thus this state is rare. The cause is still written by the code of the runtime, during a real pickup attempt of the turtle.
 - **Not verified:** `SOURCE_KEEPS` and `DESTINATION_UNLOADED`. No test reaches them. The destination uses the same code as the source.
 - **Counterexample:** `BLOCKED` and `RECOVERY` still have only a free text. Uno prints it as the recorded reason and does not interpret it.
+- **Changed in increment A:** `BLOCKED` has causes too, and an obstacle is a wait with the cause `PATH_OBSTRUCTED`. See D34. `RECOVERY` still has only a free text.
 
 ## D26 — One run of a Lua module executes one job
 
@@ -487,12 +495,14 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Choice:** `mindcraft.attach` returns the ID of the job. A run of a module keeps that ID. A job is "active" for a run only if it is the job of that run. With a different job the run ends, and the agent starts the module of the new job. The agent gives the job that it saw to the module: the run ends at once if the robot already has a different job.
 - **Versions:** the modules are now `transport@2` and `keep_stock@2`.
 - **Evidence:** test `t15_next_job_with_another_module`: a transport ends and a `keep_stock` job starts in the same tick. Before the correction the job went to `BLOCKED` with the module error. After it, the job reaches `SATISFIED` with the executor `keep_stock@2`.
-- **Limit:** the check is in the Lua modules of the mod. The functions `take`, `give`, `observe` and `block` carry no job ID. One tick stays between the last state reading of a run and its next call. In that tick a new job can get a call of the old run, for example its impediment.
+- **Limit:** the check is in the Lua modules of the mod. The functions `take`, `give`, `observe`, `impediment` and `moved` carry no job ID. In increment A `impediment` replaced `block` (D34). One tick stays between the last state reading of a run and its next call. In that tick a new job can get a call of the old run, for example its impediment.
 - **Proposed for T15 in S3:** each call of a module names its job, and the runtime refuses a call for a different job.
 
 ## D27 — Plan after the first review: four increments
 
-**Status:** decided by the project owner on 2026-11-13, in a design discussion. Not implemented.
+**Status:** decided by the project owner on 2026-11-13, in a design discussion. Increment A is implemented. B, C and D are not implemented.
+
+- **Status of the exit of A:** reached on 2026-11-14, decided by the project owner. The first part: the automatic in-game tests pass on the final code (run 75, 81 of 81, and the four restart phases, ticket #12). The CI passed on the commit `07bbf44` of the session. The second part: the project owner played the session of ticket #13 on 2026-11-14, with the checklist [PLAY_SESSION_A.md](PLAY_SESSION_A.md). Each step reached its expected behaviour. No command was used after the setup. Two differences are deferred to increment B. See D40.
 
 - **Problem:** S3 of the brief is visual composition and Lua customization. After S2, Uno can do one thing with words: create a job. A change, a pause, a question about the state and a report are buttons or commands. Uno never speaks first. An editor does not change this.
 - **Decision:** the work on Uno comes before S3. S3 is divided. The order is A, B, C, D.
@@ -504,7 +514,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 | C — Two duties | The `drain` module, parameters that each module declares, a round of duties on one robot | D35 |
 | D — Lua together | The turtle addon, the shared library, a custom step, code that Uno proposes | D36 |
 
-- **Exit of A:** the automatic in-game tests pass. The project owner plays one session with a written checklist. The steps and the results are recorded in `TEST_RESULTS.md`. In that session, after the setup, the project owner uses no `/mindcraft` command.
+- **Exit of A:** the automatic in-game tests pass. The project owner plays one session with a written checklist. The steps and the results are recorded in `TEST_RESULTS.md`. In that session, after the setup, the project owner uses no `/mindcraft` command. The checklist is [PLAY_SESSION_A.md](PLAY_SESSION_A.md).
 - **Reason for A before B:** each part of A has a test that can be repeated, and A needs no paid run. B needs the fixed templates of A anyway: they are its fallback.
 - **In A the model routes and the server speaks.** This is the order of the work. It does not change D32.
 - **Cost:** the order of the brief changes. The requirement "both the player and Uno can write and change programs" (brief 2.1) stays without evidence until D. The `Order` record keeps the shape of a transport until C.
@@ -526,7 +536,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D28 — The next play session
 
-**Status:** decided by the project owner on 2026-11-13. The facts below come from code examinations. No test supports them.
+**Status:** decided by the project owner on 2026-11-13. The facts below come from code examinations. Since 2026-11-13 an automatic test supports one of them: the path with one corner. No test supports the others.
 
 - **Decision:**
   - One player: the project owner. The development client (`gradlew runClient`). The Anthropic key in the environment of the game.
@@ -539,13 +549,19 @@ Deferred without a date. Each item names the condition that opens it again.
   - The server configuration of the test server has `can_push = true`. The comment of the option says that a turtle pushes an entity out of the way if there is space.
   - The move command of CC: Tweaked contains the message "Cannot leave loaded world".
   - `RestartTests` keeps its chunk loaded with `setChunkForced`. T11 shows that the robot works there without a connected player.
-- **Not verified:** a path with a corner. A player on the path. `/forceload` in a client with one player. A robot at the edge of the loaded area.
+- **Verified on 2026-11-13 with an automatic in-game test:** a path with one corner, in the two directions. Test `a_path_with_one_corner`.
+  - Stone walls leave one L-shaped corridor between the docks. The robot crosses the corner to the source, then again to the destination.
+  - Toward the source the x axis is walled. The move step tries z and continues. Toward the destination the order x, then z fits the corridor.
+  - The transport reaches `DONE`: 40 in the source, 24 in the destination, 0 in the robot. The walls are still in place.
+  - No correction of the move step was necessary. With a move step that tries only the first axis, the same test fails: the job goes to `BLOCKED` before the corner.
+- **Not verified:** a stair, that is a path that also changes y. More than one corner. A player on the path. `/forceload` in a client with one player. A robot at the edge of the loaded area. The checklist of the play session has the player on the path and `/forceload` (steps S7, 6 and 9 of [PLAY_SESSION_A.md](PLAY_SESSION_A.md)). Since 2026-11-14 two of them are verified in the game, manually, in the play session (D40): a player on the path, whom the robot pushed (`can_push = true`), and `/forceload` with a robot that worked while the player was about 380 blocks away.
+- **Out of scope:** a path that needs a move away from the target. The move step cannot make it. The README says which paths work.
 - **Counterexample:** `/forceload` needs commands enabled. The mod does not know the forced area. If the player forgets it, the robot stops as before and the job stays `RUNNING`.
 - **Counterexample:** if the key is in the environment of the user, the development client uses Claude with no other step. Then each written request is a paid call (D21).
 
 ## D29 — Uno acts on words through a closed list of actions
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented: the contract of a provider (D29.1), the pause and the report (D29.2), and the change, the resume and the cancellation (D29.3) are verified with automatic in-game tests. On 2026-11-14 start, change, pause, resume, cancel and report ran with the real Claude service in a client: verified in the game, manually, in the play session (D40).
 
 - **Problem:** with the code of S2, three requests fail.
   - "Leave only 16 in the depot", for an open job. The provider can only give a new order, and the robot is busy. Uno refuses.
@@ -557,10 +573,120 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Buttons and commands stay.** They are the control surface when the provider fails.
 - **Cost:** each change needs two steps. D17 already names this friction.
 - **Change:** in D17 a provider gives only an order. D23 holds: one proposal for each player, the newest.
+- **Implemented in increment A:** the contract of a provider (ticket #2, D29.1). The pause and the report, and the search of the job on the server (ticket #3, D29.2). The change, the resume and the cancellation, each as a proposal (ticket #4, D29.3). The proposed detail above is implemented: spec #1 decided it.
+
+### D29.1 — The contract of a provider: one action and its tokens
+
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules, with providers written in the tests and with a false server in place of the API. Not verified with the real Claude service (D33). On 2026-11-14 the real service refused the first request of `t18_claude_live` with error 400 (runs 76 and 78 in TEST_RESULTS.md). The cause is known and corrected: see "Observed on 2026-11-14" below. Verified with the real service on 2026-11-14 for `start` and `none` (run 81): the test of S2 passed with the corrected schema. The actions change, pause, resume, cancel and report did not run with the real service in that run. They ran with the real service in the play session of 2026-11-14: verified in the game, manually (D40). Increment A, ticket #2. The flat schema of the Claude provider is a choice of the implementation: **proposed**, not confirmed by the project owner.
+
+- **Contract:** a provider answers `answer(request, context) → Answer`. The answer holds one action as JSON, the input tokens and the output tokens. The context does not change: the station names of the player, the robot numbers and the "free" flag (D21).
+- **Actions:** the closed list of D29. Each action has its parameters. A field that the action does not use is null or absent.
+
+| Action | Parameters |
+| --- | --- |
+| `start` | The order of S2: module, robot, from, to, item, quantity, reserve |
+| `change` | A target, and a new quantity, a new reserve or both. Null is a value that does not change |
+| `pause`, `resume`, `cancel`, `report` | A target: a robot number, a station name, or nothing |
+| `none` | One short reason for the player |
+
+- **Tokens:** the Claude provider reads them from the usage data of the answer. The fixed rules report zero. Since ticket #11 the counter of the screen shows them (D33.1).
+- **What Uno does in this part:** `start` becomes a proposal, as in S2. `none` gives its reason: "I cannot propose a job: …". Each other action gets a fixed sentence, for example "I cannot pause a job from a written request yet. Use the buttons of the screen or the commands. I changed nothing." Uno creates no proposal for it.
+- **Validation in Uno:** Uno reads each answer and does not trust it. An action outside the list, a `start` without a complete order and a `none` without a reason get "I did not get a valid configuration. I created no proposal." Uno ignores the case of the action name: structured outputs do not guarantee the case of an enum value.
+- **Length limit:** 200 characters for the reason, as in S2. The limit moved from the Claude provider to Uno. Thus it applies to each provider.
+- **Failures:** each exception of a provider is a failure: "I cannot interpret the request now (…)". Before, an `IllegalArgumentException` meant a request without a complete order. This corrects a counterexample of D21: an internal error of that type looked like an incomplete request.
+- **Fixed rules:** they give `start` or `none`, with the same orders and the same reasons as before. The word patterns of the other actions came with tickets #3 and #4 (D29.2, D29.3).
+- **Claude provider:** a new system text for the seven actions and a new output schema. The model stays `claude-opus-5-5` with a low effort (D21).
+- **Proposed, the flat schema:** one object with ten fields. Each field is required, thus the model writes each one. A field that the action does not use is null: eight fields have the type "value or null". The documentation of structured outputs permits 16 parameters with such a union type.
+- **Alternative not chosen:** one object for each action, with `anyOf`. It is more exact, but its grammar is more complex to compile.
+- **Evidence:** tests `s2_uno_reference_sentence`, `t18_provider_failures`, `t18_claude_provider` and the new test `a_provider_answers_with_an_action`. The four failed before the implementation and passed after it. See "Increment A — The provider answers with an action" in TEST_RESULTS.md. The tests of the S2 flow pass with the same sentences as before: `s2_uno_request`, `s2_tablet_view`, `t22_confirm_only_the_shown_proposal`, `t22_t23_proposals_and_contact_points`, `t23_state_of_an_earlier_session`.
+- **Not verified:** the new schema and the new system text with the real service. The test `t18_claude_live` compiles with the new contract. It was not run: a run costs money and needs the consent of the project owner. Its four requests are the requests of S2: they test only `start` and `none`. Since 2026-11-14: run 81 and the play session used the new schema with the real service (D40).
+- **Counterexample:** the real service can refuse the schema, for example with "Schema is too complex for compilation". Then each request to Claude fails, and Uno says that the model service answered with error 400. The fixed rules do not take over.
+- **Observed on 2026-11-14:** run 76 gave this counterexample. The service answered with error 400. The provider wrote only the code, not the body of the error. Thus the reason is not known: the schema is the most likely cause, because the request of S2 passed with the same model, effort and fallback.
+- **Cause, found on 2026-11-14:** run 78 logged the body of the error: "Enum value 'transport' does not match declared type '['string', 'null']'". The service refuses an `enum` next to a list of types. Only the field `module` had both.
+- **Changed on 2026-11-14, the schema:** `module` is `anyOf` a string from the enum, or null. It still counts as one of the eight fields with a union type. `t18_claude_provider` checks that no field has an `enum` next to a list of types: it failed before the change (run 79) and passed after it (run 80).
+- **Changed on 2026-11-14:** the provider writes the body of an error of the service in the server log, at the level WARN. The player still gets only the code. The body holds no key. `t18_claude_live` checks that a job exists before it reads its state: a failed proposal no longer stops the server.
+- **Counterexample:** until the next parts, "pause the furnace job" gets two different answers. With Claude it gets the fixed sentence of `pause`. With the fixed rules it gets "I cannot propose a job: the quantity is missing."
+- **Changed on 2026-11-13, ticket #3:** `pause` and `report` do not get the fixed sentence any more. The fixed rules read them. The counterexample above holds now only for `change`, `resume` and `cancel`. See D29.2.
+- **Changed on 2026-11-13, ticket #4:** no action gets the fixed sentence any more. The fixed rules read `change`, `resume` and `cancel`. The counterexample above does not hold any more. See D29.3.
+
+### D29.2 — Report and pause by words
+
+**Status:** the rules below marked "decided" are decided by the project owner on 2026-11-13: spec #1, sections "How Uno finds the job" and "Immediate actions and proposals", and its further note 2. They are implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules and with providers written in the tests. Not verified with the real Claude service. Increment A, ticket #3. The choices marked "proposed" are choices of the implementation, not confirmed by the project owner.
+
+- **Decided, the search of the job:** Uno finds the job on the server. It looks only at the jobs that the actor owns, with the same check of the actor as each other request.
+  - From the robot number, if the request gives one.
+  - From a station name, if exactly one open job of the actor uses that station as source or as destination.
+  - With no target, if the actor has exactly one open job.
+- **Decided, each other case:** Uno says how many jobs fit and asks for the robot number. It does nothing and creates no proposal. The sentences:
+
+| Case | Sentence of Uno |
+| --- | --- |
+| A station of two open jobs | "2 of your open jobs use the station 'furnace'. Tell me the robot number of the job. I did nothing." |
+| A station of no open job | "None of your open jobs uses the station 'mine'. Tell me the robot number of the job. I did nothing." |
+| No target, two open jobs | "You have 2 open jobs. Tell me the robot number of the job. I did nothing." |
+| No target, no open job | "You have no open job. Tell me the robot number of the job. I did nothing." |
+| A robot without a job of the actor | "You have no job on robot #9. Tell me the robot number of the job. I did nothing." |
+
+- **Decided, the report:** it runs immediately. A request about one job gives the report sentence of that job only: the same line as in the report on all jobs. A report request without a target gives the report on all jobs of the actor, as the "Report" button does.
+- **Decided, the pause:** it runs immediately, without a proposal. It is the ordinary request of the runtime, with the robot and the job ID. Uno says: "Job 3 on robot #5 is paused. The cargo stays on board." A refusal of the runtime becomes the sentence of Uno: "I cannot pause the job: Job 3 is not running (PAUSED)."
+- **Decided, T19:** a different player cannot pause the job and gets no data of it. The search looks only at the jobs of the actor. Thus the sentence for the job of a different player is the sentence for a job that does not exist, and it does not say whether the robot or the station exists.
+- **Proposed, a robot number names the job that the robot has now, open or not.** Thus "how is robot 5?" also reports a job that is `DONE` or `CANCELLED`. A pause of such a job gets the refusal of the runtime: "Robot #5 has no open job." A station name and a request without a target look only at open jobs, as the spec says.
+- **Proposed, the robot number wins:** if a request gives a robot number and a station, Uno uses the robot number and ignores the station.
+- **Proposed, the search ignores the case of a station name.** A model does not guarantee the case of a value. An empty station name is the same as no station.
+- **Proposed, the words of the fixed rules:** a request that names two stations of the player stays a start (decided in the spec). With one station or none, the first action that fits decides: first the pause, then the report. Pause: `pause`, `pausa`, `sospendi`. Report: `report`, `status`, `how is`, `how's`, `how are`, `rapporto`, `stato`, `come va`, `come vanno`, `come sta`, `come stanno`. The job: "robot N", or the name of one station. A request without these words goes to the rules of a start, as before. Thus the reasons of "none" do not change. The README lists the words.
+- **The provider calls:** a written report request goes to the provider, as each written request. With Claude it is a paid call. The "Report" button and `/uno report` call no provider.
+- **No change of the runtime and of the Lua modules.** The pause uses `MindRuntime.control` with the job ID, as the "Pause" button does.
+- **Evidence:** tests `a_fixed_rules_report_and_pause`, `a_report_and_pause_by_words`, `a_t19_words_of_another_player`, `a_report_and_pause_through_the_view`, and the changed test `t18_claude_provider`. Each failed with the code before the change and passed after it. See "Increment A — Report and pause by words" in TEST_RESULTS.md.
+- **Not verified:** the real Claude service with a pause or a report. The schema and the system text of the Claude provider did not change in this ticket. A run of `t18_claude_live` costs money and needs the consent of the project owner. Its requests test only `start` and `none`. Since 2026-11-14: verified in the game, manually, with the real service, in the play session (D40).
+- **Counterexample:** "How is the furnace?" after the furnace job is `DONE` gets "None of your open jobs uses the station 'furnace'." The player must give the robot number.
+- **Counterexample:** the fixed rules read a robot number only after the word "robot". "Pause 5" is a pause without a target. With one open job, Uno pauses that job, also if it is not on robot #5. A pause is reversible with `resume`.
+- **Counterexample:** a start request with one station and a word of an action is that action. "Report the coal from the depot" is a report about the depot job.
+
+### D29.3 — Change, resume and cancel by words
+
+**Status:** the rules below marked "decided" are decided by the project owner on 2026-11-13: spec #1, section "Immediate actions and proposals", and its further note 1. They are implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules and with providers written in the tests. Not verified with the real Claude service. Not tried in a client. Increment A, ticket #4. The choices marked "proposed" are choices of the implementation, not confirmed by the project owner. The corrections of the code review of increment A (findings P3 and P4) are verified with automatic in-game tests on 2026-11-13. Their choices are proposed.
+
+- **Decided, proposals:** a start, a change, a resume and a cancellation become a proposal. A pause and a report run immediately (D29.2). One proposal for each player, the newest, with a number (D23). A proposal belongs to one server session and is not saved (D24). The search of the job is the one of D29.2.
+- **Decided, what a proposal holds:** its request for the runtime. A start holds the order. A change holds the robot, the job ID, the revision and the two values after the change. A resume and a cancellation hold the robot and the job ID.
+- **Decided, the text:** the server writes the text of each proposal, never the model. The screen shows the same text above the "Confirm" button. Sentences from the tests:
+
+| Proposal | Sentence of Uno |
+| --- | --- |
+| Change of the reserve | "Proposal: change job 6 on robot #7 (carry minecraft:coal from 'a_change_source' to 'a_change_destination'). Quantity to carry: 24, unchanged. Reserve to leave in 'a_change_source': from 20 to 6. I have done nothing yet. Confirm with /uno confirm." |
+| Resume of a job in `RECOVERY` | "Proposal: resume job 5 on robot #22 (carry minecraft:coal from 'a_resume_source' to 'a_resume_destination'). The job needs a check: the runtime accepts the load that it observes in the robot, and the totals can be inexact. I have done nothing yet. Confirm with /uno confirm." |
+| Cancellation | "Proposal: cancel job 5 on robot #22 (carry minecraft:coal from 'a_resume_source' to 'a_resume_destination'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm." |
+
+- **Decided, a value that the request does not give:** it stays as it is. The text says "unchanged" for it.
+- **Decided, the confirmation:** it sends the ordinary request of the runtime: `update` with the job ID and the revision, or `control` with the job ID. The runtime validates again. A refusal of the runtime becomes the sentence of Uno. The tests check these sentences exactly. The numbers below are examples.
+
+| Case | Sentence of Uno |
+| --- | --- |
+| The change after a change by a button or a command | "I cannot change the job: Job 3 changed. Read it again." |
+| The change after the robot got a different job | "I cannot change the job: Robot #7 has job 8 now, not job 3. Read it again." |
+| The cancellation after the robot got a different job | "I cannot cancel the job: Robot #7 has job 9 now, not job 8. Read it again." |
+
+- **Decided, a start for a busy robot:** it stays refused, with the number of the job: "I cannot propose this job: Robot #7 already has job 3 (WAITING)." This was already the behaviour of S2.
+- **Decided, the buttons, the number fields and the commands do not change.** The number fields show the values of the record until the confirmation.
+- **Proposed, Uno checks before the proposal:** the runtime has two new functions, `checkUpdate` and `checkControl`. Each is the validation part of `update` or `control`, without the change. Uno calls it before the proposal, as it calls `check` before the proposal of a start. `update` and `control` call it too. Thus a resume of a running job gives "I cannot propose to resume the job: Job 3 is already running." and no proposal. A cancellation of a closed job gives "I cannot propose to cancel the job: Robot #7 has no open job."
+- **Proposed, a change without a new value:** no proposal. "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal."
+- **Proposed, the button, until the code review of increment A:** the action of the "Confirm" button names the number of the proposal, as since D23. Its label stays "Confirm". The number is not visible on the screen. The text of the proposal is next to the button.
+- **Changed after the code review of increment A (finding P4), proposed:** ticket #4 says "The button names the number of the proposal". The label is now "Confirm #N", with the number of the proposal. The form of the label is a choice of the implementation. Verified with automatic in-game tests: `a_change_through_the_view` reads the label. Not seen in a client.
+- **Proposed, the words of the fixed rules:** with one station or none, the first action that fits decides, in this order: resume, cancel, pause, change, report. Resume: `resume`, `continue`, `riprendi`, `continua`. Cancel: `cancel`, `annulla`, `cancella`. Change: the first number after `quantity`, `level`, `quantità` or `livello` is the new quantity. The first number after `leave`, `reserve`, `lascia` or `riserva` is the new reserve. A change needs at least one of the two. The number after "robot" names the job: it is never a new value. The resume comes before the pause: "Riprendi il lavoro in pausa" is a resume. The README lists the words.
+- **The runtime changed:** only the two check functions. The refusals of the buttons and of the commands have the same text as before. The Lua modules did not change. The four restart phases ran after the change, and again after the merge with tickets #8 and #11.
+- **From a code examination, after the merge with ticket #8:** the confirmation of a resume or of a cancellation calls `control`, as the buttons do. Thus it writes the diary entry as a request of the owner, and it gives no notice (D30). No test checks the notices of an action by words.
+- **Changed after the code review of increment A (finding P6), from a code examination:** `control` marks the entry as a request only when the actor is the owner of the job. Thus the confirmation of an operator for the job of a different player can give that owner a notice, as the button of the operator does (D30).
+- **Evidence:** tests `a_fixed_rules_change_resume_cancel`, `a_change_by_words`, `a_confirmation_of_older_values`, `a_resume_and_cancel_by_words`, `a_change_through_the_view`, and the changed test `a_provider_answers_with_an_action`. See "Increment A — Change, resume and cancel by words" in TEST_RESULTS.md.
+- **Not verified:** the real Claude service with a change, a resume or a cancellation. The schema and the system text of the Claude provider did not change in this ticket. The proposal and the button in a client. Since 2026-11-14: verified in the game, manually, with the real service, in the play session (D40).
+- **Counterexample, until the code review of increment A:** a resume proposal did not hold the state of the job. If a `BLOCKED` or `PAUSED` job went to `RECOVERY` before the confirmation, the confirmation accepted the observed load, but the text did not say so. Story 12 of spec #1 asks that the player knows what the resume accepts.
+- **Changed after the code review (finding P3), proposed:** a resume proposal holds the state of the job at the proposal. The confirmation refuses a different state: "I cannot resume the job: Job 5 changed: its state is RECOVERY now, not PAUSED. Read it again." A state that changed and came back is the same state: the text is still right. A cancellation holds no state: its text is the same in each state. Thus a stock job, which often changes its state, can still be cancelled. Verified with an automatic in-game test: `a_resume_proposal_holds_the_state` builds the case above. It failed before the change.
+- **Counterexample:** a cancellation holds no revision. A change by a button between the proposal and the confirmation does not stop the cancellation. The spec asks for the revision only in a change.
+- **Counterexample:** the fixed rules read a change in a request with one station and "leave N". "Carry 24 coal to the furnace, leave 8" is a change of the reserve of the furnace job, not a start. The proposal shows it. Nothing changes before the confirmation.
+- **Counterexample:** the fixed rules take the first number after the word. "Change the quantity and leave 16" gives 16 for the quantity and for the reserve. "Annulla la pausa" is a cancellation. In both cases the proposal shows what the confirmation does.
+- **Counterexample:** a change to the values that the job already has is a proposal. The text says "unchanged" for both values. Its confirmation increases the revision. Not tested.
 
 ## D30 — Initiative: Uno warns
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A. The numbers are initial values, **proposed**.
+**Status:** decided by the project owner on 2026-11-13. Increment A. The numbers are initial values, **decided** by the project owner on 2026-11-14, after the play session (D38). Implemented: the notices for `BLOCKED`, `RECOVERY` and `DONE` are **verified** with automatic in-game tests on 2026-11-13 (ticket #8). See "Notices, as built" below. The notice for a long wait is **verified** with automatic in-game tests on 2026-11-13 (ticket #9). See "Long wait, as built" below. The summary at an opening is **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #10). See "Summary, as built" below. The corrections of the code review of increment A (findings P1, P2 and P6) are **verified** with automatic in-game tests and the four restart phases on 2026-11-13. Their choices are **proposed**. Not verified until 2026-11-14: a client, a real player, and the chat. The play session verified them in the game, manually (D40).
 
 - **Decision:** Uno speaks first only to warn. It proposes no remedy. It starts no action by itself, except the wait of D34.
 - **Attention rule:**
@@ -577,16 +703,112 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Counterexample:** a `keep_stock` job changes often between `RUNNING`, `WAITING` and `SATISFIED`. A notice for each change is not acceptable. This is the reason for the rule.
 - **Counterexample:** after B, Uno has two voices. The notices are flatter than the answers.
 
+Notices, as built (ticket #8). The choices of detail are **proposed**: the project owner did not confirm them one by one.
+
+| Entry of the diary | Sentence of the notice |
+| --- | --- |
+| `BLOCKED`, `OUT_OF_FUEL` | "Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel." |
+| `BLOCKED`, `SOURCE_NO_INVENTORY` or `DESTINATION_NO_INVENTORY` | "… is blocked: there is no inventory at 'depot'." The station of the cause |
+| `BLOCKED`, `LOAD_ABOVE_QUANTITY` | "… is blocked: the quantity of the job is reached, and 54 stay on board." |
+| `BLOCKED`, `NONE` | "… is blocked. Recorded reason: …" |
+| `RECOVERY` | "… needs a check: I cannot say how it went. Recorded reason: …" |
+| `DONE` | "… is done: 24 delivered." |
+
+- **Attention rule:** an entry of the diary (D31) with the state `BLOCKED`, `RECOVERY` or `DONE`, that the runtime observed. An entry that a request of an actor made is not selected: a start, a pause, a resume or a cancellation. This holds also when the resume of a `RECOVERY` completes the job, and when an operator gives the request.
+- **Changed after the code review of increment A (finding P6), proposed:** spec #1 says "A pause, a resume and a cancellation by the owner give no notice". Thus only a request of the owner of the job is not selected. A request of an operator for the job of a different player is an event for that owner. Effect: when the resume of an operator completes the job of a player, the player gets the notice of `DONE`. A pause and a cancellation of an operator still give no notice: the attention rule does not select `PAUSED` and `CANCELLED`. Verified with the automatic in-game test `a_notice_for_a_resume_by_an_operator`. It failed before the change.
+- **No remedy:** the sentences do not say "give fuel" or "resume". The report still says it, as before.
+- **`RECOVERY`** has no cause (D25). The sentence gives the recorded reason. The runtime writes it without coordinates: "the robot holds N, the record says M", or "the world is older than the record of this job".
+- **One exit:** `Notices.exit` gets the server, the owner and the text. In the game it sends the system message "Uno › …" to the owner, if the owner is connected. If not, nothing is sent and nothing waits: the diary keeps the event for the summary.
+- **Moment:** the notice leaves in the tick of the change, from `MindRuntime.set`, the one function that sets the state of a job.
+- **Console:** a job of the console has no player to warn. It gives no notice. Its diary entries exist.
+- **Evidence:** tests `a_notices_for_blocked_recovery_and_done`, `a_no_notice_for_a_resume_that_completes_the_job`, `a_no_notice_for_the_ordinary_cycle`, `a_no_notice_for_a_console_job`, `a_notices_call_no_provider`, and the notice checks in `t04_destination_removed`, `t04_source_removed`, `t06_impediment_of_an_unknown_kind` and `t16_quantity_lowered_with_load`. A test replaces the exit with one that records each notice. See "Increment A — the job diary and the notices" in `TEST_RESULTS.md`.
+- **Not verified:** a real line in the chat of a client. No test has a connected player. The code of the game exit is examined only. Steps 5, 7, 9 and 11 of the checklist of the play session have such lines ([PLAY_SESSION_A.md](PLAY_SESSION_A.md)). Since 2026-11-14: verified in the game, manually. In the play session the connected owner got the lines for `BLOCKED`, `DONE` and a long wait (D40). No line for `RECOVERY` was seen in a client.
+- **Counterexample:** the load of the record can find a `RECOVERY` at the server start ("the world is older than the record"). Its notice leaves before a player can be connected. Thus it gives no chat line. Only the summary can show it.
+
+Long wait, as built (ticket #9). The choices of detail are **proposed**: the project owner did not confirm them one by one. The length of 6000 ticks (5 minutes) is the initial value of spec #1, **proposed**.
+
+| Long wait with the cause | Sentence of the notice |
+| --- | --- |
+| `SOURCE_AT_RESERVE`, reserve 0 | "Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has waited for 5 minutes: nothing remains in 'depot'." |
+| `SOURCE_AT_RESERVE`, a reserve above 0 | "… has waited for 5 minutes: 'depot' has no item above the reserve of 16." |
+| `SOURCE_KEEPS` | "… has waited for 5 minutes: 'depot' has the items, but it releases none." |
+| `ROBOT_FULL` | "… has waited for 5 minutes: the robot is full." |
+| `DESTINATION_FULL` | "… has waited for 5 minutes: 'furnace' is full, and 12 stay on board." |
+| `SOURCE_UNLOADED`, `DESTINATION_UNLOADED` | "… has waited for 5 minutes: the area of 'depot' is not loaded." The station of the cause |
+| `PATH_OBSTRUCTED` | "… has waited for 5 minutes: the path of the robot is obstructed." |
+| `NONE` | "… has waited for 5 minutes. Recorded reason: …" A record of an older version |
+
+- **The start of a wait:** the game time when the job goes to `WAITING` from a different state. The runtime records it in `MindRuntime.set`, the one function that sets the state. A change of the cause keeps it. A repeated report of the same wait keeps it. Each other state clears it: `RUNNING`, `SATISFIED`, a pause, a block, `RECOVERY`, the end.
+- **The check:** `MindRuntime.checkWait(job, now)`. The server tick calls it for each job, at each tick, with the game time of the overworld. A test gives a later moment as the parameter `now`.
+- **The entry:** after 6000 ticks or more, one diary entry of the kind "long wait". It has the time of the check, the state `WAITING`, the cause and the quantities at that moment. It is never "requested". The attention rule selects it. Thus its notice leaves through the one exit, in the tick of the check.
+- **One for each wait:** the job records that its current wait has its long wait. The record of the job saves this flag and the start of the wait. Thus a save and a load, or a restart, give no second entry. The next wait starts with a new time and without the flag.
+- **A restart is not an interruption:** the game time does not pass while the server is stopped. After a restart the wait keeps its recorded start.
+- **A record of an older version:** a job that waits has no recorded start. The time of its wait starts at the first check after the load. The same applies to a start after the current game time: a world older than the record.
+- **No remedy:** the sentence names the cause. It does not say what the owner must do.
+- **Evidence:** tests `a_long_wait`, `a_no_long_wait_for_the_stock_cycle`, and the long-wait checks in `t05_obstacle` and `a_notices_call_no_provider`. The tests give the moment of the check as a parameter. `a_notices_call_no_provider` moves the start of a wait back by 6000 ticks: the check of the server tick then finds the long wait, and the provider gets no call. See "Increment A — a notice for a long wait" in `TEST_RESULTS.md`.
+- **Verified in the game, manually, on 2026-11-14:** a wait of 5 minutes of game time, and its one line in the chat of a client (step 5 of the play session, D40).
+- **Not verified:** a long wait across a real restart: the restart phases build no wait. The templates of `SOURCE_KEEPS`, `DESTINATION_FULL`, the two unloaded areas, `SOURCE_AT_RESERVE` with a reserve, and `NONE`: no test builds them. They come from a code examination.
+- **Counterexample:** a stock job whose source is often empty can give one notice for each wait of 5 minutes or more. Each such wait is a new wait. The rule stops only the notices of the short waits of the ordinary cycle.
+- **Counterexample:** a robot behind an obstacle that does not go away waits without an end. It gives one notice, after 5 minutes. Then the hologram and the report show the wait, but no second notice comes.
+
+Summary, as built (ticket #10). The rules of spec #1, section "The summary", are decided by the project owner (2026-11-13). The limit of 10 sentences is an initial value of the spec: **decided** by the project owner on 2026-11-14, after the play session (D38). The choices of detail marked "proposed" are choices of the implementation: the project owner did not confirm them.
+
+- **Opening:** the use of the tablet and the click on a projector call `Net.open`. It calls `UnoView.open`, then sends the view. The view that the screen asks for each second, and the view after a button, go through `Net.sendView`: they are not an opening.
+- **Last opening, until the code review:** `MindRuntime.open(actor, now)` recorded the game time of the overworld for the actor and returned the time of the opening before it. The record of each player is in `mindcraft.dat`. A record of an older version loads without openings: the next opening of each player is a first opening.
+- **Changed after the code review of increment A (finding P1), proposed:** the diary numbers its entries, one number after the other, for all owners. `MindRuntime.recordOpening(actor)` records the number of the next entry for the actor. It returns the number that the opening before it recorded. The record keeps the numbers under a new key, "openingEntries". A record with the earlier key "openings" (game times) loads without openings. Reason: the game time goes back after a crash (D08.1). The record can hold an opening and entries later than the world. With the game time, the `RECOVERY` that the load writes was older than such an opening: no summary showed it, and no player was connected for its notice. And an entry later than the world came back in each summary until the game time reached it. Story 40: "I want the event to be in the summary, so that I lose no notice."
+- **Events:** the entries of the diary that the actor reads (`MindRuntime.diary`), newer than the last opening, that the attention rule selects (`Notices.selected`). Each line is the sentence of the notice (`Notices.sentence`). Thus the long wait of ticket #9 joins the summary without a change of the summary (`a_summary_has_the_long_wait`). Since the code review "newer" means a number at or after the number of the last opening.
+- **Check of the actor:** the diary that the actor reads. It is the check of the list of jobs (`Actor.owns`). An operator also gets the events of the jobs of the other players and of the console.
+- **Sentence of Uno:** the summary goes through `Uno.say`, as each answer. With no line to say, `Uno.say` is not called: Uno keeps its sentence.
+- **No provider:** the code of the summary has no reference to a provider. A test with a provider that counts its calls confirms it.
+
+| Part | Text |
+| --- | --- |
+| First line, first opening | "From the start of my memory:" |
+| First line, each later opening | "Since you last opened this screen:" |
+| Removed entries newer than the last opening | "My memory starts 3 h ago. I do not remember older events." |
+| More than 10 events | "I do not show 2 older events." Then the 10 newest |
+| One event | "12 min ago: Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel." |
+
+- **Proposed, the ages:** the game time between the entry and the opening, in seconds, minutes, hours or days, rounded down. The game time does not advance while the server is stopped. An entry newer than the world, after a crash (D08.1), has the age "At an unknown time".
+- **Proposed, "where the memory starts":** the age of the newest removed entry (`MindRuntime.forgotten`). For an operator, the newest of all owners. Since the code review, the line appears if the number of the newest removed entry is at or after the number of the last opening.
+- **Proposed, removed entries without a selected entry:** the summary has the first line and the line about the memory. Reason: the removed entries can be events that needed attention. The spec says "With no selected entry, Uno keeps its sentence". This choice reads that rule as "with nothing to say".
+- **Proposed, the boundary, until the code review:** an event was in the summary if its game time was later than the game time of the last opening. An event in the same tick as an opening, after it, was not in the next summary. Since the numbers of the code review, such an event is in the next summary: its number is after the number of the opening.
+- **Proposed, a kept summary, until the code review:** at an opening without an event, Uno kept its sentence also when that sentence was the summary of an earlier opening. Then the screen showed that summary again, with the ages of its moment.
+- **Changed after the code review (finding P2), proposed:** at an opening without an event, a sentence that is the summary of an earlier opening becomes "Tell me what you need.", the sentence of Uno before its first answer. Each other sentence stays. Reasons: ticket #10 says "A second opening immediately after the first shows no summary". Story 43 says "so that old data do not look like current data". Uno keeps in its session which sentence is a summary: `Uno.sayAtOpening`.
+- **Evidence:** tests `a_summary_at_an_opening`, `a_summary_shows_the_10_newest`, `a_summary_says_where_the_memory_starts`, `a_t19_summary_of_another_player`, `a_summary_after_a_save_and_a_load` and, after the merge with ticket #9, `a_summary_has_the_long_wait`. The four restart phases check the summary of an operator after the restart. See "Increment A — the summary at an opening" in `TEST_RESULTS.md`.
+- **Evidence of the corrections of the code review:** the automatic in-game tests `a_summary_after_the_time_went_back` (P1) and `a_summary_at_an_opening` with a second click (P2), and the phases `crash` and `check-crash` of the restart test with an opening after the save of the world (P1). Each failed before its correction. See "Increment A — corrections of the code review" in `TEST_RESULTS.md`.
+- **Not verified:** the summary on the screen of a client: the length of 12 lines, and a line break in the text of Uno. The tests call the methods of the tablet and of the projector with a fake player of Forge, without a client. Steps 7, 10 and 11 of the checklist of the play session read the summary in a client. The checklist has no summary with more than 10 events. Since 2026-11-14: a summary of one or two events on the screen of a client is verified in the game, manually (steps 7, 10 and 11 of the play session, D40). A summary with more than 10 events in a client stays not verified.
+- **Counterexample:** the ages do not change while the screen is open. After 10 minutes, "2 min ago" is wrong by 10 minutes.
+- **Counterexample:** a player who opens the screen often sees only the events since the last opening. The other events are only in the diary, and no screen shows it.
+
 ## D31 — Memory: the job diary
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. Increment A.
+**Status:** decided by the project owner on 2026-11-13. Increment A. Implemented and **verified** with automatic in-game tests and the four restart phases on 2026-11-13 (ticket #8). See "Diary, as built" below. The size limit is an initial value of spec #1, **proposed**.
 
 - **Problem:** the record keeps one job for each robot: the last. A new job replaces the job before it (`MindRuntime.start`). Uno has no history. The summary of D30 has no source.
 - **Decision:** the runtime writes a diary: each change of the state of a job, with the time, the cause and the quantities. Minecraft saves the diary with the world. The diary has a size limit. When old entries are removed, Uno says where its memory starts.
 - **Reason:** it is a verifiable memory in the sense of the brief (2.4). Each line comes from the runtime.
 - **Deferred:** permanent decisions, for example a reserve that belongs to a station. The context of the conversation for the model.
 - **Cost:** the owner must write a complete sentence for each change. Uno does not know the sentence before it.
-- **Not decided:** the size limit.
+- **Size limit:** 200 entries for each owner. It is the initial value of spec #1, **decided** by the project owner on 2026-11-14, after the play session (D38).
+
+Diary, as built (ticket #8). The choices of detail are **proposed**: the project owner did not confirm them one by one.
+
+- **Where:** `MindRuntime.set`, the one function that sets the state of a job. It compares the new state and cause with the old ones. A change writes one entry. The same state with the same cause writes none: a robot that tries again reports the same state, and only the reason can change.
+- **The start of a job** writes its first entry, `RUNNING`. Thus the history of a job begins with its start.
+- **Content of an entry:** the game time of the overworld, the owner, the job ID, the robot, the two station names, the item, the state, the cause, the recorded reason, a "requested" flag, and the quantities at that moment: quantity, reserve, delivered, on board.
+- **Changed after the code review of increment A (finding P1), proposed:** each entry also has a number. The numbers follow the order of the diary of all owners, and do not go back after a crash, as the game time can (D08.1). The record saves the number of the next entry. A diary of the format before the numbers gets its numbers at the load, in its order. The summary of D30 uses the numbers. Verified with automatic in-game tests: `a_diary_of_a_job` (the numbers of a diary without them) and `a_diary_limit` (the number of the newest removed entry), and the four restart phases.
+- **The recorded reason** is not in the list of spec #1. The sentence of a `BLOCKED` without a cause and of a `RECOVERY` needs it.
+- **The second kind of entry (ticket #9):** a long wait. A flag "long wait" marks it. It has the state `WAITING` and the cause at that moment. See "Long wait, as built" in D30. A record without the flag loads its entries as changes.
+- **"Requested"** says that a request of an actor made the change: the start, a pause, a resume or a cancellation. The other changes come from what the runtime observed. The attention rule of D30 reads it.
+- **Changed after the code review of increment A (finding P6), proposed:** "requested" says that the owner of the job made the request. A request of an operator for the job of a different player is not "requested". See D30.
+- **Limit:** above 200 entries of one owner, the runtime removes the oldest entries of that owner only. For each owner it records how many entries it removed, and the game time of the newest removed one. Since the code review, also the number of the newest removed one. The summary (ticket #10, D30) says from this where the memory of Uno starts.
+- **Read:** `MindRuntime.diary(actor)` and `MindRuntime.forgotten(actor)` give only the data of the owners that the actor owns: the owner, an operator and the console (D37). In this ticket no screen and no command shows the diary. Since ticket #10 the summary at an opening shows the selected entries.
+- **Saved:** the diary and the removed counts are in `mindcraft.dat`, with the jobs. A record of an older version has no diary: it loads with an empty one.
+- **Evidence:** tests `a_diary_of_a_job` and `a_diary_limit`. The four restart phases check the diary after a real stop and after a halt of the process. See "Increment A — the job diary and the notices" in `TEST_RESULTS.md`.
+- **Cost:** each write of the record contains the whole diary, also the write after each transfer (D08.1). No measurement.
+- **Counterexample:** a stock job writes two entries or more for each refill (spec #1). Then the memory of a busy job is short.
+- **Limit:** a copy of the record that `load` makes outside the server writes its entries with the time 0 and sends no notice. Only the tests make such copies.
 
 ## D32 — The model speaks, the server checks
 
@@ -607,7 +829,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ## D33 — The model and its cost
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
+**Status:** decided by the project owner on 2026-11-13. The limits on the calls of increment A are implemented: see D33.1. The rest is not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
 
 The model. Increment B.
 
@@ -615,6 +837,7 @@ The model. Increment B.
 - **Measurement:** the test with the real service runs on Haiku 5.5, Sonnet 5.5 and Opus 5.5 with the same requests. It compares the orders, the sentences and the times. Each run costs money and needs the consent of the project owner.
 - **Setting:** the model becomes a setting. It is not a constant in the code any more. Each request writes the used tokens in the server log.
 - **In A:** the model of D21 stays. The action list of D29 is not verified with the real service until B.
+- **Note of ticket #12:** the play session of A uses the key (D28). Its requests are the first requests of the action list to the real service, unless the project owner runs `t18_claude_live` before it. The session is a test in the game, not an automatic test.
 - **By kind of operation:** when Uno writes code (D36), a different model can do that operation. The kind of operation selects the model. No model judges the difficulty of a request.
 - **Discarded for now:** a choice of the model by the difficulty of each request. It needs a judge: one more call, or more rules.
 
@@ -637,21 +860,67 @@ Limits on the calls. Increment A.
 - **Operators only:** by default only an operator uses Claude. Other players use the fixed rules.
 - **Reason:** `/uno ask` needs no permission, and has no counter and no limit other than one request at a time (code examination). A command block that repeats the command as a player can make one request after the other. This is deduced from the code. It was not tried.
 - **Cost:** a fixed session limit can stop a long session. It becomes a setting when multiplayer opens.
-- **Not decided:** the number of the session limit.
+- **Decided on 2026-11-14:** the number of the session limit stays 100, after the play session. See D38.
+
+### D33.1 — Limits on the model calls in increment A
+
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with providers written in the tests and with a local stand-in in place of the API. Verified with the real Claude service in a client on 2026-11-14: in the game, manually, in the play session (D40). Increment A, ticket #11. The choices of the spec are decided by the project owner (spec #1, 2026-11-13). The limit of 100 is an initial value of the spec: **decided** by the project owner on 2026-11-14, after the play session (D38). Two points are choices of the implementation: **proposed**, see below.
+
+- **Counter:** for each actor in one server session, Uno counts the requests that it sent to a model, the input tokens and the output tokens. The console is an actor too. The counters are in memory and are not saved. A new server session starts them again.
+- **When a request counts:** when Uno sends it, before the answer. The tokens arrive with the answer. A request that fails or reaches the time limit counts with zero tokens. A request that finds an open request of the same player is not sent, thus it does not count.
+- **Limit:** 100 requests to a model for each actor in one server session. The number is fixed in the code (`Uno.MODEL_REQUESTS`).
+- **At the limit:** the fixed rules read each later request of that actor until the session ends. The first answer after the limit starts with "You reached the limit of 100 model requests in this server session." The later answers do not repeat it. The fixed rules have no limit.
+- **Operators only:** a provider with a model serves only an operator. "Operator" is the `admin` flag that the server already puts in the actor: permission level 2, or the console. Each other player gets the fixed rules, without a counter and without the sentence about the limit.
+- **Screen:** with a model on the server, an operator sees "Your model requests in this session: N of 100. Tokens: X in, Y out.", also at the limit. A player who is not an operator sees no counter. With Claude on the server, the line "Written requests go to Claude, a model of Anthropic." appears only when the requests of this player go to Claude. Otherwise one line says "Uno uses the fixed rules for you", with the reason: only an operator uses Claude, or the limit. With the fixed rules on the server the screen has none of these lines.
+- **Unchanged:** one request at a time for each player. The report, the confirmation and the buttons do not call `Uno.ask`, thus they call no provider (code examination). Tickets #8 and #10 count the calls of a provider for the notices, the summary and the "Report" button: zero (`a_notices_call_no_provider`, `a_summary_at_an_opening`). No test counts the calls for a confirmation or for the other buttons.
+- **Proposed, which provider has a model:** the provider says so (`Uno.Provider.callsModel`). The default is no. The Claude provider says yes. Reason: the providers written in the older tests serve players who are not operators. Cost: a new provider with a model that forgets to say so has no limit and no operator rule.
+- **Proposed, the request after the limit:** the limit sentence comes before the answer of the fixed rules to the same request. Thus the player gets an answer, not only a refusal.
+- **Evidence:** automatic in-game tests `a_model_requests_count`, `a_model_limit`, `a_model_only_for_operators`, `a_new_session_restarts_the_counters` and `a_screen_model_lines`. The five failed before the implementation and passed after it: normal run 50 of 50, and 58 of 58 after the merge with tickets #2, #3, #5, #6 and #7 of increment A. See "Increment A — Limits on the model calls" in [TEST_RESULTS.md](TEST_RESULTS.md).
+- **Not verified:** the counter with the tokens of the real service. The test `t18_claude_live` now uses an operator and checks the counter after its four requests. It compiles. It was not run: a run costs money and needs the consent of the project owner. The screen in a client: steps 1 and 11 of the checklist of the play session. Since 2026-11-14: the counter with the real tokens is verified in the game, manually, in steps 1 and 11 of the play session (D40).
+- **Counterexample:** an operator owns each station and each robot (D11). Thus the context that goes to Claude holds the station names and the robot numbers of each player of the server, not only of the operator. With one player these are the data of D21.
+- **Counterexample:** the limit counts requests, not tokens or money. The estimate of D33 holds only for its token numbers. The counter shows the tokens, not a price.
+- **Counterexample:** the limit is for each session, not for each day. A restart of the server starts the counters again. In a single-player game each opening of the world is a new session.
+- **Counterexample:** the server builds the actor from the command source. A command block has the permission level 2, thus `/uno ask` from a command block counts as a request of an operator: the console, or the player of `execute as`. Only an operator can write a command block. This is deduced from the code and from the permission level of a command block. It was not tried.
+- **Counterexample:** a request that reaches the time limit can still reach the service and cost tokens. The counter shows zero tokens for it. Thus the counter of the tokens can be lower than the real use. The counter of the requests is not.
+- **Still open (D33):** a spending limit that the server operator can set. The gate of D33 stays.
 
 ## D34 — Waits, blocks and a load on board
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented. It changes a verified behaviour of D06 and replaces a limit of D09.
+**Status:** decided by the project owner on 2026-11-13. It changes a verified behaviour of D06 and replaces a limit of D09. The part of increment A (the obstacle and the causes of `BLOCKED`) is implemented and **verified** with automatic in-game tests on 2026-11-13. See "Increment A, as built" below. The part of increment B is not implemented.
 
 - **Rule:** a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
-- **Obstacle (increment A):** a robot that cannot move goes to `WAITING` with a cause of its own, and tries again slowly. The attention rule of D30 applies. Now the job goes to `BLOCKED` after 10 attempts and stays there until `resume`, also after the obstacle goes away. The test `t05_obstacle` expects `BLOCKED`: it must change.
+- **Obstacle (increment A):** a robot that cannot move goes to `WAITING` with a cause of its own, and tries again slowly. The attention rule of D30 applies. Before increment A the job went to `BLOCKED` after 10 attempts and stayed there until `resume`, also after the obstacle went away. Ticket #5 made the change: see "Increment A, as built" below. `t05_obstacle` now expects the wait.
 - **Causes of `BLOCKED` (increment A):** `BLOCKED` gets causes with fixed values, as `WAITING` in D25. Uno chooses its sentence from the cause. The reason with the coordinates stays in the record. It does not go to the model (D32).
 - **Fuel (increment B):** fuel at zero stays `BLOCKED`. The robot tells the runtime its fuel level at each contact. Uno warns one time when the fuel is sufficient for few trips. The number of trips comes from the distance between the docks: it is approximate.
 - **A load on board (increment B):** a new job adopts the load that the robot already holds, if it is the item of the job. The proposal says so: "The robot holds 24: I count them as the first load." One confirmation cancels the old job and starts the new one. This replaces the limit of D09.
 - **Until B:** a change of the destination with a load on board is refused, as now.
 - **Counterexample:** the runtime does not know where a load comes from. If the owner keeps coal in the turtle as fuel, a coal job adopts it and delivers it. The proposal shows the number.
 - **Counterexample:** two robots that face each other in a corridor one block wide both wait, without an end. This is deduced from the code. It was not tried.
-- **Not decided:** the time between two attempts of a robot that cannot move. How many trips are "few". When an observation is "old" (D32).
+- **Not decided:** how many trips are "few". When an observation is "old" (D32).
+- **Initial value, decided by the project owner on 2026-11-14 after the play session (D38):** a robot that cannot move tries 10 times at 1 second, as before. Then the job waits, and the robot tries one move every 5 seconds: the wait interval of the module.
+
+Increment A, as built (ticket #5). The choices of detail are **proposed**: the project owner did not confirm them one by one.
+
+| Cause | State | The runtime writes it when | Sentence of Uno in the report |
+| --- | --- | --- | --- |
+| `PATH_OBSTRUCTED` | `WAITING` | A module reports the impediment "obstacle" | "My path is obstructed. I try to move again every few seconds, and I continue by myself when the path is free." |
+| `OUT_OF_FUEL` | `BLOCKED` | A module reports the impediment "fuel": the move failed for fuel, and the robot has no fuel item | "I am stopped: I have no fuel. Give me fuel, then resume the job." |
+| `SOURCE_NO_INVENTORY`, `DESTINATION_NO_INVENTORY` | `BLOCKED` | The robot is at the dock, and the station has no inventory | "I am stopped: I find no inventory at 'x'. Put it back, then resume the job." |
+| `LOAD_ABOVE_QUANTITY` | `BLOCKED` | A transport reached its quantity with a load on board (D16.1) | "I am stopped: the quantity of the job is reached, and N stay on board. Raise the quantity and resume, or cancel the job." |
+| `NONE` | `BLOCKED` | An impediment of an unknown kind, a module error, or a record of an older version | "I am stopped and I need your help. Recorded reason: …", as before |
+
+- **Lua API:** `mindcraft.impediment(kind, detail)` replaces `mindcraft.block(reason)`. It returns the new state. The module sleeps 5 seconds only if the state is `WAITING`: the runtime decides, not the module.
+- **Kinds:** "obstacle" and "fuel". Each failed move that is not a lack of fuel is an "obstacle", also "Cannot leave loaded world". An unknown kind keeps its name in the reason: "kind: detail". The agent reports a module error as the kind "module error". Thus its reason is the same text as before.
+- **Return to work:** `mindcraft.moved()`. The module calls it after a move that succeeds while the job is `WAITING`. The runtime changes only a `WAITING` with `PATH_OBSTRUCTED` to `RUNNING`. Each other wait stays.
+- **Each attempt reports again.** During the wait, each failed attempt reports the impediment again. Thus the reason stays current: the block in front of the robot can change. The state and the cause stay the same.
+- **Two causes for "station without an inventory":** the source and the destination, as for an inventory that is not loaded (D25). Thus Uno names the station.
+- **The screen** shows the recorded reason for `BLOCKED`, `RECOVERY` and a wait with `PATH_OBSTRUCTED`. It does not show it for the other waits. Reason: a stock job often changes between `RUNNING` and those waits, and each new line changes the shape of the screen. Then the screen creates its fields again (see the second manual test in `TEST_RESULTS.md`).
+- **The state machine of the runtime:** each change of the state goes through one function, with its cause. A state without a cause gets `NONE`.
+- **Versions:** `transport@3` and `keep_stock@3`.
+- **Evidence:** tests `t05_obstacle`, `t05_pause_and_cancel_during_the_wait`, `t05_obstacle_keep_stock`, `t06_no_fuel`, `t06_impediment_of_an_unknown_kind`, `t04_destination_removed`, `t04_source_removed`, and the three `t16_quantity_*` tests with a load above the quantity. The four phases of the restart test. See `TEST_RESULTS.md`, "Increment A — waits and blocks".
+- **Observed, not built on purpose:** in `t12_second_session` the second turtle now waits without an end, behind the first turtle that lost its authority. This is the counterexample above, with one robot that does not move any more.
+- **Not verified:** a player on the path (`can_push`), and "Cannot leave loaded world". No test builds them.
+- **A wait of 5 minutes and its notice:** ticket #9. See "Long wait, as built" in D30. `t05_obstacle` checks the notice of a long wait with the cause `PATH_OBSTRUCTED`.
 
 ## D35 — The second behaviour and the first composition
 
@@ -687,14 +956,28 @@ Limits on the calls. Increment A.
 
 ## D37 — Protection of the record, one player only, gates for multiplayer
 
-**Status:** decided by the project owner on 2026-11-13. Not implemented.
+**Status:** decided by the project owner on 2026-11-13. The atomic write is implemented: see "Status of the atomic write" below. The invariant is implemented and verified for each new kind of data of increment A: see the points about the invariant below. The gates for a second player are not implemented.
 
 - **Atomic write (increment A):** the runtime writes a temporary file and then puts it in the place of `mindcraft.dat`.
 - **Reason:** D08.1 says that a stop during the write can corrupt the file. Then the runtime loses stations, robots and jobs. After D31 the file also holds the memory of Uno. With work while the player is away (D28), more writes occur that nobody sees.
-- **Verification:** no automatic test stops the process during a write. The evidence will be a code examination only.
+- **Verification:** no automatic test stops the process during a write. The evidence is a code examination only.
+- **Status of the atomic write:** decided and implemented in increment A. The protection against a stop is not verified: no test stops the process during a write. Its evidence is a code examination. See "Increment A — atomic write of the record" in [TEST_RESULTS.md](TEST_RESULTS.md).
+  - The write is in `MindRuntime.save(File)`. The record goes to `mindcraft.dat.tmp` in the same folder, then `Files.move` with `ATOMIC_MOVE` puts it in the place of `mindcraft.dat`. The ordinary save of the world and the write after each transfer both use this method.
+  - Verified: the new write gives a record that loads. The normal run (43 of 43) and the four restart phases passed with it. No temporary file stayed after these runs.
+  - Observed in one manual run, not verified: a condition built by hand made the write fail. Then `mindcraft.dat` stayed identical and the server log had the error. This run is not a test of the repository: no command repeats it.
+- **Provisional choice (proposed):** after a failed write the record stays dirty. The next save of the world or the next transfer tries again. Minecraft instead marks its data as clean after a failed write.
+- **Limits of the atomic write:**
+  - The runtime does not force the data to the disk before the move. A stop of the operating system or a loss of power is not covered.
+  - On Windows the JDK uses `MoveFileEx`. Microsoft does not document it as atomic.
+  - While the writes fail, the record on the disk is older than the world. Then the guarantee of D08.1 does not hold. The log shows each failure.
 - **Gate for two robots:** before two robots use the same station, a reserve must belong to the station (deferred in D31). A round on one robot does not need it: its duties are in sequence.
 - **One player only:** the mod is for one player now. The README says so.
 - **Invariant, from increment A on:** each new kind of data (the diary, the notices, the proposals of a change, the library) has an owner, goes through the same check of the actor, and has a test of the T19 kind.
+- **The invariant for the diary and the notices (ticket #8), verified with automatic in-game tests:** each entry has the owner of its job. A read of the diary goes through the check of the actor: a different player reads no entry of the owner (`a_diary_of_a_job`). The limit removes only entries of the same owner (`a_diary_limit`). A notice goes to the owner of the job only: the operator who resumed the job gets none (`a_notices_for_blocked_recovery_and_done`).
+- **The long wait (ticket #9), verified with automatic in-game tests:** its entry has the owner of the job. Its notices go to the owner only (`a_long_wait`).
+- **The invariant for the summary and the last opening (ticket #10), verified with automatic in-game tests:** a last opening belongs to the player who opened. The summary reads the diary through the check of the actor. A different player gets no event of the owner, and that opening does not change the summary of the owner (`a_t19_summary_of_another_player`).
+- **The invariant for the words and the proposals about a job (tickets #3 and #4), verified with automatic in-game tests:** the search of the job looks only at the jobs of the actor. The words of a different player read nothing and pause nothing (`a_t19_words_of_another_player`). A proposal belongs to one player. A different player sees no "Confirm" button and no station of the owner. The button of the owner and `/uno confirm` of that player confirm nothing (`a_change_through_the_view`).
+- **The invariant for the session counter (ticket #11), verified with automatic in-game tests:** each actor has a counter of its own. A different operator has zero. The console has a counter of its own (`a_model_requests_count`).
 
 Gates before a second player:
 
@@ -707,3 +990,81 @@ Gates before a second player:
 7. The data that a hologram shows (D20).
 
 - **Cost:** the criterion of the brief "an interlocutor does not automatically get information or control of the jobs of other players" (2.4) stays tested only with actors that the tests build.
+
+## D38 — The choices and the initial values of spec #1
+
+**Status:** the five choices are decided by the project owner on 2026-11-13: spec #1, "Further Notes". Increment A implements each of them. The column "Evidence" says which part a test supports. The six initial values are **decided** by the project owner on 2026-11-14, after the play session: each value stays (ticket #13). The behaviour of the code with each value is verified with an automatic in-game test. No test says that a value is good for a player.
+
+- **Problem:** spec #1 made five choices and six numbers that the log did not have. This entry collects them. The details are in the decisions of the column "Where".
+
+| No. | Choice | Where | Evidence |
+| --- | --- | --- | --- |
+| 1 | A new job on a busy robot stays refused in increment A | D29.3, "a start for a busy robot". The replacement of a job with one confirmation is increment B (D34) | Verified with an automatic in-game test: `a_confirmation_of_older_values` gets "I cannot propose this job: Robot #… already has job … (WAITING)." and no proposal |
+| 2 | Uno finds a job from the robot number, from a station name that fits exactly one open job, or from the only open job | D29.2, "the search of the job" | Verified with automatic in-game tests: `a_report_and_pause_by_words` (each kind of target, and each case without exactly one job) and `a_t19_words_of_another_player` |
+| 3 | The session limit counts only the requests to a model. At the limit Uno uses the fixed rules | D33.1 | Verified with automatic in-game tests: in `a_model_requests_count` a request to the fixed rules does not count. In `a_model_limit` request 101 gets the answer of the fixed rules |
+| 4 | A notice reaches the chat only if the owner is connected. If not, the summary has it | D30, "One exit" and "Summary, as built" | The summary part is verified with automatic in-game tests: the summary has the sentences of the notices, also of a long wait (`a_summary_at_an_opening`, `a_summary_has_the_long_wait`). The chat part comes from a code examination of `Notices.CHAT`: no test has a connected or a disconnected player. Since 2026-11-14 the chat part with a connected owner is verified in the game, manually: steps 5, 7, 9 and 11 of the play session (D40). A disconnected owner stays a code examination |
+| 5 | The time of the last opening is saved with the world | D30, "Summary, as built" | Verified with automatic in-game tests: `a_summary_after_a_save_and_a_load`, and the phases `check` and `check-crash` of the restart test. Since the code review the record saves the number of the next diary entry, not the game time (finding P1). That form is proposed. The rule of the choice holds: the last opening is in the saved record |
+
+| Initial value | Start | In the code | The behaviour with the value, verified with an automatic in-game test |
+| --- | --- | --- | --- |
+| Attempts before a robot that cannot move waits | 10, at 1 second | `MOVE_RETRIES` and `MOVE_RETRY_SECONDS` in `transport.lua` | `t05_obstacle`: in run 44 the wait started 235 ticks after the pickup. The test asks for at least 160 |
+| Time between two attempts during that wait | 5 seconds | `POLL_SECONDS` in `transport.lua` | `t05_obstacle`: the longest time without a call of the robot was 100 ticks. The test accepts 80 to 150 |
+| Long wait | 5 minutes of game time (6000 ticks) | `MindRuntime.LONG_WAIT` | `a_long_wait`: no notice at 5999 ticks, one notice at 6000 |
+| Model requests for each actor in one server session | 100 | `Uno.MODEL_REQUESTS` | `a_model_limit`: 100 requests reach the provider. Request 101 does not |
+| Diary entries for each owner | 200 | `MindRuntime.DIARY_LIMIT` | `a_diary_limit`: 200 entries stay. The runtime records 21 removed entries |
+| Sentences in one summary | 10 | `Notices.SUMMARY_SENTENCES` | `a_summary_shows_the_10_newest`: the 10 newest events, and "I do not show 2 older events." |
+
+- **Review, 2026-11-14:** after the play session the project owner kept each value (ticket #13). A later change is one constant and the tests that name the value.
+- **What the play session showed:** the job waited 434 ticks after the pickup, after the attempts at 1 second. After the obstacle went away, the robot moved without a resume. The long wait came 6000 ticks after the start of the wait, one time. The session used 13 model requests in two server sessions, 33 diary entries, and summaries of at most two events. Thus it gives no evidence about the limits 100, 200 and 10.
+- **Counterexample, from spec #1:** a stock job writes two or more diary entries for each refill. With 200 entries the memory of a busy job can be short. The summary then says where the memory starts.
+- **Counterexample, from spec #1:** a robot behind an obstacle gives its first notice after 5 minutes. The hologram shows the attention colour at once.
+- **Counterexample:** 100 requests can stop a long session of an operator. The limit is for each server session, not for each day (D33.1).
+
+## D39 — A guardrail: the mechanical rules and the tests at each push
+
+**Status:** decided by the project owner on 2026-11-14, after the retrospective of increment A. The task `checkRules` is verified with a static check: each rule failed on a probe file, and the files of the repository pass. The workflow is verified on GitHub: its first run, on the commit `1e83bf4`, passed in about 7 minutes.
+
+- **Problem:** the repository had no CI and no hook. In increment A each check ran by hand: the in-game runs, the search for local paths and keys before each merge, the imports of CC: Tweaked in the review. Two red runs showed a test that changed the provider of the server and did not put it back.
+- **Decision:** `gradlew check` runs `checkRules`. It refuses six things in a file that a commit can hold: a generated file, an API key, a local path, an email address other than a noreply address, a class of CC: Tweaked outside `dan200.computercraft.api`, and an assignment of `Uno.provider` in a test class outside `withServerProvider`.
+- **Decision:** the workflow `.github/workflows/check.yml` runs `check`, the normal in-game run and the four restart phases at each push and pull request. It never runs `-Plive`: the repository has no key, and a run costs money (D33).
+- **Proposed, the patterns:** each rule is a regular expression in `build.gradle`. A rule can miss a case, for example a key in a different form, or personal data that is not an email address. The rules of CLAUDE.md stay the rules. The check is a net, not a proof.
+- **Verified on 2026-11-14:** the first run of the workflow, on the commit `1e83bf4`, passed. `check` passed, the normal in-game run had "All 81 required tests passed", and the four restart phases passed. The push needed the `workflow` scope in the GitHub login of the project owner.
+- **Not verified:** a red run on GitHub. The rules failed only on the computer of the project owner, with probe files.
+
+## D40 — The play session of increment A: results and differences
+
+**Status:** the session is a test in the game, manual, on 2026-11-14 (ticket #13). The project owner decided the two deferrals and the six values of D38 on 2026-11-14. The rule about the age of a summary is **proposed**.
+
+- **Result:** each of the 12 steps reached its expected behaviour. After the setup no command was used. See "Increment A — the play session" in [TEST_RESULTS.md](TEST_RESULTS.md).
+- **Verified in the game, manually, for the first time:**
+  - start, change, pause, resume, cancel and report with the real Claude service, in a client;
+  - the counter with the real tokens, and its new start in a new server session;
+  - the proposal, the button "Confirm #N" and the buttons of a job in a client;
+  - the chat lines of the notices to a connected owner: `BLOCKED`, `DONE` and a long wait after 6000 ticks, one time;
+  - the summary of one or two events on the screen of a client, also after a new opening of the world;
+  - `/forceload`, and a robot that works while the player is about 380 blocks away (D28);
+  - a player on the path: the robot pushed the project owner (`can_push = true`).
+- **Deferred to increment B, decided by the project owner: the button "Cancel" of a job.** It cancels the job with one click, without a confirmation (D19). It is next to "Apply". The project owner read it as the cancel of the screen and cancelled a job by mistake. Reason for the deferral: spec #1 keeps the buttons unchanged in A, and B changes the screen (D34). It opens again in B: a confirmation, or a clearer label. **Closed on 2026-11-14 by D41, decision 4:** the button gives a proposal with "Confirm #N". Verified with an automatic in-game test (run 84). Not verified in a client.
+- **Deferred, decided by the project owner: the height of the screen.** In a window of about 850 × 510 pixels the screen is taller than the window. It scrolls, and its top or bottom lines are out of view. Reason: the screen scrolls, and a larger window shows everything. It opens again when the screen changes in B.
+- **Proposed, no change: the age in a summary rounds down to whole minutes.** An event of 117 seconds is "1 min ago". The number agrees with the time.
+- **Differences of the procedure, no change:** the rig was rotated and shorter (3 + 3 moves). The first turtle got 160 fuel and was replaced. The stone was at the corner. The project owner took 64 coal, not 16 or 1. The screen stayed open in step 9. The waits of step 11 were shorter. None of them changes a behaviour that the step checks.
+- **Not verified by the session:** the notice for `RECOVERY` in a client. A summary with more than 10 events in a client. A player who is not an operator. "Confirm #N" with two digits. A request in Italian.
+- **Counterexample:** one session by one person. A second session can find differences that this one did not show.
+
+## D41 — The architecture review after increment A: the account and the behaviour of a job
+
+**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is implemented and verified with automatic in-game tests: run 84 and the four restart phases. 5 and 6 wait for increments B and C.
+
+- **Problem:** one concept of a job was spread over many modules. Increments B and C change exactly these places (D32, D34, D35). The review weighted the files that changed most in increment A.
+- **Decision 1, the account of a job:** `JobAccount` reads a job with three explicit inputs: the record, whether the robot runs, and the game time. The report, the screen and the status command read a job through it. The ages have one unit, the second. The doubt about the robot is in one place. Increment B adds here the facts for the model and the check of its numbers (D32).
+- **Decision 2, the behaviour of a job:** `Behaviour` holds the rules of `transport` and `keep_stock`: the need, the limit of a delivery, "reached", and whether the job ends at its quantity. The job updates its totals itself after a take, a give or an observation. The runtime sets the state after a transfer (`settle`). The rule "complete" is in one place: the end of a transfer and the resume use it. `RobotApi` keeps the authority check and the physical transfer, in the same tick (D05). The third behaviour of D35 is one more constant of `Behaviour`.
+- **No change of behaviour:** the record keeps the same fields and the same values. The texts for the player are the same. One exception: the status command gives the ages in seconds, not in ticks.
+- **Decision 3, the seam of the provider:** it carries a typed context and a typed action. One function parses and validates the JSON of an answer. `RuleProvider` builds the types directly. The provider describes itself: its name for the log, its line for the screen, its model. The JSON schema and the system text for Claude stay the same. Thus no `-Plive` run is needed (CLAUDE.md).
+- **Decision 4, one path for an action on a job:** the buttons build the same `Request` as the words, and get the same sentences. A button acts at once, except "Cancel": it gives a proposal with "Confirm #N". This closes the deferral of the button "Cancel" in D40. The words keep their rule: a pause and a report at once, the other actions as proposals. The `/mindcraft` commands stay as they are: they are the tool of an operator.
+- **Decision 5, a module for the one-time warnings:** in increment B, as the first step of the low fuel notice. Then the module has two adapters. A diary entry gets a kind, and the load converts the flags of an older record.
+- **Decision 6, a read of the record limited to the actor:** in increment B the context of the model reads the jobs of the actor through one question to the runtime. The map of the jobs becomes private in increment C, when a robot can have more than one job.
+- **The tests of 3 and 4:** replace, do not layer. The bad answers of a provider are tested on the parse function, without a robot. The reference sentences compare typed actions. A new test covers the button "Cancel".
+- **No manual test, decided by the project owner:** these changes get no test in the game by a person. The confirmation of "Cancel" in the screen of a client stays not verified manually. The automatic tests read the view that the server builds.
+- **Rejected by the review:** the save and the load of the record are already in one module. The global seams of the tests stay: the tests share one server (D24). The Lua composition passes the deletion test.
+- **Not done:** the tests did not change. A test can now give the account a robot that does not run. `t21_report_with_old_data` still shuts down a computer for it.
+- **Counterexample:** each of the two modules has one use until its increment comes. Without B and C they are moves of code without leverage.

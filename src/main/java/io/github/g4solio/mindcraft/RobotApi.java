@@ -143,7 +143,7 @@ public class RobotApi implements ILuaAPI {
         }
         Map<String, Object> out = new HashMap<>();
         out.put("id", job.id);
-        out.put("module", job.module);
+        out.put("module", job.behaviour.id);
         out.put("state", job.state.name());
         // The module gets no "need" while the destination stock is unknown. Then it must observe first.
         if (job.need() != MindRuntime.UNKNOWN) out.put("need", job.need());
@@ -168,14 +168,11 @@ public class RobotApi implements ILuaAPI {
         int want = Math.min(need, stock - job.reserve);
         IItemHandler hold = new InvWrapper(turtle.getInventory());
         int moved = want > 0 ? move(inventory, hold, job.item, want) : 0;
-        job.taken += moved;
-        job.carried += moved;
-        job.fromSeen = stock - moved;
-        job.fromSeenAt = now();
+        job.took(moved, stock, now());
         if (moved > 0 || job.carried > 0) {
             runtime().set(job, State.RUNNING, "");
         } else if (need == 0) {
-            settle(job);
+            runtime().settle(job);
         } else if (want <= 0) {
             runtime().waiting(job, Cause.SOURCE_AT_RESERVE, "the source has " + stock + ", the reserve is " + job.reserve);
         } else if (ItemHandlerHelper.insertItemStacked(hold, new ItemStack(job.item), true).isEmpty()) {
@@ -194,63 +191,48 @@ public class RobotApi implements ILuaAPI {
         Job job = activeJob();
         IItemHandler inventory = docked(job, job.to, "destination");
         if (inventory == null) return new Object[]{null, job.reason};
-        job.toSeen = count(inventory, job.item);
-        job.toSeenAt = now();
-        settle(job);
+        job.observed(count(inventory, job.item), now());
+        runtime().settle(job);
         return new Object[]{job.toSeen, job.reason};
-    }
-
-    /**
-     * Sets the state from the record, when no transfer was refused.
-     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup.
-     * A "keep_stock" job keeps that load for the next need. A transport cannot use it: it stops and the owner decides.
-     * A transport is never DONE with a load on board.
-     */
-    private void settle(Job job) {
-        boolean reached = job.keepStock() ? job.toSeen >= job.quantity : job.delivered >= job.quantity;
-        String onBoard = job.carried > 0 ? ", " + job.carried + " stay on board" : "";
-        if (!reached) {
-            runtime().set(job, State.RUNNING, "");
-        } else if (job.keepStock()) {
-            runtime().set(job, State.SATISFIED, "the destination has " + job.toSeen + ", the target is " + job.quantity + onBoard);
-        } else if (job.carried > 0) {
-            runtime().set(job, State.BLOCKED, "the quantity is " + job.quantity + " and " + job.delivered + " are delivered: "
-                + job.carried + " stay on board. Raise the quantity and resume, or cancel the job");
-        } else {
-            runtime().set(job, State.DONE, "");
-        }
     }
 
     /**
      * Moves the load from the robot into the destination inventory. Returns the moved quantity.
      * The delivery never goes above the quantity of the job, also when the owner lowered it after the pickup.
-     * For "keep_stock" the limit is the level, with the stock that this call counts in the same tick.
+     * The behaviour of the job gives the limit, with the stock that this call counts in the same tick.
      */
     @LuaFunction(mainThread = true)
     public final Object[] give() throws LuaException {
         Job job = activeJob();
         IItemHandler inventory = docked(job, job.to, "destination");
         if (inventory == null) return new Object[]{0, job.reason};
-        int room = job.quantity - (job.keepStock() ? count(inventory, job.item) : job.delivered);
-        int allowed = Math.max(0, Math.min(job.carried, room));
+        int allowed = Math.max(0, Math.min(job.carried, job.behaviour.room(job, count(inventory, job.item))));
         int moved = allowed > 0 ? move(new InvWrapper(turtle.getInventory()), inventory, job.item, allowed) : 0;
-        job.delivered += moved;
-        job.carried -= moved;
-        job.toSeen = count(inventory, job.item);
-        job.toSeenAt = now();
+        job.gave(moved, count(inventory, job.item), now());
         if (moved < allowed) {
             runtime().waiting(job, Cause.DESTINATION_FULL, "the destination is full, " + job.carried + " still on board");
         } else {
-            settle(job);
+            runtime().settle(job);
         }
         record(job, "give", moved);
         return new Object[]{moved, job.reason};
     }
 
-    /** The module reports an impediment that it cannot remove. The owner must resume the job. */
+    /**
+     * The module reports an impediment that it cannot remove: a kind and the detail text, with the position.
+     * The runtime decides the state from the kind. Returns the new state: "WAITING" when the module must try again later.
+     */
     @LuaFunction(mainThread = true)
-    public final void block(String reason) throws LuaException {
-        runtime().set(activeJob(), State.BLOCKED, reason);
+    public final String impediment(String kind, String detail) throws LuaException {
+        Job job = activeJob();
+        runtime().impediment(job, kind, detail);
+        return job.state.name();
+    }
+
+    /** The module tells the runtime that the robot moved. A job that waited for a free path works again. */
+    @LuaFunction(mainThread = true)
+    public final void moved() throws LuaException {
+        runtime().moved(activeJob());
     }
 
     // --- Internals -------------------------------------------------------------------------------------------------
@@ -292,7 +274,8 @@ public class RobotApi implements ILuaAPI {
         }
         IItemHandler inventory = inventoryAt(level, station.inventory(), station.dock());
         if (inventory == null) {
-            runtime().set(job, State.BLOCKED, "the " + role + " station has no inventory at " + station.inventory().toShortString());
+            runtime().blocked(job, role.equals("source") ? Cause.SOURCE_NO_INVENTORY : Cause.DESTINATION_NO_INVENTORY,
+                "the " + role + " station has no inventory at " + station.inventory().toShortString());
         }
         return inventory;
     }
@@ -336,11 +319,9 @@ public class RobotApi implements ILuaAPI {
     }
 
     private void record(Job job, String kind, int moved) {
-        job.ops++;
-        job.lastOp = "#" + job.ops + " " + kind + " " + moved + " at tick " + now();
+        job.operated(kind, moved, now());
         MindCraft.LOGGER.info("Robot #{} job {} op {}", id(), job.id, job.lastOp);
         if (moved > 0) {
-            job.lastOpAt = now();
             runtime().setDirty();
             runtime().flush(computer.getLevel().getServer());
         }

@@ -296,7 +296,7 @@ Definition of availability:
 
 ## D17 — Minimal Uno: proposal, confirmation, report
 
-**Status:** verified with the deterministic provider. Verified with the Claude provider and the real service. See D21. The review of 2026-11-12 found three defects in this decision. They are corrected: see D23, D24 and D25. Since increment A a provider gives an action (D29.1). The real service did not run with that interface.
+**Status:** verified with the deterministic provider. Verified with the Claude provider and the real service. See D21. The review of 2026-11-12 found three defects in this decision. They are corrected: see D23, D24 and D25. Since increment A a provider gives an action (D29.1). The real service ran with that interface on 2026-11-14 for `start` and `none` (run 81 in TEST_RESULTS.md).
 
 - **Provisional choice:** Uno has no authority of its own. A replaceable provider changes the request into an order in JSON format. The order goes through the same validation as the commands. The result is a proposal. The player confirms it with `/uno confirm`. At the confirmation the runtime validates again.
 - **Provider:** the interface is `propose(request, context) → JSON`. The provider runs off the server thread, with a limit of 20 seconds. The context contains only the stations and the robots of the actor.
@@ -381,7 +381,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 
 ## D21 — First real provider: Claude, with the official Anthropic SDK
 
-**Status:** decided by the project owner on 2026-11-12. The code of the provider is verified in the game against a false server in place of the API. The provider was verified two times with the real service, on 2026-11-12: four requests written in the test, first with the Italian text of Uno and then with the current English text. Those runs used the schema of S2. The schema of increment A has no run with the real service (D29.1). The production jar was not loaded on an installed Forge.
+**Status:** decided by the project owner on 2026-11-12. The code of the provider is verified in the game against a false server in place of the API. The provider was verified two times with the real service, on 2026-11-12: four requests written in the test, first with the Italian text of Uno and then with the current English text. Those runs used the schema of S2. The schema of increment A passed the same test on 2026-11-14, after a correction (D29.1). The production jar was not loaded on an installed Forge.
 
 - **Decision:** Claude is the first provider with a language model. The `Uno.Provider` interface does not change. The deterministic provider stays: it serves the tests and the players without a key.
 - **Activation:** at the server start, if the environment of the process contains `ANTHROPIC_API_KEY`, Uno uses Claude. Otherwise it uses the fixed rules. The server log says which provider is active. A test server (`runGameTestServer`) always uses the fixed rules.
@@ -408,7 +408,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Not verified:** the load of the `-all` jar on an installed Forge. The coexistence with other mods that bring Kotlin or Jackson. A favourable sign: in the development game the same libraries load as modules together with those of Forge.
 - **Not done:** a check of the license notices of the 25 libraries inside the `-all` jar. The repository does not contain those libraries. Only a built `-all` jar does.
 - **Discard condition:** the `-all` jar does not load on an installed Forge, or its weight becomes a problem for the distribution. Then: a direct HTTP call with the same prompt and the same schema.
-- **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is not verified with the real service. See D29.1.
+- **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is verified with the real service for `start` and `none` since 2026-11-14. See D29.1.
 - **Decided on 2026-11-13:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). These two points are not implemented: they are increment B. By default only an operator uses Claude, with a session limit and a counter on the screen (D33). Increment A implements this point: see the next line.
 - **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
 
@@ -577,7 +577,7 @@ Deferred without a date. Each item names the condition that opens it again.
 
 ### D29.1 — The contract of a provider: one action and its tokens
 
-**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules, with providers written in the tests and with a false server in place of the API. Not verified with the real Claude service (D33). On 2026-11-14 the real service refused the first request of `t18_claude_live` with error 400 (runs 76 and 78 in TEST_RESULTS.md). The cause is known and corrected: see "Observed on 2026-11-14" below. The corrected schema did not run with the real service. Increment A, ticket #2. The flat schema of the Claude provider is a choice of the implementation: **proposed**, not confirmed by the project owner.
+**Status:** implemented and verified with automatic in-game tests on 2026-11-13, with the fixed rules, with providers written in the tests and with a false server in place of the API. Not verified with the real Claude service (D33). On 2026-11-14 the real service refused the first request of `t18_claude_live` with error 400 (runs 76 and 78 in TEST_RESULTS.md). The cause is known and corrected: see "Observed on 2026-11-14" below. Verified with the real service on 2026-11-14 for `start` and `none` (run 81): the test of S2 passed with the corrected schema. The actions change, pause, resume, cancel and report did not run with the real service. Increment A, ticket #2. The flat schema of the Claude provider is a choice of the implementation: **proposed**, not confirmed by the project owner.
 
 - **Contract:** a provider answers `answer(request, context) → Answer`. The answer holds one action as JSON, the input tokens and the output tokens. The context does not change: the station names of the player, the robot numbers and the "free" flag (D21).
 - **Actions:** the closed list of D29. Each action has its parameters. A field that the action does not use is null or absent.

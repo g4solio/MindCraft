@@ -13,7 +13,7 @@ The session is a test in the game. The project owner plays it in the development
 
 | No. | Point | Result |
 | --- | --- | --- |
-| B1 | Decide whether to run the test with the real service one time: `gradlew runGameTestServer -Plive`. It costs four requests on the account of the key. Its requests test the actions `start` and `none` and the counter, not the other actions. Without this run, the first requests of the schema of increment A to the real service are the requests of this session (D29.1) | |
+| B1 | Decide whether to run the test with the real service one time: `gradlew runGameTestServer -Plive`. It costs four requests on the account of the key. Its requests test the actions `start` and `none` and the counter, not the other actions. Without this run, the first requests of the schema of increment A to the real service are the requests of this session (D29.1) | Done on 2026-11-14, with the consent of the project owner. Runs 76 and 78 found a defect of the schema; run 81 passed after the correction. See D29.1 |
 | B2 | Write down the commit of the code of the session | |
 | B3 | The key is in the environment of the process that starts the client, as `ANTHROPIC_API_KEY`. It is in no file, in no visible command and in no message. Do not write it in the chat of the game or in a request to Uno | |
 | B4 | Each written request of this session is a paid call. The steps have about 15 requests. With the estimate of D33 this is about 0.25 $. The counter on the screen shows the real tokens | |

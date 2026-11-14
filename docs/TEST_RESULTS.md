@@ -111,10 +111,19 @@ x:  0          1      2        3    4      5
 | 78 | 0 of 1, with `-Plive` | Test `t18_claude_live` with the real Claude service, on 2026-11-14, with the consent of the project owner. Log line: `Enabled Gametest Namespaces: [mindcraft_live]`. The service answered the first request with error 400. The log now has the reason: `output_config.format.schema: Invalid schema: Enum value 'transport' does not match declared type '['string', 'null']'`. The test failed without a stop of the server |
 | 79 | 80 of 81, expected | `t18_claude_provider` has a new check: no field of the schema has an `enum` next to a list of types. It failed on the schema of run 78 |
 | 80 | 81 of 81 | None. The field `module` of the schema uses `anyOf`: a string from the enum, or null |
+| 81 | 1 of 1, with `-Plive` | None. Test `t18_claude_live` with the real Claude service and the corrected schema, on 2026-11-14, with the consent of the project owner. Log line: `Enabled Gametest Namespaces: [mindcraft_live]`. The counter: 4 requests, 5708 input tokens, 309 output tokens |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
-Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. See D29.1.
+Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
+
+The answers of run 81, from the log:
+
+- The free request in Italian: "Proposal: keep at least 64 x minecraft:coal in 'fornaci', taken from 'deposito'. Reserve to leave in 'deposito': 32. Robot #0." After the confirmation the robot delivered 48 items.
+- "Porta del carbone alle fornaci": "I cannot propose a job: The request gives no quantity and no source station, and no robot is free."
+- "Che tempo farà domani?": "I cannot propose a job: The request asks about the weather, which is not an action of the list."
+- "Porta 10 pezzi di carbone dal deposito alla segheria": "I cannot propose a job: The destination station "segheria" is not in the context, and no robot is free."
+- The counter of the session: 4 requests, 5708 input tokens, 309 output tokens. With the prices of `claude-opus-5-5` this is about 0.03 dollars.
 
 - The tickets ran at the same time, each in a working folder of its own. Thus the numbers do not give the order in time.
 - The numbers follow the order of the merges into the branch `increment-a`: tickets #7, #6, #2, #5, #3, #11, #8, #4, #9 and #10, then the code review and ticket #12. Inside a ticket they follow the order of its section below.
@@ -284,7 +293,7 @@ Increment A changed three things in these rows. The rows describe S2.
 
 - A provider gives an action (D29.1). The schema of `t18_claude_provider` now has ten required fields. The `problem` field is now the reason of the action `none`. See "Increment A — The provider answers with an action".
 - The "Confirm" button has the label "Confirm #N" (D29.3).
-- The "real Claude" rows used the schema of S2. The schema of increment A has no run with the real service.
+- The "real Claude" rows used the schema of S2. The schema of increment A passed the same test in run 81, after a correction. See "Runs".
 
 Run 75, the final run of increment A, confirms the other rows.
 
@@ -913,7 +922,7 @@ After the four phases the data folder has `mindcraft.dat` and no temporary file.
 
 Until run 75 no test of increment A called the real Claude service. No run used `-Plive`. `LiveTests.java` compiles with the code of increment A: each run compiles it.
 
-Runs 76 and 78, on 2026-11-14, used `-Plive` with the consent of the project owner. The real service refused the first request with error 400: the schema had an `enum` next to a list of types. Run 80 has the corrected schema. It did not run with the real service. See D29.1.
+Runs 76 and 78, on 2026-11-14, used `-Plive` with the consent of the project owner. The real service refused the first request with error 400: the schema had an `enum` next to a list of types. Run 81 passed with the corrected schema and the real service. See D29.1.
 
 The evidence of increment A, by kind:
 
@@ -1000,7 +1009,7 @@ Third manual test, on the projector and its hologram:
 | S2: Claude with requests different from the four of the test `t18_claude_live` | Other languages, ambiguous station names, more than one free robot, a simple transport. Each request costs money to the key owner |
 | S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person. The play session of increment A uses the key |
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
-| Increment A: the schema and the system text of the seven actions with the real service | Runs 76 and 78 sent the first real requests of this schema. The service refused them with error 400, so no answer of the model was read. The cause: the field `module` had an `enum` next to the types string and null. Run 80 has the corrected schema, with `anyOf`. The corrected schema did not run with the real service. A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none` |
+| Increment A: the schema and the system text of the seven actions with the real service | Runs 76 and 78 sent the first real requests of this schema. The service refused them with error 400, so no answer of the model was read. The cause: the field `module` had an `enum` next to the types string and null. Run 81 passed with the corrected schema, with `anyOf`. Its four requests test only `start` and `none`. The actions change, pause, resume, cancel and report did not run with the real service A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none` |
 | Increment A: the counter with the tokens of the real service | The same reason. Steps 1 and 11 of the checklist read it |
 | Increment A: a stop of the process during a write of the record | No test can stop the process at that moment. The protection rests on a code examination (D37) |
 | Increment A: a notice to an owner who is not connected, in a client | In a single-player game the server stops when the player leaves. The exit is a code examination (`Notices.CHAT`). The tests replace the exit |

@@ -10,6 +10,7 @@ Dates: 2026-11-12 (S0 to S2 and the review) and 2026-11-13 (increment A). Enviro
 | **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0`, or of the compiled code of Minecraft and Forge with `javap`. A code examination is not a test: it says what the code does, not that it was seen to do it |
 | **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" and "Increment A — the play session" |
 | **Observed in one manual run** | A condition built by hand around an automatic run. No command of the repository repeats it. Only ticket #7 has one |
+| **Static check** | A program reads the files of the repository without a start of the game. Command: `gradlew checkRules`, a part of `gradlew check` |
 
 No test uses a simulation of the game. Where a condition is built artificially, the table says so.
 Two tests use a false server in place of the Anthropic API: `t18_claude_provider` and, since increment A, `a_screen_model_lines`. They verify the code of the provider and of the screen, not the language model.
@@ -956,6 +957,16 @@ The checklist is [PLAY_SESSION_A.md](PLAY_SESSION_A.md). After the session each 
 | Step 11 — close the world and open it again | Not executed | |
 | Step 12 — cancel by words, with a load on board | Not executed | |
 | C1 to C9, the checks during the whole session | Not executed | |
+
+## Guardrail — the rules of CLAUDE.md and the CI
+
+Date: 2026-11-14. See D39.
+
+| Check | Type | Result |
+| --- | --- | --- |
+| `gradlew checkRules` on the files of the repository | Static check | Passed |
+| `gradlew checkRules` with probe files made for the check, then deleted: a tracked file in `run-gametest`, a text in the form of an API key, an email address, an import of `dan200.computercraft.shared`, an assignment of `Uno.provider` in a test class, and a local path in three forms (a drive with a backslash, a drive with a slash, a home folder) | Static check | Each rule failed on its probe, as expected |
+| The workflow `.github/workflows/check.yml` | Not executed | The workflow runs on GitHub after a push. It did not run yet |
 
 ## Manual test in the game
 

@@ -80,6 +80,14 @@ The test of the Claude provider with the real service is separate. It needs `ANT
 ./gradlew runGameTestServer -Plive
 ```
 
+`check` compiles the code and checks the rules of `CLAUDE.md` that a program can check. Its task `checkRules` refuses a generated file, an API key, a local path or an email address in a file that a commit can hold. It also refuses a class of CC: Tweaked outside `dan200.computercraft.api`, and a test that sets the provider of the server outside `withServerProvider`:
+
+```bash
+./gradlew check
+```
+
+The workflow `.github/workflows/check.yml` runs `check`, the normal in-game run and the four restart phases at each push and pull request. It never runs the test with the real service.
+
 The jar to install in a game is `build/libs/mindcraft-<version>-all.jar`. It contains the Anthropic SDK and is about 43 MB.
 The load of this jar on an installed Forge is not verified yet.
 

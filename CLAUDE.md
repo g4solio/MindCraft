@@ -11,6 +11,7 @@ The plan of the increments after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS
 - Use only `dan200.computercraft.api` of CC: Tweaked. The other classes are internal.
 - The build needs a JDK 17. Set `JAVA_HOME` before you use `gradlew`. A portable JDK can be in `%USERPROFILE%\.jdks`.
 - Compile with `gradlew compileJava`. Run the in-game tests with `gradlew runGameTestServer`.
+- Run `gradlew check` before a commit. It checks the mechanical rules of this file. The CI runs it at each push.
 - The normal run does not contain the server restart test. After a change of the runtime or of the Lua modules, also run its four phases. See `RestartTests.java`.
 - The test `gradlew runGameTestServer -Plive` calls the real Claude service with the key of the project owner. It costs money. Run it only with the consent of the project owner.
 - Never write an API key in a file, in a visible command or in a message.

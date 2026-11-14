@@ -1018,3 +1018,13 @@ Gates before a second player:
 - **Counterexample, from spec #1:** a stock job writes two or more diary entries for each refill. With 200 entries the memory of a busy job can be short. The summary then says where the memory starts.
 - **Counterexample, from spec #1:** a robot behind an obstacle gives its first notice after 5 minutes. The hologram shows the attention colour at once.
 - **Counterexample:** 100 requests can stop a long session of an operator. The limit is for each server session, not for each day (D33.1).
+
+## D39 — A guardrail: the mechanical rules and the tests at each push
+
+**Status:** decided by the project owner on 2026-11-14, after the retrospective of increment A. The task `checkRules` is verified with a static check: each rule failed on a probe file, and the files of the repository pass. The CI did not run yet.
+
+- **Problem:** the repository had no CI and no hook. In increment A each check ran by hand: the in-game runs, the search for local paths and keys before each merge, the imports of CC: Tweaked in the review. Two red runs showed a test that changed the provider of the server and did not put it back.
+- **Decision:** `gradlew check` runs `checkRules`. It refuses six things in a file that a commit can hold: a generated file, an API key, a local path, an email address other than a noreply address, a class of CC: Tweaked outside `dan200.computercraft.api`, and an assignment of `Uno.provider` in a test class outside `withServerProvider`.
+- **Decision:** the workflow `.github/workflows/check.yml` runs `check`, the normal in-game run and the four restart phases at each push and pull request. It never runs `-Plive`: the repository has no key, and a run costs money (D33).
+- **Proposed, the patterns:** each rule is a regular expression in `build.gradle`. A rule can miss a case, for example a key in a different form, or personal data that is not an email address. The rules of CLAUDE.md stay the rules. The check is a net, not a proof.
+- **Not verified:** the workflow on GitHub. The first push runs it.

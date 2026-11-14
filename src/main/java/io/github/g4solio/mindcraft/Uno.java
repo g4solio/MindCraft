@@ -102,7 +102,6 @@ public final class Uno {
     private static final Provider RULES = new RuleProvider();
     private static final String LIMIT_REACHED = "You reached the limit of " + MODEL_REQUESTS + " model requests in this server session. "
         + "Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. ";
-    private static final int SILENT_TICKS = 300;
     /** The limit of the reason of a "none" action. A provider writes the reason, and the screen has little room. */
     private static final int MAX_REASON_LENGTH = 200;
     private static final String INVALID = "I did not get a valid configuration. I created no proposal.";
@@ -433,7 +432,7 @@ public final class Uno {
         Target target = Target.of(json);
         if (target != null && target.none()) return report(runtime, actor, now);
         Found found = find(runtime, actor, target);
-        return found.problem() != null ? found.problem() : report(found.job().robot, found.job(), now);
+        return found.problem() != null ? found.problem() : JobAccount.of(found.job(), now).report();
     }
 
     /**
@@ -599,81 +598,9 @@ public final class Uno {
     static String report(MindRuntime runtime, Actor actor, long now) {
         List<String> lines = new ArrayList<>();
         runtime.jobs.forEach((robotId, job) -> {
-            if (actor.owns(job.owner)) lines.add(report(robotId, job, now));
+            if (actor.owns(job.owner)) lines.add(JobAccount.of(job, now).report());
         });
         return lines.isEmpty() ? "I have no record of a job of yours." : String.join("\n", lines);
-    }
-
-    private static String report(int robotId, Job job, long now) {
-        String from = "'" + job.from + "'", to = "'" + job.to + "'";
-        StringBuilder text = new StringBuilder("Job " + job.id + ", robot #" + robotId + ": ");
-        text.append(job.keepStock()
-            ? "keep at least " + job.quantity + " items in " + to + ", reserve " + job.reserve + " in " + from + ". "
-            : "carry " + job.quantity + " items from " + from + " to " + to + ", reserve " + job.reserve + ". ");
-        text.append("I delivered ").append(job.delivered).append(" items. ");
-        // The owner can lower the quantity below the deliveries. The record keeps the deliveries: the report must not hide the difference.
-        if (!job.keepStock() && job.delivered > job.quantity) text.append("That is more than the quantity of the job: the quantity became lower after those deliveries. ");
-        if (job.carried > 0) text.append("The record says that I have ").append(job.carried).append(" on board. ");
-        boolean live = RobotApi.live(robotId) != null;
-        text.append(switch (job.state) {
-            case RUNNING -> live ? "I am working. " : "The job is open, but the robot is stopped. ";
-            case SATISFIED -> "At the last observation the stock was at the requested level. "
-                + (job.carried > 0 ? "I keep the load on board for the next need. " : "");
-            case DONE -> "The job is complete. ";
-            case PAUSED -> "I am paused at your request. ";
-            case CANCELLED -> "You cancelled the job. ";
-            case WAITING -> waiting(job, from, to);
-            case BLOCKED -> blocked(job, from, to);
-            case RECOVERY -> "I cannot say how it went. Recorded reason: " + job.reason + ". You decide whether to resume or cancel. ";
-        });
-        if (job.recoveries > 0) text.append("After a recovery the totals can be inexact. ");
-        text.append("Last observations: ").append(from).append(' ').append(seen(job.fromSeen, job.fromSeenAt, now))
-            .append(", ").append(to).append(' ').append(seen(job.toSeen, job.toSeenAt, now)).append(". ");
-        // The state of the link is not the state of the job. Old data must not look like current data.
-        if (job.state.open() && job.state != State.PAUSED) {
-            if (!live) {
-                text.append("The robot is not running or not loaded. These are the last recorded data, not the current state.");
-            } else if (job.lastContact == MindRuntime.UNKNOWN || now - job.lastContact > SILENT_TICKS) {
-                text.append("The robot has not contacted me for a while. I do not know if it is working.");
-            }
-        }
-        return text.toString().trim();
-    }
-
-    /** Why the job waits. The sentence comes from the cause that the runtime recorded, not from a guess. */
-    private static String waiting(Job job, String from, String to) {
-        String missing = job.keepStock() ? "To reach " + job.quantity + " in " + to + " I need more materials. "
-            : "I must carry " + (job.quantity - job.delivered) + " more. I need more materials. ";
-        return switch (job.cause) {
-            case SOURCE_AT_RESERVE -> (job.reserve == 0 ? "Nothing remains in " + from + ". "
-                : job.fromSeen + " remain in " + from + (job.fromSeen == job.reserve ? ": that is the reserve you asked me to keep. "
-                    : ": that is less than the reserve of " + job.reserve + " you asked me to keep. ")) + missing;
-            case SOURCE_KEEPS -> from + " has the items, but it does not let me take them. ";
-            case ROBOT_FULL -> "My inventory is full: I cannot take the items from " + from + ". Make room in the robot. ";
-            case DESTINATION_FULL -> "The destination is full. I am waiting for free space. ";
-            case SOURCE_UNLOADED -> "The area of " + from + " is not loaded: I cannot see its inventory and I do not know its stock. ";
-            case DESTINATION_UNLOADED -> "The area of " + to + " is not loaded: I cannot see its inventory and I do not know its stock. ";
-            case PATH_OBSTRUCTED -> "My path is obstructed. I try to move again every few seconds, and I continue by myself when the path is free. ";
-            // A record of an older version has no cause. The recorded text is all that Uno knows.
-            default -> "I am waiting. Recorded reason: " + job.reason + ". ";
-        };
-    }
-
-    /** Why the job is blocked. A block needs the hands of the owner. The sentence comes from the cause that the runtime recorded. */
-    private static String blocked(Job job, String from, String to) {
-        return switch (job.cause) {
-            case OUT_OF_FUEL -> "I am stopped: I have no fuel. Give me fuel, then resume the job. ";
-            case SOURCE_NO_INVENTORY -> "I am stopped: I find no inventory at " + from + ". Put it back, then resume the job. ";
-            case DESTINATION_NO_INVENTORY -> "I am stopped: I find no inventory at " + to + ". Put it back, then resume the job. ";
-            case LOAD_ABOVE_QUANTITY -> "I am stopped: the quantity of the job is reached, and " + job.carried
-                + " stay on board. Raise the quantity and resume, or cancel the job. ";
-            // A record of an older version, or an impediment of a kind that the runtime does not know. The recorded text is all that Uno knows.
-            default -> "I am stopped and I need your help. Recorded reason: " + job.reason + ". ";
-        };
-    }
-
-    static String seen(int count, long at, long now) {
-        return count == MindRuntime.UNKNOWN ? "never observed" : count + " items, " + (now - at) / 20 + " seconds ago";
     }
 
     /** A failure of the provider: an exception or the time limit. It is not an answer, thus each exception gets this sentence. */

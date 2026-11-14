@@ -87,6 +87,7 @@ final class UnoView {
     }
 
     private static void job(JsonArray widgets, int robotId, Job job, long now) {
+        JobAccount account = JobAccount.of(job, now);
         String from = "'" + job.from + "'", to = "'" + job.to + "'";
         widgets.add(text("Job " + job.id + " · robot #" + robotId + " · " + STATES.get(job.state), "heading"));
         String what = job.quantity + " x " + MindRuntime.itemName(job.item);
@@ -104,13 +105,13 @@ final class UnoView {
         if (!job.keepStock()) {
             widgets.add(bar("delivered", job.delivered, job.quantity, ""));
         } else if (job.toSeen != MindRuntime.UNKNOWN) {
-            widgets.add(bar(job.to, job.toSeen, job.quantity, "seen " + (now - job.toSeenAt) / 20 + " s ago"));
+            widgets.add(bar(job.to, job.toSeen, job.quantity, "seen " + account.seconds(job.toSeenAt) + " s ago"));
         }
-        widgets.add(text(from + ": " + Uno.seen(job.fromSeen, job.fromSeenAt, now) + " · delivered " + job.delivered
+        widgets.add(text(from + ": " + account.seen(job.fromSeen, job.fromSeenAt) + " · delivered " + job.delivered
             + " · on board " + job.carried, "muted"));
         if (!job.state.open()) return;
         // Old data must not look like current data.
-        if (RobotApi.live(robotId) == null) widgets.add(text("The robot is not running. These data are not the current state.", "muted"));
+        if (!account.running()) widgets.add(text("The robot is not running. These data are not the current state.", "muted"));
         JsonArray buttons = new JsonArray();
         // Each action names the job, not only the robot. The runtime refuses an action of a view that showed an earlier job.
         // "Apply" also carries the revision. The runtime refuses a change that comes from an old view of the same job.

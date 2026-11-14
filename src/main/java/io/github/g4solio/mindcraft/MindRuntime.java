@@ -89,6 +89,76 @@ public class MindRuntime extends SavedData {
         LOAD_ABOVE_QUANTITY
     }
 
+    /**
+     * What a job does with its quantity (D16). Each behaviour has its rules: the need, the limit of a delivery and the end.
+     * The record keeps its ID: the name of its Lua module. The third behaviour of D35 comes here.
+     */
+    public enum Behaviour {
+        /** Carries the quantity one time. Then the job ends. */
+        TRANSPORT(MindRuntime.TRANSPORT, true) {
+            @Override
+            int need(Job job) {
+                return Math.max(0, job.quantity - job.delivered - job.carried);
+            }
+
+            @Override
+            int room(Job job, int stock) {
+                return job.quantity - job.delivered;
+            }
+
+            @Override
+            boolean reached(Job job) {
+                return job.delivered >= job.quantity;
+            }
+        },
+        /** Keeps at least the quantity in the destination, and works again at the next need. */
+        KEEP_STOCK(MindRuntime.KEEP_STOCK, false) {
+            @Override
+            int need(Job job) {
+                return job.toSeen == UNKNOWN ? UNKNOWN : Math.max(0, job.quantity - job.toSeen - job.carried);
+            }
+
+            @Override
+            int room(Job job, int stock) {
+                return job.quantity - stock;
+            }
+
+            @Override
+            boolean reached(Job job) {
+                return job.toSeen >= job.quantity;
+            }
+        };
+
+        public final String id;
+        /** At its quantity a job that ends is DONE. A job that does not end is SATISFIED, and keeps its robot. */
+        final boolean ends;
+
+        Behaviour(String id, boolean ends) {
+            this.id = id;
+            this.ends = ends;
+        }
+
+        /**
+         * The quantity that the robot must still bring to the destination. The load in the robot counts as in transit. It is not stock.
+         * UNKNOWN when the rule needs an observation of the destination first.
+         */
+        abstract int need(Job job);
+
+        /** The most that one delivery can add, with the stock of the destination in the same tick. It can be zero or less. */
+        abstract int room(Job job, int stock);
+
+        /** The quantity of the job is reached. */
+        abstract boolean reached(Job job);
+
+        /** The behaviour with this ID, or null. */
+        static Behaviour of(String id) {
+            for (Behaviour behaviour : values()) {
+                if (behaviour.id.equals(id)) return behaviour;
+            }
+            return null;
+        }
+    }
+
     /** The kinds of impediment that a Lua module reports. The runtime decides the state from the kind. See impediment(). */
     static final String OBSTACLE = "obstacle", NO_FUEL = "fuel";
 
@@ -131,7 +201,7 @@ public class MindRuntime extends SavedData {
         public UUID owner;
         /** The robot of the job: its key in the record. Not saved: the load takes it from the key. */
         public int robot = UNKNOWN;
-        public String module = TRANSPORT;
+        public Behaviour behaviour = Behaviour.TRANSPORT;
         public String from, to;
         public Item item;
         public int quantity, reserve;
@@ -162,17 +232,45 @@ public class MindRuntime extends SavedData {
         public boolean longWait;
 
         public boolean keepStock() {
-            return module.equals(KEEP_STOCK);
+            return behaviour == Behaviour.KEEP_STOCK;
         }
 
-        /**
-         * The quantity that the robot must still bring to the destination.
-         * The load in the robot counts as in transit. It is not stock.
-         * UNKNOWN for "keep_stock" until a robot observes the destination.
-         */
+        /** See Behaviour.need. */
         public int need() {
-            if (!keepStock()) return Math.max(0, quantity - delivered - carried);
-            return toSeen == UNKNOWN ? UNKNOWN : Math.max(0, quantity - toSeen - carried);
+            return behaviour.need(this);
+        }
+
+        /** The job ends here: its behaviour ends, the quantity is reached and nothing is on board. A job is never DONE with a load. */
+        boolean complete() {
+            return behaviour.ends && carried == 0 && behaviour.reached(this);
+        }
+
+        /** The robot took items from the source. "Stock" is the count of the source before the transfer, in the same tick. */
+        void took(int moved, int stock, long now) {
+            taken += moved;
+            carried += moved;
+            fromSeen = stock - moved;
+            fromSeenAt = now;
+        }
+
+        /** The robot gave items to the destination. "Stock" is the count of the destination after the transfer, in the same tick. */
+        void gave(int moved, int stock, long now) {
+            delivered += moved;
+            carried -= moved;
+            observed(stock, now);
+        }
+
+        /** The robot counted the destination from its dock. */
+        void observed(int stock, long now) {
+            toSeen = stock;
+            toSeenAt = now;
+        }
+
+        /** A transfer of the robot, also of zero items. Only a transfer that moved items changes the time of the last transfer. */
+        void operated(String kind, int moved, long now) {
+            ops++;
+            lastOp = "#" + ops + " " + kind + " " + moved + " at tick " + now;
+            if (moved > 0) lastOpAt = now;
         }
     }
 
@@ -309,9 +407,7 @@ public class MindRuntime extends SavedData {
     /** The ordinary validation of an order. Each source of orders goes through it: a command, a test or Uno. */
     public RobotApi check(Actor actor, Order order) {
         int robotId = order.robot();
-        if (!order.module().equals(TRANSPORT) && !order.module().equals(KEEP_STOCK)) {
-            throw new Refusal("Unknown module '" + order.module() + "'.");
-        }
+        if (Behaviour.of(order.module()) == null) throw new Refusal("Unknown module '" + order.module() + "'.");
         requireRobot(actor, robotId);
         Job current = jobs.get(robotId);
         if (current != null && current.state.open()) {
@@ -341,7 +437,7 @@ public class MindRuntime extends SavedData {
         job.id = nextJobId++;
         job.owner = actor.id();
         job.robot = order.robot();
-        job.module = order.module();
+        job.behaviour = Behaviour.of(order.module());
         job.from = order.from();
         job.to = order.to();
         job.item = order.item();
@@ -455,7 +551,7 @@ public class MindRuntime extends SavedData {
                     job.recoveries++;
                 }
                 // A resume can complete the job: the owner accepted the observed load, and nothing is on board.
-                set(job, !job.keepStock() && job.carried == 0 && job.delivered >= job.quantity ? State.DONE : State.RUNNING, Cause.NONE, "", byOwner);
+                set(job, job.complete() ? State.DONE : State.RUNNING, Cause.NONE, "", byOwner);
             }
         }
         if (robot != null) robot.wake();
@@ -502,18 +598,8 @@ public class MindRuntime extends SavedData {
 
     /** The whole record of a robot, without a check of the actor. A request of a player goes through status(). */
     String describe(int robotId, long now) {
-        Job j = jobs.get(robotId);
-        if (j == null) return "Robot #" + robotId + ": no job.";
-        return "Job " + j.id + " on robot #" + robotId + ": " + j.state + (j.reason.isEmpty() ? "" : " (" + j.reason + ")")
-            + "\n  " + (j.keepStock() ? "keep at least " : "") + j.quantity + " x " + itemName(j.item)
-            + " from '" + j.from + "' to '" + j.to + "', reserve " + j.reserve + ", revision " + j.revision
-            + "\n  taken " + j.taken + ", delivered " + j.delivered + ", on board " + j.carried + " (recorded)"
-            + (j.recoveries > 0 ? "\n  " + j.recoveries + " recovery. The totals can be inexact." : "")
-            + "\n  source stock: " + seen(j.fromSeen, j.fromSeenAt, now) + ", destination stock: " + seen(j.toSeen, j.toSeenAt, now)
-            + "\n  robot: " + (RobotApi.live(robotId) == null ? "not running or not loaded" : "running")
-            + ", last contact: " + (j.lastContact == UNKNOWN ? "none since server start" : (now - j.lastContact) + " ticks ago")
-            + ", executor: " + (j.executor.isEmpty() ? "none" : j.executor)
-            + "\n  last operation: " + (j.lastOp.isEmpty() ? "none" : j.lastOp);
+        Job job = jobs.get(robotId);
+        return job == null ? "Robot #" + robotId + ": no job." : JobAccount.of(job, now).describe();
     }
 
     /**
@@ -615,6 +701,25 @@ public class MindRuntime extends SavedData {
         }
     }
 
+    /**
+     * Sets the state from the record, after a transfer or an observation that nothing refused.
+     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup.
+     * A job that does not end keeps that load for the next need. A job that ends cannot use it: it stops and the owner decides.
+     */
+    void settle(Job job) {
+        if (!job.behaviour.reached(job)) {
+            set(job, State.RUNNING, "");
+        } else if (!job.behaviour.ends) {
+            set(job, State.SATISFIED, "the destination has " + job.toSeen + ", the target is " + job.quantity
+                + (job.carried > 0 ? ", " + job.carried + " stay on board" : ""));
+        } else if (job.complete()) {
+            set(job, State.DONE, "");
+        } else {
+            blocked(job, Cause.LOAD_ABOVE_QUANTITY, "the quantity is " + job.quantity + " and " + job.delivered + " are delivered: "
+                + job.carried + " stay on board. Raise the quantity and resume, or cancel the job");
+        }
+    }
+
     /** The job waits for a condition that can change without the owner. The cause is what the runtime observed. */
     void waiting(Job job, Cause cause, String reason) {
         set(job, State.WAITING, cause, reason);
@@ -647,10 +752,6 @@ public class MindRuntime extends SavedData {
         UUID owner = robots.get(robotId);
         if (owner == null) throw new Refusal("Robot #" + robotId + " is not enrolled.");
         if (!actor.owns(owner)) throw new Refusal("Robot #" + robotId + " is not yours.");
-    }
-
-    private static String seen(int count, long at, long now) {
-        return count == UNKNOWN ? "unknown" : count + " (seen " + (now - at) + " ticks ago)";
     }
 
     static String itemName(Item item) {
@@ -720,7 +821,7 @@ public class MindRuntime extends SavedData {
             CompoundTag t = new CompoundTag();
             t.putInt("id", j.id);
             t.putUUID("owner", j.owner);
-            t.putString("module", j.module);
+            t.putString("module", j.behaviour.id);
             t.putInt("revision", j.revision);
             t.putString("from", j.from);
             t.putString("to", j.to);
@@ -809,7 +910,9 @@ public class MindRuntime extends SavedData {
             Job j = new Job();
             j.id = t.getInt("id");
             j.owner = t.getUUID("owner");
-            j.module = t.getString("module");
+            // An older version treated a module that it did not know as a transport.
+            Behaviour behaviour = Behaviour.of(t.getString("module"));
+            j.behaviour = behaviour == null ? Behaviour.TRANSPORT : behaviour;
             j.revision = t.getInt("revision");
             j.from = t.getString("from");
             j.to = t.getString("to");

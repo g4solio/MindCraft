@@ -765,7 +765,7 @@ public class MindCraftTests {
 
     private static boolean sameJob(Job a, Job b) {
         return a.id == b.id && a.owner.equals(b.owner) && a.from.equals(b.from) && a.to.equals(b.to) && a.item == b.item
-            && a.module.equals(b.module) && a.revision == b.revision
+            && a.behaviour == b.behaviour && a.revision == b.revision
             && a.quantity == b.quantity && a.reserve == b.reserve && a.state == b.state && a.reason.equals(b.reason) && a.cause == b.cause
             && a.taken == b.taken && a.delivered == b.delivered && a.carried == b.carried && a.fromSeen == b.fromSeen
             && a.toSeen == b.toSeen && a.executor.equals(b.executor) && a.ops == b.ops && a.lastOp.equals(b.lastOp)

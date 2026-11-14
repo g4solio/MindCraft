@@ -115,8 +115,11 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 79 | 80 of 81, expected | `t18_claude_provider` has a new check: no field of the schema has an `enum` next to a list of types. It failed on the schema of run 78 |
 | 80 | 81 of 81 | None. The field `module` of the schema uses `anyOf`: a string from the enum, or null |
 | 81 | 1 of 1, with `-Plive` | None. Test `t18_claude_live` with the real Claude service and the corrected schema, on 2026-11-14, with the consent of the project owner. Log line: `Enabled Gametest Namespaces: [mindcraft_live]`. The counter: 4 requests, 5708 input tokens, 309 output tokens |
+| 82 | 81 of 81 | None. D41: the account and the behaviour of a job. Server line: `All 81 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
+
+Run 82 is the run of the architecture review after increment A (D41).
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -152,6 +155,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 72, code review | `crash`, `check-crash` | Red: `crash` passed. `check-crash` failed as expected: the summary missed the `RECOVERY` of the load |
 | Run 73, code review | All four | Passed |
 | Run 75, ticket #12 | All four | **Passed**. See "Increment A — final runs and evidence" |
+| Run 82, D41 | All four | Passed. See "The architecture review after increment A" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -998,6 +1002,15 @@ The session verified these points for the first time, in the game, manually:
 - the English text of Uno in a client.
 
 Not verified by the session: the notice for `RECOVERY` in a client, a summary with more than 10 events in a client, a player who is not an operator, "Confirm #N" with two digits, a request in Italian.
+
+## The architecture review after increment A (D41)
+
+Date: 2026-11-14. Type: in the game, automatic. Code: the branch `increment-a` at `0d801e7`, with the changes of D41: the account of a job (`JobAccount`) and its behaviour (`Behaviour`).
+
+- Run 82: `Enabled Gametest Namespaces: [mindcraft]`. Server line: `All 81 required tests passed :)`. The tests did not change, except one comparison of two records: it compares the behaviour, not the name of the module.
+- The four restart phases passed after run 82: `stop`, `check`, `check-crash` with `All 1 required tests passed :)`, and `crash` with its halt. The status at the halt gives the ages in seconds: `source stock: 40 (seen 17 s ago)`, `last contact: 4 s ago`.
+- The changes keep the fields of the record and the texts for the player. The one exception is the unit of the ages in the status command.
+- Not tested: a record of an older version with a module that the runtime does not know. The load makes it a transport, as before (code examination).
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

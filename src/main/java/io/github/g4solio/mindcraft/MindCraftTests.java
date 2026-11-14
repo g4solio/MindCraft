@@ -78,6 +78,15 @@ import java.util.stream.Stream;
 /**
  * In-game checks. "gradlew runGameTestServer" runs them on a real headless server with real turtles.
  * The names refer to the adversarial matrix in docs/MINDCRAFT_CLAUDE_BRIEF.md, section 8.
+ *
+ * The helpers that a new test reuses:
+ * - Rig: two chests, two docks and one enrolled turtle in the "empty" template. rig.begin() starts a sequence.
+ * - check(condition, message): the assertion of each test.
+ * - withServerProvider(provider, action): sets the provider of the server and puts it back, also after a failed check.
+ * - CountingModel: a provider that counts as a model provider and counts its calls.
+ * - modelAction(action, reason, fields...): an answer in the shape of the output schema of the Claude provider.
+ * - listen(), NOTICES, notices(owner), noticesAbout(job, robot), subject(rig, job): the notices that a test reads.
+ * - states(runtime, actor, jobId): the diary of a job, as a list of states.
  */
 // ponytail: the tests are in the main source set and go into the mod jar. Move them before a public release.
 @GameTestHolder(MindCraft.MOD_ID)

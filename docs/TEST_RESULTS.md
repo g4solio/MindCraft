@@ -35,6 +35,8 @@ x:  0          1      2        3    4      5
 
 ## Runs
 
+Work in parallel: each ticket writes its runs in a section of its own, at the end of the file. The numbers of this table come at the merge.
+
 | No. | Result | Cause of the failures |
 | --- | --- | --- |
 | 1 | 13 of 19 | The test server ran at about 300 ticks per second. The restart of the turtle had a limit in ticks. Corrected: 20 ticks per second and a limit in real time |

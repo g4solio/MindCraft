@@ -934,31 +934,70 @@ The evidence of increment A, by kind:
 | **In the game, automatic** | The 81 tests of run 75. Among them, 38 tests are new in increment A: 34 with the prefix `a_`, and `t04_source_removed`, `t05_pause_and_cancel_during_the_wait`, `t05_obstacle_keep_stock` and `t06_impediment_of_an_unknown_kind`. Increment A also changed older tests: each section above lists them. The four restart phases |
 | **Code examination** | The protection of the record against a stop during a write (D37). The exit of the notices in the game: a line only for a connected owner (`Notices.CHAT`). The check of the long wait in the server tick. The templates of the long waits that no test builds. The confirmation and the buttons of a job call no provider. The hologram has the attention colour during a wait for a free path (`MindRuntime.mood`). The mod uses only `dan200.computercraft.api` |
 | **Observed in one manual run** | A failure of the write, built by hand: the earlier record stays on the disk (ticket #7) |
-| **In the game, manual** | None yet. The play session of ticket #13 is the test in the game of increment A. See the next section |
+| **In the game, manual** | The play session of ticket #13, on 2026-11-14. See the next section |
 | **Not executed** | The rows of increment A in "Not executed" below |
 
 ## Increment A — the play session
 
-Ticket #13 of spec #1. Type: in the game, manual. Executor: the project owner. **Not executed yet.**
-The checklist is [PLAY_SESSION_A.md](PLAY_SESSION_A.md). After the session each row gets its result. Each difference gets a decision: correct it now, or defer it with a reason.
+Ticket #13 of spec #1. Date: 2026-11-14. Type: in the game, manual. Executor: the project owner, in the development client (`gradlew runClient`), with the checklist [PLAY_SESSION_A.md](PLAY_SESSION_A.md).
+
+- The code is the commit `07bbf44` of the branch `increment-a`. Its runtime and its Lua modules are those of `1e83bf4`. The CI passed on both commits.
+- The key went from the environment of the user into the process of the client, through a script that never printed it.
+- During the session the agent read the log of the client, the record `mindcraft.dat` and the saved chunks. It compared each screenshot of the project owner with the checklist. These readings are part of this manual test. They are not tests of their own.
+- Each step reached its expected behaviour. No command was used after the setup.
+- Two differences of the product are deferred to increment B by the project owner. The other differences come from the procedure or from the rig. See D40 in [DECISIONS.md](DECISIONS.md).
 
 | Part of the checklist | Result | Difference and decision |
 | --- | --- | --- |
-| B1 to B4, before the session | Not executed | |
-| S1 to S10, the setup | Not executed | |
-| Step 1 — start a stock job by words | Not executed | |
-| Step 2 — ask about the job | Not executed | |
-| Step 3 — change the reserve by words | Not executed | |
-| Step 4 — pause and resume by words | Not executed | |
-| Step 5 — an obstacle in the corridor | Not executed | |
-| Step 6 — stand on the path | Not executed | |
-| Step 7 — the fuel ends | Not executed | |
-| Step 8 — cancel the stock job by words | Not executed | |
-| Step 9 — a transport reaches `DONE` while you are far | Not executed | |
-| Step 10 — come back and read the summary | Not executed | |
-| Step 11 — close the world and open it again | Not executed | |
-| Step 12 — cancel by words, with a load on board | Not executed | |
-| C1 to C9, the checks during the whole session | Not executed | |
+| B1 | Done before the session. Runs 76 and 78 got error 400. Run 81 passed with the corrected schema (D29.1) | None |
+| B2 | The commit `07bbf44` | None |
+| B3 | The key was in the environment of the client process only. It is in no file and in no message | None |
+| B4 | Accepted. The session used 13 requests: 18169 input tokens and 1039 output tokens | None |
+| S1 | The title screen. No error of MindCraft in the log | None |
+| S2 | The log line "Uno interprets requests with Claude (claude-opus-5-5) for the operators, at most 100 requests for each of them in this session. …" | None |
+| S3 | Built | The rig is rotated and shorter. The depot chest is at 1042 71 275, with its dock to the south. The corner is at 1042 71 279. The furnace dock is at 1039 71 279, with the chest to the west. The path has 3 + 3 moves, thus a round trip costs 12 fuel, not 16. The wall fills x 1038 to 1041, z 275 to 278, two blocks high. The saved chunks showed two tufts of grass in the corridor. The project owner removed them before S4. Decision: none. The case of a path with one corner is the same |
+| S4 | Fuel 80, inventory empty | The first turtle got 160 fuel: two items burned. A new turtle replaced it before the enrolment. Decision: none |
+| S5, S6 | As expected. R = 1 | None |
+| S7 | Two chunks: [64, 17] and [65, 17] | None |
+| S8 | A light blue hologram. The projector is at 1045 71 277, to the east of the corridor: the place of "north" in the rotated rig | None |
+| S9, S10 | Done | None |
+| Step 1 | As expected. The three lines before the request. Claude answered in less than 5 seconds. The proposal word for word. The counter after it: 1 of 100, 1428 in, 71 out. Job 1. Green, then light blue. The record: `SATISFIED`, 64 delivered, depot 192, furnace 64. No chat line | None |
+| Step 2 | As expected: "Job 1, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 64 items. At the last observation the stock was at the requested level. Last observations: 'depot' 192 items, 94 seconds ago, 'furnace' 64 items, 0 seconds ago." No proposal. The counter: 2 of 100 | The optional question in Italian was not asked |
+| Step 3 | As expected. The proposal word for word. The field showed 32 before the confirmation. "Confirm #2" fits the button. After it: "Job 1 on robot #1 changed. Level to keep in 'furnace': 64. Reserve to leave in 'depot': 16. The robot uses the new values at its next step." The field showed 16. The counter stayed 3 of 100 after the confirmation | In a window of about 850 × 510 pixels the screen is taller than the window. It scrolls, and its top or bottom lines are out of view. Decision of the project owner: deferred to increment B. Reason: the screen scrolls, and a larger window shows everything (D40) |
+| Step 4 | As expected. The pause at once: "Job 1 on robot #1 is paused. The cargo stays on board." The button "Resume". The resume as a proposal, "Confirm #3", then "I resume job 1 on robot #1." and "stock at level". No chat line. The counter: 5 of 100 | None |
+| Before step 5 | Job 1 became `CANCELLED`, "cancelled by the owner". No chat line | The project owner pressed the button "Cancel" of the job by mistake. It is next to "Apply", and the project owner read it as the cancel of the screen. The button cancels the job at once, without a confirmation (D19). The recovery: a new stock job by words, with the reserve 16 (job 2). Decision of the project owner: deferred to increment B. Reason: spec #1 keeps the buttons unchanged in A, and B changes the screen (D34, D40) |
+| Step 5 | As expected. The job waited 434 ticks after the pickup, with the cause "path obstructed" and 16 on board. "Recorded reason: the robot cannot move from 1042 71 278 (south, in front: minecraft:stone) toward 1039 71 279: Movement obstructed". An amber hologram. The report: "… My path is obstructed. I try to move again every few seconds, and I continue by myself when the path is free. …" One chat line, 6000 ticks after the start of the wait: "Uno › Job 2 on robot #1 (minecraft:coal from 'depot' to 'furnace') has waited for 5 minutes: the path of the robot is obstructed." No second line. The stone stayed. After the stone was broken: `RUNNING` without a resume, the delivery, furnace 64. No chat line. The failed moves cost no fuel: 68 before, 56 after one round trip | The stone was at the corner, 1042 71 279, not between the corner and the furnace dock. The robot met it on the way back, with its load. Decision: none |
+| Step 6 | The robot pushed the project owner along the corridor and continued. The configuration of the world has `can_push = true`. No wait, no damage, no lost item. Furnace 64. No chat line | The project owner took a whole stack, 64, not 16. The robot carried 64. Decision: none |
+| Step 7 | As expected. On the 4th trip the robot stopped at 1042 71 278 with 64 on board, as computed from the fuel 44. One chat line: "Uno › Job 2 on robot #1 (minecraft:coal from 'depot' to 'furnace') is blocked: the robot has no fuel." An amber hologram. The summary at the opening had the long wait of step 5 and the block (the project owner remembered it; no screenshot). "Recorded reason: the robot cannot move from 1042 71 278 (south, in front: no block) toward 1039 71 279: Out of fuel". The report: "… I am stopped: I have no fuel. Give me fuel, then resume the job. …" With 8 charcoal on board the job stayed `BLOCKED` for 136 seconds. The resume as a proposal, "Confirm #5", then "I resume job 2 on robot #1." The robot burned the 8 charcoal, not the coal: fuel 636, inventory empty. It delivered its 64. No chat line for the resume | The project owner took 64 coal for each trip; the depot stayed above the reserve. The robot stopped loaded in the corridor, not empty at the dock: this follows from the shorter round trip. Decision: none |
+| Step 8 | As expected. The proposal said "The cargo stays on board the robot." After it: "Job 2 on robot #1 is cancelled. The cargo stays on board the robot." The state "cancelled", without the buttons of a job. No chat line. The counter: 10 of 100 | None |
+| Step 9 | As expected. The project owner was at x 1424, about 380 blocks from the rig. The proposal: "Proposal: carry 16 x minecraft:coal from 'depot' to 'furnace'. Reserve to leave in 'depot': 0. Robot #1. …" Then "Job 3 started on robot #1." `DONE` 9 seconds after the start, and the chat line "… is done: 16 delivered." | The screen stayed open until the job was complete. An open screen is not an opening, and the summary of step 10 came. Decision: none |
+| Step 10 | As expected, except the age. The projector: "Since you last opened this screen:" and "1 min ago: Job 3 on robot #1 (minecraft:coal from 'depot' to 'furnace') is done: 16 delivered." The text fits, one event on a line. The second click: "Tell me what you need." The project owner flew back, without a command | The event was about 117 seconds old. The age rounds down to whole minutes: "1 min", not "2 min". The number agrees with the time. Decision: no change, proposed (D40) |
+| Step 11 | As expected. The chat line "… Job 4 … is done: 8 delivered." After "Save and Quit to Title" and a new opening of the world: a new log line "Uno interprets requests with Claude …". The turtle showed "MindCraft: this turtle works for Uno." The projector: "Since you last opened this screen:" and "45 s ago: Job 4 on robot #1 (minecraft:coal from 'depot' to 'furnace') is done: 8 delivered." Not "From the start of my memory:". The counter: "0 of 100. Tokens: 0 in, 0 out." | The project owner pressed Esc 4 seconds after the chat line, not 1 minute later. The world stayed closed 14 seconds, not 1 minute. The age counts only the game time: about 4 seconds before the close and 41 seconds after the opening. Decision: none |
+| Step 12 | As expected. Job 5 waited with 32 on board. "Cancel the job of robot 1" gave a proposal with "The cargo stays on board the robot." and "Confirm #2": the numbers start again in a new server session. After it: "Job 5 on robot #1 is cancelled. The cargo stays on board the robot." The state "cancelled", 32 on board. After the stone was gone, the saved world had the robot still at 1042 71 278 with 32 coal. No chat line | None |
+| C1 | No command after S10 | None |
+| C2 | English in each screenshot | None |
+| C3 | No problem reported | None |
+| C4 | No chat line for the own pause, resume and cancellations, by the button and by words | None |
+| C5 | "Confirm #2" to "Confirm #7" fit the button | A number of two digits was not reached. Not verified |
+| C6 | One more for each written request. No change for a confirmation, a notice or a summary | None |
+| C7 | The first answer in less than 5 seconds. No slow answer reported. The slowest time was not measured | None |
+| C8 | No error of MindCraft in the log of the client | None |
+| C9 | Steps 7, 10 and 11: the next opening after a chat line gave a summary with the same sentence. A second opening without a new event gave "Tell me what you need." (README, after finding P2) | None |
+
+The cost of the session: 11 requests with 15377 input tokens and 911 output tokens in the first server session; 2 requests with 2792 and 128 in the second. One request had about 1390 input tokens and 60 to 140 output tokens.
+
+The session verified these points for the first time, in the game, manually:
+
+- start, change, pause, resume, cancel and report with the real Claude service, in a client;
+- the counter with the real tokens, and its new start in a new server session;
+- the proposal, the button "Confirm #N" and the buttons of a job in a client;
+- the chat lines of the notices to a connected owner: `BLOCKED`, `DONE`, and a long wait after 6000 ticks, one time;
+- the summary of one or two events on the screen of a client, also after a new opening of the world;
+- `/forceload`, and a robot that works while the player is about 380 blocks away;
+- a player on the path, pushed by the robot;
+- the English text of Uno in a client.
+
+Not verified by the session: the notice for `RECOVERY` in a client, a summary with more than 10 events in a client, a player who is not an operator, "Confirm #N" with two digits, a request in Italian.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 
@@ -1001,15 +1040,12 @@ Third manual test, on the projector and its hologram:
 | The `/mindcraft` commands sent by a real client without operator permissions | The manual test uses a world with commands enabled. Thus the player is an operator. The `status` and `cancel` commands are tested with a player entity of the test system (`t19_status_command`). The other commands are tested only at the level of the runtime (T19) |
 | T11: unload and reload of a chunk during the transport | It needs a player or forced chunk loading |
 | T11: sudden stop on a normal server | The test server has no idle time in the tick. A normal server can write chunks to disk at different moments |
-| T05: a player on the path | It needs a client. The configuration says that a turtle pushes an entity if there is space (`can_push = true`). Not tried. Step 6 of the checklist of the play session |
 | A stair (a path that also changes y), or more than one corner | The rigs have none. The move step should permit them when each move brings the robot nearer to the target (code examination). The path with one corner is tested: `a_path_with_one_corner` |
-| `/forceload` by a player in a client, and a robot that works while the player is far | It needs a person at the game. Steps S7 and 9 of the checklist of the play session (D28) |
 | Two robots in one corridor that is one block wide | Outside the rig. From the code, each robot is an obstacle for the other |
 | T08: delayed confirmation | Not applicable: the runtime and the turtle are in the same process, without network messages |
 | Inventory not loaded (`WAITING` with unknown stock) in a real area that is not loaded | One test reaches the branch with an artificial station record (`t21_report_inventory_not_loaded`). No test unloads a chunk |
 | A change of world in a client: two servers, one after the other, in one Java process | It needs a person at the game. The logic is tested with an artificial session change (`t23_state_of_an_earlier_session`). See D24 |
 | A request to Uno that is open when a real server stops | It needs a server stop during a test. The branch comes from a code examination. See D24 |
-| The screen in a client after the review: the line of the proposal, "Confirm" and the buttons of a job with the new actions | It needs a person at the game. The view that the server builds is tested automatically. Steps 1 to 4 of the checklist of the play session |
 | A source that has the items but does not release them (`SOURCE_KEEPS`) | It needs an inventory that refuses the extraction. The chests of the rig do not |
 | A robot session that CC: Tweaked does not stop in time at a real server stop, then a second world | It needs a person at the game and a stop that exceeds the limit of one second. The logic is tested with an artificial server start (`t23_robots_of_an_earlier_session`). See D24 |
 | Double chests, inventories with sides (furnaces), hoppers, items with NBT | Outside the S1 rig |
@@ -1018,12 +1054,8 @@ Third manual test, on the projector and its hologram:
 | Cost on the server thread | No measurement |
 | S2: the screen of the tablet in the client (drawing, mouse, keyboard, network messages) | It needs a person at the game. See D19 |
 | S2: each single point of the projector in the client (the three colours, the range without a tablet, the dark) | The project owner confirmed the projector in general, not point by point. See D20 |
-| S2: the English text of Uno in a client | The project owner tried the screen only with the Italian text. The English text is tested automatically, through the view that the server builds. Check C2 of the checklist of the play session |
 | S2: Claude with requests different from the four of the test `t18_claude_live` | Other languages, ambiguous station names, more than one free robot, a simple transport. Each request costs money to the key owner |
-| S2: Uno with Claude used by a player in the client | It needs the key in the environment of the game and a person. The play session of increment A uses the key |
 | S2: the fallback on refusals (`fallbacks`) with the real service | No request of the real test was declined. The branch is tested only with the false API |
-| Increment A: the schema and the system text of the seven actions with the real service | Runs 76 and 78 sent the first real requests of this schema. The service refused them with error 400, so no answer of the model was read. The cause: the field `module` had an `enum` next to the types string and null. Run 81 passed with the corrected schema, with `anyOf`. Its four requests test only `start` and `none`. The actions change, pause, resume, cancel and report did not run with the real service A run of `t18_claude_live` costs money and needs the consent of the project owner (D33). Its four requests test only `start` and `none` |
-| Increment A: the counter with the tokens of the real service | The same reason. Steps 1 and 11 of the checklist read it |
 | Increment A: a stop of the process during a write of the record | No test can stop the process at that moment. The protection rests on a code examination (D37) |
 | Increment A: a notice to an owner who is not connected, in a client | In a single-player game the server stops when the player leaves. The exit is a code examination (`Notices.CHAT`). The tests replace the exit |
 | Increment A: a notice to an owner who is connected in a different dimension | No test and no step of the checklist builds it |

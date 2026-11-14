@@ -2,6 +2,7 @@
 
 This is the checklist of the play session of increment A. It is the second part of the exit of the increment (D27). Ticket #13 of spec #1 is the session.
 The session is a test in the game. The project owner plays it in the development client.
+The project owner played it on 2026-11-14. The results are in [TEST_RESULTS.md](TEST_RESULTS.md), and the differences are in D40 of [DECISIONS.md](DECISIONS.md).
 
 - The setup is the only part with commands.
 - After the setup, no step uses a command. The words go to Uno through the screen. The tablet and the projector open the screen.

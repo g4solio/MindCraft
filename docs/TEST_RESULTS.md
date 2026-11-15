@@ -182,6 +182,8 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 162 | 108 of 108 | None. Each correction. Server line: `All 108 required tests passed :)` |
 | 163 | 108 of 108 | None. The committed code `afa3717`. Server line: `All 108 required tests passed :)` |
 | 164 | 108 of 108 | None. The final code of increment B: the integration branch after the merge of the corrections of the code review. Server line: `All 108 required tests passed :)` |
+| 165 | 107 of 108 | The CI on GitHub, the run of the push of `4396f7d`. `a_diary_of_a_job` failed: "expected two attempts or more". The test waited 140 ticks for a second attempt of the robot, and the robot runs in real time. The run of the pull request on the same commit passed. A test of increment A, not changed by increment B |
+| 166 | 108 of 108 | None. `a_diary_of_a_job` waits for the second attempt of the robot, not for 140 ticks. Server line: `All 108 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -210,6 +212,7 @@ Run 154 is the run of the integration branch after the merge of ticket #26.
 Runs 155 to 157 are the runs of ticket #28, on the integration branch at `8b0d3e2`. Ticket #28 changed only documents.
 Runs 158 to 163 are the runs of the corrections of the code review of increment B, on the branch `b/review-fixes` from `9722178`.
 Run 164 is the run of the final code of increment B, on the integration branch after the merge of the corrections. The four restart phases passed after it.
+Run 165 is a run of the CI on GitHub, and run 166 is its correction. The correction changed only a test of the normal run: the four restart phases of run 164 still apply to the code of the mod.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 

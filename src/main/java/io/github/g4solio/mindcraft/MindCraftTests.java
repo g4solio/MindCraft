@@ -4549,9 +4549,9 @@ public class MindCraftTests {
             })
             .thenWaitUntil(() -> rig.state(State.WAITING))
             // At least one more attempt of the robot. Each attempt records the same state and cause again.
-            .thenIdle(140)
+            // The robot runs in real time. Thus the test waits for the attempt, not for a number of ticks: a slow computer is late.
+            .thenWaitUntil(() -> check(rig.job().ops >= 2, "expected two attempts or more: " + rig.describe()))
             .thenExecute(() -> {
-                check(rig.job().ops >= 2, "expected two attempts or more: " + rig.describe());
                 List<String> states = states(rig.runtime, player, first[0].id);
                 check(states.equals(List.of("RUNNING", "WAITING SOURCE_AT_RESERVE")), states.toString());
                 Container inventory = rig.robot().turtle.getInventory();

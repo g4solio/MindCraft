@@ -87,8 +87,10 @@ public class LiveTests {
                 .thenExecute(() -> {
                     MindCraft.LOGGER.info("t18_claude_live request '{}': {}", request, answers.get(index));
                     check(!Uno.hasProposal(player), "this became a proposal: " + answers.get(index));
-                    // The sentence must come from the model. A failure of the service has a different answer. See Uno.failure.
-                    check(answers.get(index).startsWith("I cannot propose a job: "), answers.get(index));
+                    // The sentence must come from the model, and pass the checks of Uno: the voice of "none" (D42, point 15).
+                    // A failure of the service, the fixed rules and a failed check have different answers.
+                    check(!answers.get(index).startsWith("The model gave no valid answer") && !answers.get(index).startsWith("I cannot propose a job: ")
+                        && !answers.get(index).equals("I cannot answer that. I did nothing."), answers.get(index));
                 });
         }
         sequence

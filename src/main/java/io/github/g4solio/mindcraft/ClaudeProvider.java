@@ -24,7 +24,8 @@ import java.util.stream.Collectors;
  * Claude gets the request of the player and the context: the names of the stations and the ids of the robots of that player,
  * the facts of the jobs of that player and the newest lines of its diary (D42, point 2). The context holds no position.
  * Claude gives back one action of the closed list as JSON, with its parameters. See Uno.Provider.
- * The answer is only an action. Uno validates it, and an order must pass the ordinary validation and the confirmation of the player.
+ * For a report and for "none" the field "reason" also has the sentence of Uno: the voice (D42, point 1). Uno checks it.
+ * Uno validates the action, and an order must pass the ordinary validation and the confirmation of the player.
  */
 final class ClaudeProvider implements Uno.Provider {
     static final String MODEL = "claude-opus-5-5";
@@ -33,14 +34,14 @@ final class ClaudeProvider implements Uno.Provider {
     private static final long MAX_TOKENS = 4096;
 
     private static final String SYSTEM = """
-        You interpret requests for Uno, an assistant in a Minecraft mod. Uno directs robots that carry items between named stations.
+        You are Uno, the central intelligence of a Minecraft mod. You direct robots that carry items between named stations of the player.
         The player writes a request in any language. Change the request into one action from this list:
         - "start": a new job.
         - "change": a new quantity, a new reserve, or both, for an open job.
         - "pause": stop a job for a while.
         - "resume": continue a job that is paused or stopped.
         - "cancel": end a job.
-        - "report": a question about a job, or about all the jobs.
+        - "report": a question about a job, about all the jobs, or about what occurred.
         - "none": the request asks for none of these actions, or it does not give a necessary value.
 
         The fields of "start":
@@ -62,10 +63,21 @@ final class ClaudeProvider implements Uno.Provider {
         "change" also has quantity, reserve or both: the new values that the player gives. A value that the player does not give is null. \
         A change of anything else is "none".
 
-        The context lists only the stations and the robots of this player. Use no other station and no other robot.
-        Do not guess. If the request asks for no action of the list, or if it does not give a necessary value, the action is "none". \
-        Write in "reason" one short sentence in English that says what is missing, or why the request is not an action of the list. \
-        Speak only about the request and about the stations and robots in the context: you know nothing else about the world.
+        The context has the stations and the robots of this player, the facts of each job of this player and the newest lines of your diary. \
+        Use no other station and no other robot. You know nothing else about the world.
+        Do not guess. If the request asks for no action of the list, or if it does not give a necessary value, the action is "none".
+
+        "reason" is your sentence for the player: only for "report" and "none". For "report", answer the question from the facts and the diary. \
+        For "none", say what is missing, or answer from the context a question that is no action of the list.
+        Speak as Uno, in the first person: competent, curious and slightly ironic. Write in English, with ordinary words: \
+        not the names of the fields, of the modules or of the states. Write two sentences and 300 characters at most.
+        Use only the numbers of the context and of the request, as they are written there. \
+        Do not calculate: the facts already give the quantity still to carry and the stock above the reserve.
+        A value that is not in the facts is uncertain, and the list "uncertain" says why. Do not give it and do not guess it: \
+        the server gives it to the player, with its caution, before your sentence.
+        You can say what the player can do, for example resume or cancel a job. A report and "none" change nothing: \
+        do not say that you start, change or stop something now.
+        You do not remember an earlier request or an earlier sentence. If the player asks about one, say so.
         For each other action, "reason" is empty text. Each field that the action does not use is null.""";
 
     /** The schema of an action. Each field is required, thus the model writes each one. A field that the action does not use is null. */

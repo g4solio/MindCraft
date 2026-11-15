@@ -173,7 +173,7 @@ public final class Uno {
      * What a confirmation asks the runtime: its ordinary request, with the values of the proposal. The runtime validates again.
      * A request about a job names the robot and the job ID. Thus a confirmation never reaches a different job.
      */
-    sealed interface Request permits Start, Change, Control {
+    sealed interface Request permits Start, Replace, Change, Control {
         /** Sends the request. A refusal of the runtime is a Refusal. The answer is the sentence of Uno. */
         String send(MindRuntime runtime, Actor actor);
 
@@ -191,6 +191,24 @@ public final class Uno {
         @Override
         public String what() {
             return "start the job";
+        }
+    }
+
+    /**
+     * A new job in the place of the open job of the robot (D42, point 10). The request names the job that it replaces.
+     * The answer gives the load that the new job adopted: it can differ from the load in the text of the proposal.
+     */
+    record Replace(int job, Order order) implements Request {
+        @Override
+        public String send(MindRuntime runtime, Actor actor) {
+            Job next = runtime.replace(actor, job, order);
+            return Notices.capital(Notices.job(job, order.robot())) + " is cancelled. " + started(next)
+                + (next.carried > 0 ? "" : " The robot holds no " + MindRuntime.itemName(next.item) + ": the new job starts without a load.");
+        }
+
+        @Override
+        public String what() {
+            return "replace the job";
         }
     }
 
@@ -609,15 +627,24 @@ public final class Uno {
         return name + ": " + (before == after ? before + ", unchanged" : "from " + before + " to " + after);
     }
 
-    /** A start becomes a proposal, after the ordinary validation of the order. The proposal says what the robot holds. */
+    /**
+     * A start becomes a proposal, after the ordinary validation of the order. The proposal says what the robot holds.
+     * A start for a robot with an open job of the actor is the proposal of a replacement (D42, point 10). The new order must be
+     * valid as for a free robot. The text names the job that it replaces. The robot can work until the confirmation.
+     */
     private static String start(Session mine, MindRuntime runtime, Actor actor, Order order) {
+        Job open = runtime.jobs.get(order.robot());
+        boolean replace = open != null && open.state.open() && actor.owns(open.owner);
         RobotApi robot;
         try {
-            robot = runtime.check(actor, order);
+            robot = replace ? runtime.checkReplace(actor, open.id, order) : runtime.check(actor, order);
         } catch (Refusal refusal) {
             return "I cannot propose this job: " + refusal.getMessage();
         }
-        return propose(mine, actor, describe(order) + adoption(order, robot), new Start(order));
+        String text = describe(order) + adoption(order, robot);
+        if (!replace) return propose(mine, actor, text, new Start(order));
+        return propose(mine, actor, "cancel " + name(open) + ", and start in its place: " + text
+            + ". The load can change until the confirmation: the new job counts the load that the robot holds then", new Replace(open.id, order));
     }
 
     /**
@@ -661,7 +688,7 @@ public final class Uno {
     }
 
     /**
-     * The answer to a start that the runtime accepted, for each source of orders: a confirmation and the start command.
+     * The answer to a start that the runtime accepted, for each source of orders: a confirmation, a replacement and the start command.
      * It gives the load that the job adopted at the start (D42, point 9). That load can differ from the load at the proposal.
      */
     static String started(Job job) {
@@ -826,10 +853,16 @@ public final class Uno {
             }
             if (item == null) throw new IllegalArgumentException("I do not know the item");
 
+            // No robot named: the only free robot. With no free robot and one robot, that robot: Uno proposes to replace its job (D42, point 10).
             if (robot == null) {
                 List<Integer> free = known.robots().stream().filter(Context.Robot::free).map(Context.Robot::id).toList();
-                if (free.size() != 1) throw new IllegalArgumentException("you have " + free.size() + " free robots: write 'robot N'");
-                robot = free.get(0);
+                if (free.isEmpty() && known.robots().size() == 1) {
+                    robot = known.robots().get(0).id();
+                } else if (free.size() == 1) {
+                    robot = free.get(0);
+                } else {
+                    throw new IllegalArgumentException("you have " + free.size() + " free robots: write 'robot N'");
+                }
             }
 
             String module = text.matches("(?s).*\\b(mantieni|mantenere|almeno|keep)\\b.*") ? MindRuntime.KEEP_STOCK : MindRuntime.TRANSPORT;

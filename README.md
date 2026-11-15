@@ -134,6 +134,7 @@ This procedure uses the commands. The play session of increment A uses commands 
    The robot delivers that load first. It takes only the rest from the source: a transport of 64 with 24 on board takes 40.
    A load above the quantity follows the rule of a lower quantity (step 8). The robot delivers the quantity, and the job is `BLOCKED` with the rest on board.
    The job does not count the items of other kinds. They stay on board. When the fuel ends, the robot burns those that can burn.
+   The command refuses a robot with an open job: a command never ends a job that it does not name. Cancel the job first, or ask Uno to replace it (see "Talk with Uno").
 
 7. Check and control the job. Only the owner of the robot, an operator and the console can read the status.
 
@@ -197,7 +198,23 @@ A change, a resume and a cancellation are proposals, as a new job is. Nothing ch
 - Uno checks the request before the proposal. For example, a resume of a running job gives the reason and no proposal.
 - The proposal of a new job says what the robot holds. The items of the job are the first load of the job, as for the command. The proposal also says when that load is above the quantity, and that items of other kinds stay on board. A robot that holds nothing gets no such sentence.
 - The proposal gives the load at the moment of the proposal. The job counts the load at the confirmation. The answer to the confirmation gives that number.
-- A new job for a robot with an open job stays refused, with the number of that job. Cancel that job first.
+
+A new job for a robot with an open job of yours is one proposal: cancel that job, and start the new one. One confirmation does both.
+
+```
+/uno ask Carry 24 coal from depot to smelter
+/uno confirm
+```
+
+- The proposal names the job that it cancels and the new job. Nothing changes before you confirm.
+- Uno checks the new job as for a free robot. If the runtime refuses it, Uno gives the reason and creates no proposal.
+- The proposal says what the robot holds now, as for a new job. The robot can work until you confirm: the new job counts the load that the robot holds at the confirmation. The answer gives that number.
+- The confirmation cancels the open job and starts the new job in the same moment. The robot is never without a job between the two. This holds in each open state of the job, also `RECOVERY`.
+- If the runtime refuses the new job at the confirmation, for example because the robot is not running, nothing is cancelled. If the robot has a different job at the confirmation, Uno refuses too.
+- The cancellation is your request: it gives no notice. The diary keeps the entries of the cancelled job.
+- Thus you change the destination of a job with words: ask for the same job with the new destination. The new job adopts the load on board, and the robot carries it to the new destination.
+- A request that names no robot uses your only free robot. If no robot is free and you have one robot, Uno uses that robot. In each other case Uno asks for the robot number and creates no proposal.
+- The command `/mindcraft job transport` for a robot with an open job stays refused.
 
 ### The tablet
 
@@ -303,6 +320,7 @@ The server log says which provider is active: look for the line `Uno interprets 
 - A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
+- Uno asks Claude to follow the rule above for a request that names no robot. A new job from Claude for a robot with an open job becomes the proposal of a replacement, as with the fixed rules.
 - Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
@@ -318,7 +336,8 @@ A request that names two of your stations is a new job:
 - A quantity, and a reserve after "leave" or "reserve".
 - An item: the Minecraft ID (`coal`, `minecraft:coal`).
 - "Keep" for a stock. Otherwise the job is a transport.
-- "robot N" if you have more than one free robot.
+- "robot N", unless you have exactly one free robot, or no free robot and one robot only. A robot with an open job gets the proposal of a replacement.
+- A change of the destination needs the whole request, with the two stations. The fixed rules do not know the job that "it" means.
 
 It also reads the same request in Italian, the first language of this project.
 
@@ -348,7 +367,7 @@ A request without the words of an action and without two stations gets the reaso
 | `PAUSED` | The owner asked for a pause. The cargo stays on board | The owner, with `resume` |
 | `RECOVERY` | The real cargo of the robot is different from the recorded cargo, or the world is older than the record. The runtime does not know the result | The owner, with `resume` (accepts the observed cargo) or `cancel` |
 | `DONE` | The requested quantity was delivered and no load of the job is on board | |
-| `CANCELLED` | The owner cancelled. The cargo stays on board. A new job for the same item counts it as its first load | |
+| `CANCELLED` | The owner cancelled, or a new job replaced the job. The cargo stays on board. A new job for the same item counts it as its first load | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
 A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. A `WAITING` of 5 minutes without an interruption gives one notice too. See "Notices".

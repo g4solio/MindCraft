@@ -153,6 +153,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 124 | 98 of 98 | None. Ticket #24: the low fuel notice. Server line: `All 98 required tests passed :)` |
 | 125 | 98 of 98 | None. Ticket #24, the committed code `97cd020`. Server line: `All 98 required tests passed :)` |
 | 126 | 98 of 98 | None. Ticket #24, one more step in `a_notices_call_no_provider` (`dfa1d29`). Server line: `All 98 required tests passed :)` |
+| 127 | 103 of 103 | None. The integration branch after the merge of tickets #20 and #24. Server line: `All 103 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -169,6 +170,7 @@ Run 103 is the run of the integration branch after the merge of ticket #19.
 Runs 104 to 106 are the runs of ticket #21. Run 107 is the run of the integration branch after its merge.
 Runs 108 to 112 are the runs of ticket #20. Its merge changed no file, thus run 112 is also the run of the integration branch after its merge.
 Runs 120 to 126 are the runs of ticket #24, on the integration branch at `8df1f39`. See "Increment B — the low fuel notice (ticket #24)". The numbers start at 120: other tickets run at the same time. No run of ticket #24 called the real Claude service.
+Run 127 is the run of the integration branch after the merge of ticket #24.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -213,6 +215,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 96, ticket #18 after the merge | All four | Passed. Run 97 changed only the expectation of one test of the normal run |
 | Run 101, ticket #19 of increment B | All four | Passed. See "Increment B — the facts of the jobs go to the model (ticket #19)" |
 | Run 125, ticket #24 of increment B | All four | Passed. See "Increment B — the low fuel notice (ticket #24)" |
+| Run 127, tickets #20 and #24 after the merge | All four | Passed |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".

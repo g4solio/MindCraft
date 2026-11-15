@@ -42,7 +42,8 @@ public final class Notices {
     }
 
     /**
-     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and each one-time warning: a long wait.
+     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and each one-time warning: a long wait
+     * and low fuel.
      * The rule reads the kind of the entry (D41, decision 5).
      * A change that a request made is not selected: a pause, a resume or a cancellation does not come back to the owner as a notice.
      * The other changes to WAITING are not selected: the ordinary cycle of a stock job is silent.
@@ -57,6 +58,11 @@ public final class Notices {
         return "job " + id + " on robot #" + robot;
     }
 
+    /** The trips that a fuel level gives, in words: "about 4 trips". */
+    static String trips(int trips) {
+        return "about " + trips + (trips == 1 ? " trip" : " trips");
+    }
+
     /** The text with a capital first letter, for the start of a sentence. */
     static String capital(String text) {
         return Character.toUpperCase(text.charAt(0)) + text.substring(1);
@@ -67,6 +73,8 @@ public final class Notices {
         String subject = capital(job(entry.job(), entry.robot())) + " (" + MindRuntime.itemName(entry.item())
             + " from '" + entry.from() + "' to '" + entry.to() + "')";
         if (entry.kind() == Kind.LONG_WAIT) return subject + longWait(entry);
+        // The fuel level and the trips of the entry. No remedy (D42, point 12).
+        if (entry.kind() == Kind.LOW_FUEL) return subject + " has little fuel: " + entry.fuel() + ", " + trips(entry.trips()) + " between its stations.";
         return switch (entry.state()) {
             case BLOCKED -> subject + switch (entry.cause()) {
                 case OUT_OF_FUEL -> " is blocked: the robot has no fuel.";

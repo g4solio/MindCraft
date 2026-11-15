@@ -90,11 +90,12 @@ public final class Uno {
          * The facts of one job: the part of its account that goes to the model. JobAccount builds them (D42, point 2).
          * The model does not get an uncertain number (D32). Such a number is null, and a sentence of "uncertain" says which value
          * is not given, and why (D42, point 3). "Still to carry" and "above the reserve" are derived numbers: the model does not
-         * calculate (D42, point 4). The age of an observation is in words.
+         * calculate (D42, point 4). The age of an observation is in words. The fuel level and the trips that it gives between
+         * the two docks are the values of the last contact of the robot with an active job (D42, point 19). The trips are a derived number too.
          */
         public record Facts(int job, int robot, String module, String item, String from, String to, int quantity, int reserve,
                             State state, Cause cause, Integer delivered, Integer onBoard, Stock source, Stock destination,
-                            Integer stillToCarry, Integer aboveReserve, List<String> uncertain) {
+                            Integer stillToCarry, Integer aboveReserve, Integer fuel, Integer trips, List<String> uncertain) {
         }
 
         /** An observed stock: the count, and the age of the observation in words, for example "12 min ago". */
@@ -139,6 +140,8 @@ public final class Uno {
                 put(item, "destinationStock", job.destination());
                 put(item, "stillToCarry", job.stillToCarry());
                 put(item, "aboveReserve", job.aboveReserve());
+                put(item, "fuel", job.fuel());
+                put(item, "fuelForTrips", job.trips());
                 JsonArray uncertain = new JsonArray();
                 job.uncertain().forEach(uncertain::add);
                 item.add("uncertain", uncertain);

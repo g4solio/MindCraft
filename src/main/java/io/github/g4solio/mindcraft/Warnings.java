@@ -13,6 +13,9 @@ import java.util.Set;
  * The long wait is the first kind. Its condition is a wait of LONG_WAIT ticks without an interruption.
  * MindRuntime.checkWait checks the condition. The end of the wait, in MindRuntime.set, ends it.
  * <p>
+ * Low fuel is the second kind (D42, points 11 and 12). Its condition is a fuel level below the fuel of LOW_FUEL_TRIPS trips.
+ * MindRuntime.checkFuel checks the condition and its end at each contact of the robot with an active job.
+ * <p>
  * The record of the job saves the given warnings. Thus a save and a load, or a restart, give no second warning.
  */
 final class Warnings {

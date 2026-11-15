@@ -59,6 +59,10 @@ record JobAccount(Job job, boolean running, long now) {
             case RECOVERY -> "I cannot say how it went. Recorded reason: " + job.reason + ". You decide whether to resume or cancel. ";
         });
         if (job.recoveries > 0) text.append("After a recovery the totals can be inexact. ");
+        // The level of the last contact with an active job (D42, point 19). A turtle that needs no fuel has none.
+        if (job.fuel != MindRuntime.UNKNOWN) {
+            text.append("My fuel level is ").append(job.fuel).append(": ").append(Notices.trips(job.trips)).append(" between the stations. ");
+        }
         text.append("Last observations: ").append(from).append(' ').append(seen(job.fromSeen, job.fromSeenAt))
             .append(", ").append(to).append(' ').append(seen(job.toSeen, job.toSeenAt)).append(". ");
         // The state of the link is not the state of the job. Old data must not look like current data.
@@ -118,15 +122,17 @@ record JobAccount(Job job, boolean running, long now) {
      * <ul>
      * <li>RECOVERY: the delivered total, the load on board and the stocks. The sentence gives the cause.</li>
      * <li>After a recovery: the delivered total.</li>
-     * <li>A robot that is not running, or that is silent for more than SILENT_TICKS: the load on board and the stocks.
+     * <li>A robot that is not running, or that is silent for more than SILENT_TICKS: the load on board, the stocks and the fuel.
      * They are the last recorded data, not the current state (T21). This holds in each state of the job.</li>
      * <li>An observation older than OLD_TICKS: that stock.</li>
      * </ul>
-     * A derived number is not given when its number is not given. Ticket #24 adds the fuel level and the trips here.
+     * A derived number is not given when its number is not given. The fuel level and its trips are not uncertain in RECOVERY:
+     * the runtime reads the level from the turtle (D42, point 19). A turtle that needs no fuel has no level.
      */
     Uno.Context.Facts facts() {
         List<String> uncertain = new ArrayList<>();
-        boolean recovery = job.state == State.RECOVERY, delivered = !recovery && job.recoveries == 0, current = !recovery && running && !silent();
+        boolean recovery = job.state == State.RECOVERY, delivered = !recovery && job.recoveries == 0, linked = running && !silent(),
+            current = !recovery && linked, fuel = linked && job.fuel != MindRuntime.UNKNOWN;
         if (recovery) {
             uncertain.add("The result of the job is uncertain" + switch (job.cause) {
                 case LOAD_DIFFERS -> ": the load in the robot differs from the record";
@@ -138,9 +144,9 @@ record JobAccount(Job job, boolean running, long now) {
             uncertain.add("After a recovery the delivered total can be inexact. Not given: the delivered total.");
         }
         if (!running) {
-            uncertain.add("The robot is not running or not loaded. Not given: the load on board and the stocks.");
+            uncertain.add("The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel.");
         } else if (silent()) {
-            uncertain.add("The robot has not contacted the server for a while. Not given: the load on board and the stocks.");
+            uncertain.add("The robot has not contacted the server for a while. Not given: the load on board, the stocks and the fuel.");
         }
         Uno.Context.Stock source = current ? stock(job.from, job.fromSeen, job.fromSeenAt, uncertain) : null;
         Uno.Context.Stock destination = current ? stock(job.to, job.toSeen, job.toSeenAt, uncertain) : null;
@@ -150,7 +156,7 @@ record JobAccount(Job job, boolean running, long now) {
         Integer aboveReserve = source == null ? null : Math.max(0, source.count() - job.reserve);
         return new Uno.Context.Facts(job.id, job.robot, job.behaviour.id, MindRuntime.itemName(job.item), job.from, job.to, job.quantity,
             job.reserve, job.state, job.cause, delivered ? job.delivered : null, current ? job.carried : null, source, destination,
-            toCarry, aboveReserve, List.copyOf(uncertain));
+            toCarry, aboveReserve, fuel ? job.fuel : null, fuel ? job.trips : null, List.copyOf(uncertain));
     }
 
     /**
@@ -210,6 +216,7 @@ record JobAccount(Job job, boolean running, long now) {
             + "\n  robot: " + (running ? "running" : "not running or not loaded")
             + ", last contact: " + (j.lastContact == MindRuntime.UNKNOWN ? "none since server start" : seconds(j.lastContact) + " s ago")
             + ", executor: " + (j.executor.isEmpty() ? "none" : j.executor)
+            + "\n  fuel: " + (j.fuel == MindRuntime.UNKNOWN ? "unknown" : j.fuel + ", " + Notices.trips(j.trips) + " between the stations")
             + "\n  last operation: " + (j.lastOp.isEmpty() ? "none" : j.lastOp);
     }
 

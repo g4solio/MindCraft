@@ -92,6 +92,15 @@ import java.util.stream.Stream;
  * - said(sequence, server, player, cases, after): requests with the answers of a provider of the test, and a check of each answer of Uno.
  * - listen(), NOTICES, notices(owner), noticesAbout(job, robot), subject(rig, job): the notices that a test reads.
  * - states(runtime, actor, jobId): the diary of a job, as a list of states.
+ * - shutDown(server, computerId): a wait step that turns a computer off. See CODING_STANDARDS.md for the rules of a test.
+ *
+ * The sections of this file, in their order. Each starts with a line "// --- " and its name:
+ * S1: transport; S2: keep stock; S2: Uno; Findings of the code review of 2026-11; Increment A: limits on the model calls (D33);
+ * Increment A: the job diary and the notices; Increment A: a notice for a long wait; Increment B: the low fuel notice;
+ * Increment A: the summary at an opening; Increment A: corrections of the code review; Increment B: the harness of the measurement;
+ * S0: probes of the Lua execution model.
+ * The other tests of increment B start with "b_". Each sits next to the test that it extends. For example, the adoption and the
+ * replacement are in "S1: transport", and the facts, the voice and the record of a request are in "S2: Uno".
  */
 // ponytail: the tests are in the main source set and go into the mod jar. Move them before a public release.
 @GameTestHolder(MindCraft.MOD_ID)
@@ -566,6 +575,7 @@ public class MindCraftTests {
         BlockPos obstacle = new BlockPos(3, 1, 1);
         helper.setBlock(obstacle, Blocks.STONE);
         BlockPos[] stop = new BlockPos[1];
+        long[] changed = new long[1];
         rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> check(rig.job().state != State.RUNNING, rig.describe()))
@@ -573,10 +583,11 @@ public class MindCraftTests {
                 rig.state(State.WAITING);
                 check(rig.job().cause == Cause.PATH_OBSTRUCTED, rig.describe());
                 stop[0] = rig.robot().turtle.getPosition();
+                changed[0] = rig.level.getGameTime();
                 rig.runtime.control(rig.actor, rig.id, "pause");
             })
-            // More than one wait interval: the robot makes its next attempt, sees the pause and stops.
-            .thenIdle(140)
+            // The robot makes its next attempt and sees the pause. The test waits for that contact, not for a number of ticks.
+            .thenWaitUntil(() -> check(rig.job().lastContact > changed[0], "the robot did not see the pause yet: " + rig.describe()))
             .thenExecute(() -> {
                 rig.state(State.PAUSED);
                 helper.setBlock(obstacle, Blocks.AIR);
@@ -589,8 +600,11 @@ public class MindCraftTests {
                 rig.runtime.control(rig.actor, rig.id, "resume");
             })
             .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().cause == Cause.PATH_OBSTRUCTED, rig.describe()))
-            .thenExecute(() -> rig.runtime.control(rig.actor, rig.id, "cancel"))
-            .thenIdle(140)
+            .thenExecute(() -> {
+                changed[0] = rig.level.getGameTime();
+                rig.runtime.control(rig.actor, rig.id, "cancel");
+            })
+            .thenWaitUntil(() -> check(rig.job().lastContact > changed[0], "the robot did not see the cancellation yet: " + rig.describe()))
             .thenExecute(() -> {
                 rig.state(State.CANCELLED);
                 helper.setBlock(obstacle, Blocks.AIR);
@@ -960,11 +974,16 @@ public class MindCraftTests {
     public static void t14_pause(GameTestHelper helper) {
         Rig rig = new Rig(helper, "t14a", 64, 1000);
         BlockPos[] stop = new BlockPos[1];
+        long[] changed = new long[1];
         rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> rig.carried(24))
-            .thenExecute(() -> rig.runtime.control(rig.actor, rig.id, "pause"))
-            .thenIdle(30)
+            .thenExecute(() -> {
+                changed[0] = rig.level.getGameTime();
+                rig.runtime.control(rig.actor, rig.id, "pause");
+            })
+            // The first contact after the pause: the robot has seen it. The robot runs in real time, thus the test waits for the contact.
+            .thenWaitUntil(() -> check(rig.job().lastContact > changed[0], "the robot did not see the pause yet: " + rig.describe()))
             .thenExecute(() -> stop[0] = rig.robot().turtle.getPosition())
             .thenIdle(40)
             .thenExecute(() -> {
@@ -986,11 +1005,16 @@ public class MindCraftTests {
     public static void t14_cancel(GameTestHelper helper) {
         Rig rig = new Rig(helper, "t14b", 64, 1000);
         BlockPos[] stop = new BlockPos[1];
+        long[] changed = new long[1];
         rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> rig.carried(24))
-            .thenExecute(() -> rig.runtime.control(rig.actor, rig.id, "cancel"))
-            .thenIdle(30)
+            .thenExecute(() -> {
+                changed[0] = rig.level.getGameTime();
+                rig.runtime.control(rig.actor, rig.id, "cancel");
+            })
+            // The first contact after the cancellation: the robot has seen it. The robot runs in real time, thus the test waits for the contact.
+            .thenWaitUntil(() -> check(rig.job().lastContact > changed[0], "the robot did not see the cancellation yet: " + rig.describe()))
             .thenExecute(() -> stop[0] = rig.robot().turtle.getPosition())
             .thenIdle(40)
             .thenExecute(() -> {

@@ -36,7 +36,7 @@ x:  0          1      2        3    4      5
 
 ## Runs
 
-Work in parallel: each ticket writes its runs in a section of its own, at the end of the file. The numbers of this table come at the merge.
+Work in parallel: each ticket writes its runs in a section of its own, before `## Guardrail`. A ticket gives its runs the label of the ticket, for example `#16.1` and `#16.2`. It adds no row to this table. At each merge, the coordinator adds the run of the integration branch to this table. The runs of increment B, 85 to 166, are older than this rule.
 
 | No. | Result | Cause of the failures |
 | --- | --- | --- |
@@ -184,6 +184,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 164 | 108 of 108 | None. The final code of increment B: the integration branch after the merge of the corrections of the code review. Server line: `All 108 required tests passed :)` |
 | 165 | 107 of 108 | The CI on GitHub, the run of the push of `4396f7d`. `a_diary_of_a_job` failed: "expected two attempts or more". The test waited 140 ticks for a second attempt of the robot, and the robot runs in real time. The run of the pull request on the same commit passed. A test of increment A, not changed by increment B |
 | 166 | 108 of 108 | None. `a_diary_of_a_job` waits for the second attempt of the robot, not for 140 ticks. Server line: `All 108 required tests passed :)` |
+| 167 | 108 of 108 | None. The retrospective of increment B: `t05_pause_and_cancel_during_the_wait`, `t14_pause` and `t14_cancel` wait for the first contact of the robot after the change, not for a number of ticks. Server line: `All 108 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -213,6 +214,7 @@ Runs 155 to 157 are the runs of ticket #28, on the integration branch at `8b0d3e
 Runs 158 to 163 are the runs of the corrections of the code review of increment B, on the branch `b/review-fixes` from `9722178`.
 Run 164 is the run of the final code of increment B, on the integration branch after the merge of the corrections. The four restart phases passed after it.
 Run 165 is a run of the CI on GitHub, and run 166 is its correction. The correction changed only a test of the normal run: the four restart phases of run 164 still apply to the code of the mod.
+Run 167 is the run after the retrospective of increment B. It changed only tests of the normal run and the rules of `checkRules`.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -265,11 +267,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
 
-Lesson from run 2: the exit code is not sufficient. The log must contain the line `GAME TESTS COMPLETE`.
-Lesson from run 14: that line is not sufficient either. The number of tests and the line `Enabled Gametest Namespaces` say which tests ran.
-Lesson from run 21: a test that passed 12 times can hide a defect that depends on one tick. A test must build such a moment on purpose.
-Lesson from the restart test after run 25: the normal run does not contain the restart test. A change of the transfer rules needs the four restart phases too. One case of them is now also in the normal run.
-Lesson from run 28: a test must not depend on which thread is faster. A fast provider can answer inside the call that sends the request.
+The lessons of runs 2, 14, 21, 25 and 28 are rules now. The rules of the tests are in `CODING_STANDARDS.md`. The rule of the restart phases is in `CLAUDE.md`.
 
 The real Claude service was not called between run 19 and run 76. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases. Runs 76, 78 and 81 called it, with `-Plive`. No run of increment B called it: not runs 85 to 157, and not the restart phases.
 
@@ -2071,6 +2069,7 @@ Date: 2026-11-14. See D39.
 | `gradlew checkRules` on the files of the repository | Static check | Passed |
 | `gradlew checkRules` with probe files made for the check, then deleted: a tracked file in `run-gametest`, a text in the form of an API key, an email address, an import of `dan200.computercraft.shared`, an assignment of `Uno.provider` in a test class, and a local path in three forms (a drive with a backslash, a drive with a slash, a home folder) | Static check | Each rule failed on its probe, as expected |
 | The workflow `.github/workflows/check.yml`, first run, on the commit `1e83bf4` | Static check, then in the game, automatic, on a GitHub runner (Ubuntu, Temurin 17) | Passed in about 7 minutes. `check` passed. The normal run: "All 81 required tests passed". The four restart phases passed |
+| `gradlew checkRules` after the retrospective of increment B, with two probe files made for the check, then deleted: a document with a sentence of 50 words and a table row of 60 words, and a test class with a `computercraft shutdown` command | Static check | Each new rule failed on its probe: "a sentence of more than 45 words" on the sentence, not on the table row, and "a computercraft shutdown outside MindCraftTests.shutDown". The files of the repository pass |
 
 ## Manual test in the game
 

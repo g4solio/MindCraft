@@ -132,3 +132,32 @@ tasks.named('jar', Jar).configure {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+// The rules of CLAUDE.md that a program can check. `gradlew check` runs them, and the CI runs `check` at each push.
+// The files are the files that a commit can hold: the tracked files and the new files that Git does not ignore.
+tasks.register('checkRules') {
+    group = 'verification'
+    description = 'Checks the mechanical rules of CLAUDE.md.'
+    doLast {
+        def paths = 'git ls-files --cached --others --exclude-standard'.execute(null, projectDir).text.readLines()
+        def problems = []
+        paths.findAll { it ==~ /(build|run|run-gametest|\.gradle|out|bin)\/.*/ }.each { problems << "$it: a generated file" }
+        paths.findAll { !(it ==~ /.*\.(jar|png|nbt)/) && file(it).isFile() }.each { path ->
+            def text = file(path).getText('UTF-8')
+            if (text =~ /sk-ant-[\w-]{8,}/) problems << "$path: an API key"
+            // A dollar-slashy string: the backslashes reach the regex as they are written.
+            if (text =~ $/\b[A-Za-z]:[\\/][A-Za-z]|/home/\w|/Users/\w/$) problems << "$path: a local path"
+            if ((text =~ /[\w.+-]+@[\w-]+\.[\w.-]+/).findAll().any { !(it ==~ /.*@users\.noreply\.github\.com|noreply@anthropic\.com/) }) {
+                problems << "$path: an email address"
+            }
+            if (!path.endsWith('.java')) return
+            if (text =~ /\bdan200\.computercraft\.(?!api\.)\w/) problems << "$path: a class of CC: Tweaked outside dan200.computercraft.api"
+            // A test that sets the provider of the server must put it back, also after a failed check. Only withServerProvider does it.
+            def outside = text.replaceAll(/(?s)withServerProvider\([^)]*\)\s*\{.*?\n    \}/, '')
+            if (path.endsWith('Tests.java') && outside =~ /\bUno\.provider\s*=(?!=)/) problems << "$path: Uno.provider set outside withServerProvider"
+        }
+        if (problems) throw new GradleException("The rules of CLAUDE.md:\n" + problems.join('\n'))
+    }
+}
+
+tasks.named('check') { dependsOn 'checkRules' }

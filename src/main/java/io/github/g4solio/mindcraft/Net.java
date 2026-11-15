@@ -43,8 +43,15 @@ final class Net {
         }, buffer -> new Action(buffer.readUtf(64), buffer.readUtf(4096)), Net::onAction, Optional.of(NetworkDirection.PLAY_TO_SERVER));
     }
 
+    /** A new view after an action of the screen. It is not an opening. */
     static void sendView(ServerPlayer player) {
         String view = UnoView.build(MindRuntime.get(player.server), MindCraft.actor(player), player.serverLevel().getGameTime());
+        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new View(view));
+    }
+
+    /** The player opens a contact point: the use of the tablet or the click on a projector. Uno gives the summary (D30). */
+    static void open(ServerPlayer player) {
+        String view = UnoView.open(MindRuntime.get(player.server), MindCraft.actor(player), player.server.overworld().getGameTime());
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new View(view));
     }
 

@@ -1,0 +1,42 @@
+# The guardrail of the repository: at each push and pull request, the rules of CLAUDE.md, the normal in-game run
+# and the four phases of the server restart test. The test with the real Claude service never runs here: it needs a key.
+name: Check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Rules of CLAUDE.md and compilation
+        run: ./gradlew check
+
+      - name: Normal in-game run
+        run: ./gradlew runGameTestServer
+
+      # The phases share the world in run-gametest. Thus they run in this order, in one step. See RestartTests.java.
+      - name: Server restart test
+        run: |
+          for phase in stop check crash check-crash; do
+            ./gradlew runGameTestServer -PrestartPhase=$phase
+          done
+
+      - name: Logs of the game server
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-server-logs
+          path: run-gametest/logs

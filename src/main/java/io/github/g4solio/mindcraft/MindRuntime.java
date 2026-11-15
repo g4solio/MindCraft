@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
@@ -17,7 +18,14 @@ import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.registries.ForgeRegistries;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -47,12 +55,18 @@ public class MindRuntime extends SavedData {
     }
 
     /**
-     * Why a job waits. The runtime records the cause together with the WAITING state, from what it observed in that tick.
+     * Why a job waits or is blocked. The runtime records the cause together with the state, from what it observed in that tick.
      * Uno reads this value. It does not guess the cause from the load or from the text of the reason.
+     * D34: a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
      */
     public enum Cause {
-        /** No recorded cause: the job does not wait, or an older version of the mod wrote the record. */
+        /**
+         * No recorded cause: the job does not wait and is not blocked, an older version of the mod wrote the record,
+         * or a module reported an impediment of an unknown kind. Then the recorded reason is all that Uno knows.
+         */
         NONE,
+
+        // Causes of WAITING.
         /** The source has no item above the reserve. */
         SOURCE_AT_RESERVE,
         /** The source has items above the reserve and the robot has room, but the source released nothing. */
@@ -62,8 +76,91 @@ public class MindRuntime extends SavedData {
         /** The destination did not accept the whole load. */
         DESTINATION_FULL,
         /** The area of the inventory is not loaded. Its stock is unknown. */
-        SOURCE_UNLOADED, DESTINATION_UNLOADED
+        SOURCE_UNLOADED, DESTINATION_UNLOADED,
+        /** The robot cannot move. It tries again, and the job works again at the first move that succeeds. */
+        PATH_OBSTRUCTED,
+
+        // Causes of BLOCKED.
+        /** The robot cannot move and has no fuel item. The owner gives fuel and resumes. */
+        OUT_OF_FUEL,
+        /** The robot is at the dock, but the station has no inventory at its position. */
+        SOURCE_NO_INVENTORY, DESTINATION_NO_INVENTORY,
+        /** A transport reached its quantity with a load on board: the owner lowered the quantity after the pickup. */
+        LOAD_ABOVE_QUANTITY
     }
+
+    /**
+     * What a job does with its quantity (D16). Each behaviour has its rules: the need, the limit of a delivery and the end.
+     * The record keeps its ID: the name of its Lua module. The third behaviour of D35 comes here.
+     */
+    public enum Behaviour {
+        /** Carries the quantity one time. Then the job ends. */
+        TRANSPORT(MindRuntime.TRANSPORT, true) {
+            @Override
+            int need(Job job) {
+                return Math.max(0, job.quantity - job.delivered - job.carried);
+            }
+
+            @Override
+            int room(Job job, int stock) {
+                return job.quantity - job.delivered;
+            }
+
+            @Override
+            boolean reached(Job job) {
+                return job.delivered >= job.quantity;
+            }
+        },
+        /** Keeps at least the quantity in the destination, and works again at the next need. */
+        KEEP_STOCK(MindRuntime.KEEP_STOCK, false) {
+            @Override
+            int need(Job job) {
+                return job.toSeen == UNKNOWN ? UNKNOWN : Math.max(0, job.quantity - job.toSeen - job.carried);
+            }
+
+            @Override
+            int room(Job job, int stock) {
+                return job.quantity - stock;
+            }
+
+            @Override
+            boolean reached(Job job) {
+                return job.toSeen >= job.quantity;
+            }
+        };
+
+        public final String id;
+        /** At its quantity a job that ends is DONE. A job that does not end is SATISFIED, and keeps its robot. */
+        final boolean ends;
+
+        Behaviour(String id, boolean ends) {
+            this.id = id;
+            this.ends = ends;
+        }
+
+        /**
+         * The quantity that the robot must still bring to the destination. The load in the robot counts as in transit. It is not stock.
+         * UNKNOWN when the rule needs an observation of the destination first.
+         */
+        abstract int need(Job job);
+
+        /** The most that one delivery can add, with the stock of the destination in the same tick. It can be zero or less. */
+        abstract int room(Job job, int stock);
+
+        /** The quantity of the job is reached. */
+        abstract boolean reached(Job job);
+
+        /** The behaviour with this ID, or null. */
+        static Behaviour of(String id) {
+            for (Behaviour behaviour : values()) {
+                if (behaviour.id.equals(id)) return behaviour;
+            }
+            return null;
+        }
+    }
+
+    /** The kinds of impediment that a Lua module reports. The runtime decides the state from the kind. See impediment(). */
+    static final String OBSTACLE = "obstacle", NO_FUEL = "fuel";
 
     /** The player or console that makes a request. The server decides this value, not the client. */
     public record Actor(UUID id, boolean admin) {
@@ -102,7 +199,9 @@ public class MindRuntime extends SavedData {
     public static class Job {
         public int id;
         public UUID owner;
-        public String module = TRANSPORT;
+        /** The robot of the job: its key in the record. Not saved: the load takes it from the key. */
+        public int robot = UNKNOWN;
+        public Behaviour behaviour = Behaviour.TRANSPORT;
         public String from, to;
         public Item item;
         public int quantity, reserve;
@@ -127,20 +226,77 @@ public class MindRuntime extends SavedData {
         public int recoveries;
         /** Game time of the last call from the robot. Not saved. */
         public long lastContact = UNKNOWN;
+        /** Game time of the start of the current wait. UNKNOWN when the job does not wait. A change of the cause keeps it (D30). */
+        public long waitingSince = UNKNOWN;
+        /** The current wait has its long-wait entry in the diary. One for each uninterrupted wait (D30). */
+        public boolean longWait;
 
         public boolean keepStock() {
-            return module.equals(KEEP_STOCK);
+            return behaviour == Behaviour.KEEP_STOCK;
         }
 
-        /**
-         * The quantity that the robot must still bring to the destination.
-         * The load in the robot counts as in transit. It is not stock.
-         * UNKNOWN for "keep_stock" until a robot observes the destination.
-         */
+        /** See Behaviour.need. */
         public int need() {
-            if (!keepStock()) return Math.max(0, quantity - delivered - carried);
-            return toSeen == UNKNOWN ? UNKNOWN : Math.max(0, quantity - toSeen - carried);
+            return behaviour.need(this);
         }
+
+        /** The job ends here: its behaviour ends, the quantity is reached and nothing is on board. A job is never DONE with a load. */
+        boolean complete() {
+            return behaviour.ends && carried == 0 && behaviour.reached(this);
+        }
+
+        /** The robot took items from the source. "Stock" is the count of the source before the transfer, in the same tick. */
+        void took(int moved, int stock, long now) {
+            taken += moved;
+            carried += moved;
+            fromSeen = stock - moved;
+            fromSeenAt = now;
+        }
+
+        /** The robot gave items to the destination. "Stock" is the count of the destination after the transfer, in the same tick. */
+        void gave(int moved, int stock, long now) {
+            delivered += moved;
+            carried -= moved;
+            observed(stock, now);
+        }
+
+        /** The robot counted the destination from its dock. */
+        void observed(int stock, long now) {
+            toSeen = stock;
+            toSeenAt = now;
+        }
+
+        /** A transfer of the robot, also of zero items. Only a transfer that moved items changes the time of the last transfer. */
+        void operated(String kind, int moved, long now) {
+            ops++;
+            lastOp = "#" + ops + " " + kind + " " + moved + " at tick " + now;
+            if (moved > 0) lastOpAt = now;
+        }
+    }
+
+    /**
+     * One line of the diary: a change of the state of a job, or of the cause of a wait or of a block (D31).
+     * The number gives the order of the entries of all owners. It grows at each entry, also when the game time goes back after a crash
+     * (D08.1). Thus the summary finds the entries after an opening by the number, not by the time (D30).
+     * The entry carries what its sentence needs, because the record of the job can be gone: a new job replaces it on the robot.
+     * The quantities are the values of the job at that moment.
+     * "Requested" says that the owner of the job asked for the change: a start, a pause, a resume or a cancellation.
+     * The other changes come from what the runtime observed, or from a request of an operator for the job of a different player.
+     * "Long wait" marks the other kind of entry: the job is WAITING for LONG_WAIT ticks without an interruption (D30).
+     * Its state is WAITING, and its cause is the cause at that moment.
+     */
+    public record Entry(long number, long time, UUID owner, int job, int robot, String from, String to, Item item, State state, Cause cause,
+                        String reason, boolean requested, int quantity, int reserve, int delivered, int carried, boolean longWait) {
+    }
+
+    /** The ticks of game time in WAITING, without an interruption, that make a long wait (D30): 5 minutes. An initial value. */
+    static final int LONG_WAIT = 6000;
+
+    /**
+     * What the runtime removed from a diary: the number of entries, and the game time and the number of the newest of them.
+     * The time and the number are UNKNOWN if none.
+     */
+    public record Forgotten(int entries, long until, long newest) {
     }
 
     public final List<Place> places = new ArrayList<>();
@@ -149,12 +305,28 @@ public class MindRuntime extends SavedData {
     public final Map<Integer, UUID> robots = new TreeMap<>();
     /** Computer ID to the current or last job. A robot has one job at most. */
     public final Map<Integer, Job> jobs = new TreeMap<>();
+    /** The diary of all owners, the oldest entry first (D31). It keeps the entries of a job after a new job replaced it. */
+    private final List<Entry> diary = new ArrayList<>();
+    /** The entries for each owner at most (D31). An initial value, to review after the play session. */
+    static final int DIARY_LIMIT = 200;
+    /** Owner to what the runtime removed from the diary of that owner. */
+    private final Map<UUID, Forgotten> forgotten = new HashMap<>();
+    /** The number of the next diary entry. */
+    private long nextEntry;
+    /**
+     * Player to the number of the first diary entry after the last opening of a contact point by that player (D30).
+     * Minecraft saves it with the world.
+     */
+    private final Map<UUID, Long> openings = new HashMap<>();
     private int nextJobId = 1;
     /** True after the comparison of the record with the age of the world. Not saved. */
     private boolean ageChecked;
+    /** The server of this record, for the game time of the diary. Not saved. Null in a copy that load() made outside the server. */
+    private MinecraftServer server;
 
     public static MindRuntime get(MinecraftServer server) {
         MindRuntime runtime = server.overworld().getDataStorage().computeIfAbsent(MindRuntime::load, MindRuntime::new, MindCraft.MOD_ID);
+        runtime.server = server;
         if (!runtime.ageChecked) {
             runtime.ageChecked = true;
             long now = server.overworld().getGameTime();
@@ -235,9 +407,7 @@ public class MindRuntime extends SavedData {
     /** The ordinary validation of an order. Each source of orders goes through it: a command, a test or Uno. */
     public RobotApi check(Actor actor, Order order) {
         int robotId = order.robot();
-        if (!order.module().equals(TRANSPORT) && !order.module().equals(KEEP_STOCK)) {
-            throw new Refusal("Unknown module '" + order.module() + "'.");
-        }
+        if (Behaviour.of(order.module()) == null) throw new Refusal("Unknown module '" + order.module() + "'.");
         requireRobot(actor, robotId);
         Job current = jobs.get(robotId);
         if (current != null && current.state.open()) {
@@ -266,13 +436,16 @@ public class MindRuntime extends SavedData {
         Job job = new Job();
         job.id = nextJobId++;
         job.owner = actor.id();
-        job.module = order.module();
+        job.robot = order.robot();
+        job.behaviour = Behaviour.of(order.module());
         job.from = order.from();
         job.to = order.to();
         job.item = order.item();
         job.quantity = order.quantity();
         job.reserve = order.reserve();
         jobs.put(order.robot(), job);
+        // The first entry of the job: it is RUNNING from now on.
+        write(job, true, false, now());
         setDirty();
         robot.wake();
         return job;
@@ -286,16 +459,23 @@ public class MindRuntime extends SavedData {
      * A lower quantity changes nothing that the robot already did: no item goes back.
      * From the change on, the robot delivers only up to the new quantity. A load above it stays on board. See RobotApi.give.
      */
-    public void update(Actor actor, int robotId, int jobId, int expectedRevision, int quantity, int reserve) {
-        Job job = openJob(actor, robotId, jobId);
-        if (job.revision != expectedRevision) throw new Refusal("Job " + job.id + " changed. Read it again.");
-        requireQuantities(quantity, reserve);
+    public Job update(Actor actor, int robotId, int jobId, int expectedRevision, int quantity, int reserve) {
+        Job job = checkUpdate(actor, robotId, jobId, expectedRevision, quantity, reserve);
         job.quantity = quantity;
         job.reserve = reserve;
         job.revision++;
         setDirty();
         RobotApi robot = RobotApi.live(robotId);
         if (robot != null) robot.wake();
+        return job;
+    }
+
+    /** The validation of update(), without the change. Uno checks a change with it before the proposal. update() checks again. */
+    Job checkUpdate(Actor actor, int robotId, int jobId, int expectedRevision, int quantity, int reserve) {
+        Job job = openJob(actor, robotId, jobId);
+        if (job.revision != expectedRevision) throw new Refusal("Job " + job.id + " changed. Read it again.");
+        requireQuantities(quantity, reserve);
+        return job;
     }
 
     /** For a command that names only the robot: the request is about the job that the robot has now. */
@@ -325,19 +505,36 @@ public class MindRuntime extends SavedData {
         control(actor, robotId, currentJob(robotId), action);
     }
 
-    /** Pause, resume or cancel of the named job. The robot finishes its current single move or transfer first. */
-    public void control(Actor actor, int robotId, int jobId, String action) {
+    /** The validation of control(), without the change. Uno checks a resume or a cancellation with it before the proposal. control() checks again. */
+    Job checkControl(Actor actor, int robotId, int jobId, String action) {
         Job job = openJob(actor, robotId, jobId);
-        RobotApi robot = RobotApi.live(robotId);
         switch (action) {
             case "pause" -> {
                 if (!job.state.active()) throw new Refusal("Job " + job.id + " is not running (" + job.state + ").");
-                set(job, State.PAUSED, "paused by the owner");
             }
-            // The load stays in the robot. The status shows it.
-            case "cancel" -> set(job, State.CANCELLED, "cancelled by the owner");
             case "resume" -> {
                 if (job.state.active()) throw new Refusal("Job " + job.id + " is already running.");
+            }
+            case "cancel" -> {
+            }
+            default -> throw new Refusal("Unknown action '" + action + "'.");
+        }
+        return job;
+    }
+
+    /**
+     * Pause, resume or cancel of the named job. The robot finishes its current single move or transfer first.
+     * A request of the owner gives no notice (spec #1). A request of an operator for the job of a different player can: the owner did not ask.
+     */
+    public void control(Actor actor, int robotId, int jobId, String action) {
+        Job job = checkControl(actor, robotId, jobId, action);
+        RobotApi robot = RobotApi.live(robotId);
+        boolean byOwner = actor.id().equals(job.owner);
+        switch (action) {
+            case "pause" -> set(job, State.PAUSED, Cause.NONE, "paused by the owner", byOwner);
+            // The load stays in the robot. The status shows it.
+            case "cancel" -> set(job, State.CANCELLED, Cause.NONE, "cancelled by the owner", byOwner);
+            case "resume" -> {
                 if (job.state == State.RECOVERY) {
                     // The owner accepts the observed load as the truth. The totals can be inexact after this.
                     if (robot == null) throw new Refusal("Robot #" + robotId + " is not running. The runtime cannot observe its load.");
@@ -353,11 +550,40 @@ public class MindRuntime extends SavedData {
                     job.lastOpAt = Math.min(job.lastOpAt, robot.now());
                     job.recoveries++;
                 }
-                set(job, !job.keepStock() && job.carried == 0 && job.delivered >= job.quantity ? State.DONE : State.RUNNING, "");
+                // A resume can complete the job: the owner accepted the observed load, and nothing is on board.
+                set(job, job.complete() ? State.DONE : State.RUNNING, Cause.NONE, "", byOwner);
             }
-            default -> throw new Refusal("Unknown action '" + action + "'.");
         }
         if (robot != null) robot.wake();
+    }
+
+    /** The diary entries that the actor owns, the oldest first. Only the owner and an operator read an entry, as for a job. */
+    public List<Entry> diary(Actor actor) {
+        return diary.stream().filter(entry -> actor.owns(entry.owner())).toList();
+    }
+
+    /** What the runtime removed from the diaries that the actor owns. */
+    public Forgotten forgotten(Actor actor) {
+        int entries = 0;
+        long until = UNKNOWN, newest = UNKNOWN;
+        for (Map.Entry<UUID, Forgotten> owner : forgotten.entrySet()) {
+            if (!actor.owns(owner.getKey())) continue;
+            entries += owner.getValue().entries();
+            until = Math.max(until, owner.getValue().until());
+            newest = Math.max(newest, owner.getValue().newest());
+        }
+        return new Forgotten(entries, until, newest);
+    }
+
+    /**
+     * The actor opens a contact point. The runtime records the number of the next diary entry for the actor.
+     * Returns the number that the opening before it recorded: the first entry after that opening.
+     * UNKNOWN at the first opening of the actor in this world.
+     */
+    public long recordOpening(Actor actor) {
+        Long last = openings.put(actor.id(), nextEntry);
+        setDirty();
+        return last == null ? UNKNOWN : last;
     }
 
     /** The status of a robot and its job, for a request of a player. Only the owner and an operator read it. */
@@ -372,18 +598,8 @@ public class MindRuntime extends SavedData {
 
     /** The whole record of a robot, without a check of the actor. A request of a player goes through status(). */
     String describe(int robotId, long now) {
-        Job j = jobs.get(robotId);
-        if (j == null) return "Robot #" + robotId + ": no job.";
-        return "Job " + j.id + " on robot #" + robotId + ": " + j.state + (j.reason.isEmpty() ? "" : " (" + j.reason + ")")
-            + "\n  " + (j.keepStock() ? "keep at least " : "") + j.quantity + " x " + itemName(j.item)
-            + " from '" + j.from + "' to '" + j.to + "', reserve " + j.reserve + ", revision " + j.revision
-            + "\n  taken " + j.taken + ", delivered " + j.delivered + ", on board " + j.carried + " (recorded)"
-            + (j.recoveries > 0 ? "\n  " + j.recoveries + " recovery. The totals can be inexact." : "")
-            + "\n  source stock: " + seen(j.fromSeen, j.fromSeenAt, now) + ", destination stock: " + seen(j.toSeen, j.toSeenAt, now)
-            + "\n  robot: " + (RobotApi.live(robotId) == null ? "not running or not loaded" : "running")
-            + ", last contact: " + (j.lastContact == UNKNOWN ? "none since server start" : (now - j.lastContact) + " ticks ago")
-            + ", executor: " + (j.executor.isEmpty() ? "none" : j.executor)
-            + "\n  last operation: " + (j.lastOp.isEmpty() ? "none" : j.lastOp);
+        Job job = jobs.get(robotId);
+        return job == null ? "Robot #" + robotId + ": no job." : JobAccount.of(job, now).describe();
     }
 
     /**
@@ -398,16 +614,138 @@ public class MindRuntime extends SavedData {
     }
 
     void set(Job job, State state, String reason) {
+        set(job, state, Cause.NONE, reason);
+    }
+
+    /**
+     * The one place where the state of a job changes. The cause belongs to the state: a new state without a cause has NONE.
+     * A change of the state or of the cause writes an entry in the diary. The same state with the same cause writes none:
+     * a robot that tries again reports the same state again, and only the reason can be new.
+     */
+    void set(Job job, State state, Cause cause, String reason) {
+        set(job, state, cause, reason, false);
+    }
+
+    /**
+     * As above. "Requested": a request of the owner makes the change, not an observation of the runtime. Such a change gives no notice.
+     * A wait starts when the job goes to WAITING from a different state. A change of the cause does not start it again. Each other state ends it.
+     */
+    private void set(Job job, State state, Cause cause, String reason, boolean requested) {
+        boolean changed = job.state != state || job.cause != cause;
+        if (state != State.WAITING) {
+            job.waitingSince = UNKNOWN;
+            job.longWait = false;
+        } else if (job.state != State.WAITING) {
+            job.waitingSince = now();
+            job.longWait = false;
+        }
         job.state = state;
         job.reason = reason;
-        job.cause = Cause.NONE;
+        job.cause = cause;
+        if (changed) write(job, requested, false, now());
         setDirty();
+    }
+
+    /** The game time of the overworld. 0 in a copy that load() made outside the server. */
+    private long now() {
+        return server == null ? 0 : server.overworld().getGameTime();
+    }
+
+    /**
+     * Writes the job as it is now in the diary, at the given game time. Above the limit, the oldest entries of the same owner go.
+     * Then the attention rule reads the entry: it can give a notice (D30). A copy that load() made outside the server gives none.
+     */
+    private void write(Job job, boolean requested, boolean longWait, long time) {
+        Entry entry = new Entry(nextEntry++, time, job.owner, job.id, job.robot, job.from, job.to, job.item, job.state, job.cause, job.reason,
+            requested, job.quantity, job.reserve, job.delivered, job.carried, longWait);
+        diary.add(entry);
+        forget(job.owner);
+        if (server != null) Notices.warn(server, entry);
+    }
+
+    /**
+     * The check of a long wait (D30). A job that is WAITING for LONG_WAIT ticks or more, without an interruption, gets one
+     * "long wait" entry, with the cause at this moment. Thus it gets one notice. A later check of the same wait writes nothing.
+     * "now" is the game time of the check. The server tick gives the current game time. A test gives a later moment.
+     */
+    void checkWait(Job job, long now) {
+        if (job.state != State.WAITING || job.longWait) return;
+        if (job.waitingSince == UNKNOWN || job.waitingSince > now) {
+            // A record of an older version has no start of the wait. In a world older than the record the start is in the future.
+            // In both cases the time of the wait starts now.
+            job.waitingSince = now;
+            setDirty();
+            return;
+        }
+        if (now - job.waitingSince < LONG_WAIT) return;
+        job.longWait = true;
+        write(job, false, true, now);
+        setDirty();
+    }
+
+    /** The check of a long wait for each job. The server tick calls it with the current game time. */
+    void checkWaits(long now) {
+        for (Job job : jobs.values()) checkWait(job, now);
+    }
+
+    /** Removes the oldest entries of the owner above the limit, and records what it removed. The entries of other owners stay. */
+    private void forget(UUID owner) {
+        int count = (int) diary.stream().filter(entry -> entry.owner().equals(owner)).count();
+        for (Iterator<Entry> entries = diary.iterator(); count > DIARY_LIMIT && entries.hasNext(); ) {
+            Entry old = entries.next();
+            if (!old.owner().equals(owner)) continue;
+            entries.remove();
+            count--;
+            Forgotten before = forgotten.getOrDefault(owner, new Forgotten(0, UNKNOWN, UNKNOWN));
+            forgotten.put(owner, new Forgotten(before.entries() + 1, Math.max(before.until(), old.time()), Math.max(before.newest(), old.number())));
+        }
+    }
+
+    /**
+     * Sets the state from the record, after a transfer or an observation that nothing refused.
+     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup.
+     * A job that does not end keeps that load for the next need. A job that ends cannot use it: it stops and the owner decides.
+     */
+    void settle(Job job) {
+        if (!job.behaviour.reached(job)) {
+            set(job, State.RUNNING, "");
+        } else if (!job.behaviour.ends) {
+            set(job, State.SATISFIED, "the destination has " + job.toSeen + ", the target is " + job.quantity
+                + (job.carried > 0 ? ", " + job.carried + " stay on board" : ""));
+        } else if (job.complete()) {
+            set(job, State.DONE, "");
+        } else {
+            blocked(job, Cause.LOAD_ABOVE_QUANTITY, "the quantity is " + job.quantity + " and " + job.delivered + " are delivered: "
+                + job.carried + " stay on board. Raise the quantity and resume, or cancel the job");
+        }
     }
 
     /** The job waits for a condition that can change without the owner. The cause is what the runtime observed. */
     void waiting(Job job, Cause cause, String reason) {
-        set(job, State.WAITING, reason);
-        job.cause = cause;
+        set(job, State.WAITING, cause, reason);
+    }
+
+    /** The job needs the hands of the owner. It continues only after a resume. */
+    void blocked(Job job, Cause cause, String reason) {
+        set(job, State.BLOCKED, cause, reason);
+    }
+
+    /**
+     * A Lua module reports an impediment that it cannot remove. The runtime decides the state from the kind (D34).
+     * A condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
+     * An unknown kind is a block without a cause. The reason keeps the kind: the cause cannot name it.
+     */
+    void impediment(Job job, String kind, String detail) {
+        switch (kind) {
+            case OBSTACLE -> waiting(job, Cause.PATH_OBSTRUCTED, detail);
+            case NO_FUEL -> blocked(job, Cause.OUT_OF_FUEL, detail);
+            default -> blocked(job, Cause.NONE, kind + ": " + detail);
+        }
+    }
+
+    /** The robot moved. A job that waited for a free path works again. The owner gives no resume. */
+    void moved(Job job) {
+        if (job.state == State.WAITING && job.cause == Cause.PATH_OBSTRUCTED) set(job, State.RUNNING, "");
     }
 
     private void requireRobot(Actor actor, int robotId) {
@@ -416,15 +754,42 @@ public class MindRuntime extends SavedData {
         if (!actor.owns(owner)) throw new Refusal("Robot #" + robotId + " is not yours.");
     }
 
-    private static String seen(int count, long at, long now) {
-        return count == UNKNOWN ? "unknown" : count + " (seen " + (now - at) + " ticks ago)";
-    }
-
     static String itemName(Item item) {
         return String.valueOf(ForgeRegistries.ITEMS.getKey(item));
     }
 
     // --- Persistence -------------------------------------------------------------------------------------------
+
+    /**
+     * Writes the record to the disk. The ordinary save of the world and flush() both call this method.
+     * The record goes to a temporary file in the same folder. One move then puts that file in the place of the record.
+     * Thus a stop of the process during the write leaves the earlier record or the new one on the disk, never a part of one.
+     * A failure leaves the earlier record, writes an error in the server log, and keeps the record dirty: the next save tries again.
+     * The content is the same as in SavedData.save(File) of Minecraft 1.20.1.
+     * Limit: the runtime does not force the data to the disk before the move. A stop of the operating system can still lose the write.
+     */
+    @Override
+    public void save(File file) {
+        if (!isDirty()) return;
+        CompoundTag root = new CompoundTag();
+        root.put("data", save(new CompoundTag()));
+        NbtUtils.addCurrentDataVersion(root);
+        Path target = file.toPath();
+        Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        try {
+            NbtIo.writeCompressed(root, temporary.toFile());
+            // On Windows the JDK uses MoveFileEx with MOVEFILE_REPLACE_EXISTING. On Linux it uses rename. Both replace the record.
+            Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
+            setDirty(false);
+        } catch (IOException e) {
+            try {
+                Files.deleteIfExists(temporary);
+            } catch (IOException cleanup) {
+                e.addSuppressed(cleanup);
+            }
+            MindCraft.LOGGER.error("MindCraft could not write its record to {}. The earlier record stays on the disk.", target, e);
+        }
+    }
 
     @Override
     public CompoundTag save(CompoundTag root) {
@@ -456,7 +821,7 @@ public class MindRuntime extends SavedData {
             CompoundTag t = new CompoundTag();
             t.putInt("id", j.id);
             t.putUUID("owner", j.owner);
-            t.putString("module", j.module);
+            t.putString("module", j.behaviour.id);
             t.putInt("revision", j.revision);
             t.putString("from", j.from);
             t.putString("to", j.to);
@@ -478,9 +843,47 @@ public class MindRuntime extends SavedData {
             t.putString("lastOp", j.lastOp);
             t.putLong("lastOpAt", j.lastOpAt);
             t.putInt("recoveries", j.recoveries);
+            t.putLong("waitingSince", j.waitingSince);
+            t.putBoolean("longWait", j.longWait);
             jobTags.put(robotId.toString(), t);
         });
         root.put("jobs", jobTags);
+        root.putLong("nextEntry", nextEntry);
+        ListTag diaryTags = new ListTag();
+        for (Entry e : diary) {
+            CompoundTag t = new CompoundTag();
+            t.putLong("number", e.number());
+            t.putLong("time", e.time());
+            t.putUUID("owner", e.owner());
+            t.putInt("job", e.job());
+            t.putInt("robot", e.robot());
+            t.putString("from", e.from());
+            t.putString("to", e.to());
+            t.putString("item", itemName(e.item()));
+            t.putString("state", e.state().name());
+            t.putString("cause", e.cause().name());
+            t.putString("reason", e.reason());
+            t.putBoolean("requested", e.requested());
+            t.putInt("quantity", e.quantity());
+            t.putInt("reserve", e.reserve());
+            t.putInt("delivered", e.delivered());
+            t.putInt("carried", e.carried());
+            t.putBoolean("longWait", e.longWait());
+            diaryTags.add(t);
+        }
+        root.put("diary", diaryTags);
+        CompoundTag forgottenTags = new CompoundTag();
+        forgotten.forEach((owner, f) -> {
+            CompoundTag t = new CompoundTag();
+            t.putInt("entries", f.entries());
+            t.putLong("until", f.until());
+            t.putLong("newest", f.newest());
+            forgottenTags.put(owner.toString(), t);
+        });
+        root.put("forgotten", forgottenTags);
+        CompoundTag openingTags = new CompoundTag();
+        openings.forEach((player, entry) -> openingTags.putLong(player.toString(), entry));
+        root.put("openingEntries", openingTags);
         return root;
     }
 
@@ -507,7 +910,9 @@ public class MindRuntime extends SavedData {
             Job j = new Job();
             j.id = t.getInt("id");
             j.owner = t.getUUID("owner");
-            j.module = t.getString("module");
+            // An older version treated a module that it did not know as a transport.
+            Behaviour behaviour = Behaviour.of(t.getString("module"));
+            j.behaviour = behaviour == null ? Behaviour.TRANSPORT : behaviour;
             j.revision = t.getInt("revision");
             j.from = t.getString("from");
             j.to = t.getString("to");
@@ -530,8 +935,32 @@ public class MindRuntime extends SavedData {
             j.lastOp = t.getString("lastOp");
             j.lastOpAt = t.getLong("lastOpAt");
             j.recoveries = t.getInt("recoveries");
-            rt.jobs.put(Integer.valueOf(robotId), j);
+            // A record of an older version has no start of the wait. The first check starts the time (see checkWait).
+            j.waitingSince = t.contains("waitingSince") ? t.getLong("waitingSince") : UNKNOWN;
+            j.longWait = t.getBoolean("longWait");
+            j.robot = Integer.parseInt(robotId);
+            rt.jobs.put(j.robot, j);
         }
+        // A record of an older version has no diary: it loads with an empty one.
+        // A diary of the format before the numbers: each entry gets the next number, in the order of the diary.
+        rt.nextEntry = root.getLong("nextEntry");
+        for (Tag tag : root.getList("diary", Tag.TAG_COMPOUND)) {
+            CompoundTag t = (CompoundTag) tag;
+            rt.diary.add(new Entry(t.contains("number") ? t.getLong("number") : rt.nextEntry++, t.getLong("time"), t.getUUID("owner"),
+                t.getInt("job"), t.getInt("robot"), t.getString("from"), t.getString("to"),
+                ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(t.getString("item"))),
+                State.valueOf(t.getString("state")), Cause.valueOf(t.getString("cause")), t.getString("reason"), t.getBoolean("requested"),
+                t.getInt("quantity"), t.getInt("reserve"), t.getInt("delivered"), t.getInt("carried"), t.getBoolean("longWait")));
+        }
+        CompoundTag forgottenTags = root.getCompound("forgotten");
+        for (String owner : forgottenTags.getAllKeys()) {
+            CompoundTag t = forgottenTags.getCompound(owner);
+            rt.forgotten.put(UUID.fromString(owner), new Forgotten(t.getInt("entries"), t.getLong("until"), t.getLong("newest")));
+        }
+        // A record of an older version has no openings: the next opening of each player is a first opening.
+        // The same for the format before the numbers: its key "openings" held game times.
+        CompoundTag openingTags = root.getCompound("openingEntries");
+        for (String player : openingTags.getAllKeys()) rt.openings.put(UUID.fromString(player), openingTags.getLong(player));
         return rt;
     }
 }

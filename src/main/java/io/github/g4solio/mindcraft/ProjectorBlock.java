@@ -93,7 +93,7 @@ public class ProjectorBlock extends Block {
 
     @Override
     public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
-        if (player instanceof ServerPlayer serverPlayer) Net.sendView(serverPlayer);
+        if (player instanceof ServerPlayer serverPlayer) Net.open(serverPlayer);
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 

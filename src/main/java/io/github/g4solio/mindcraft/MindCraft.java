@@ -66,7 +66,7 @@ public class MindCraft {
     static final RegistryObject<Item> TABLET = ITEMS.register("tablet", () -> new Item(new Item.Properties().stacksTo(1)) {
         @Override
         public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-            if (player instanceof ServerPlayer serverPlayer) Net.sendView(serverPlayer);
+            if (player instanceof ServerPlayer serverPlayer) Net.open(serverPlayer);
             return InteractionResultHolder.sidedSuccess(player.getItemInHand(hand), level.isClientSide);
         }
     });
@@ -93,6 +93,7 @@ public class MindCraft {
      * No computer of the new server runs at this moment.
      * <p>
      * Uno asks Claude only if the server has an API key in its environment. Without a key Uno uses the fixed rules.
+     * Also with a key, only an operator uses Claude, with a limit of requests in each server session (D33).
      * A game test server always uses the fixed rules. Thus the checks give the same result on each computer and cost nothing.
      */
     static void aboutToStart(ServerAboutToStartEvent event) {
@@ -101,8 +102,12 @@ public class MindCraft {
         REBOOTS.clear();
         String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
         boolean claude = key != null && !key.isBlank() && !(event.getServer() instanceof GameTestServer);
-        Uno.provider = claude ? ClaudeProvider.fromEnv() : new Uno.RuleProvider();
-        LOGGER.info("Uno interprets requests with {}.", claude ? "Claude (" + ClaudeProvider.MODEL + ")" : "the fixed rules, without a language model");
+        Uno.Provider chosen = claude ? ClaudeProvider.fromEnv() : new Uno.RuleProvider();
+        Uno.provider = chosen;
+        LOGGER.info("Uno interprets requests with {}.", chosen.callsModel()
+            ? chosen.name() + " for the operators, at most " + Uno.MODEL_REQUESTS + " requests for each of them in this session. "
+                + "The fixed rules read the requests of the other players"
+            : chosen.name());
     }
 
     /**
@@ -121,6 +126,8 @@ public class MindCraft {
 
     private static void tick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        // D30: a job that waits for 5 minutes gets one notice. The check reads the game time, thus a stopped server counts no time.
+        MindRuntime.get(event.getServer()).checkWaits(event.getServer().overworld().getGameTime());
         REBOOTS.entrySet().removeIf(reboot -> {
             int id = reboot.getKey();
             if (RobotApi.boots(id) >= reboot.getValue()[0] || Util.getMillis() > reboot.getValue()[1]) return true;

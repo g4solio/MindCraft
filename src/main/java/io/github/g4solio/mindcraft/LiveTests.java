@@ -43,7 +43,8 @@ public class LiveTests {
     public static void t18_claude_live(GameTestHelper helper) {
         String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
         check(key != null && !key.isBlank(), "this check needs " + ClaudeProvider.KEY_VARIABLE + " in the environment");
-        Actor player = MindCraftTests.player("live");
+        // Only an operator uses Claude (D33). This test runs alone: the operator sees only the stations of this test.
+        Actor player = MindCraftTests.operator("live");
         Rig rig = new Rig(helper, "live", 0, 1000, player);
         MinecraftServer server = rig.level.getServer();
         rig.chest(rig.source).setItem(0, new ItemStack(Items.COAL, 64));
@@ -58,13 +59,8 @@ public class LiveTests {
 
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> {
-                boolean easy = true;
-                try {
-                    new Uno.RuleProvider().propose(REQUEST, Uno.context(rig.runtime, player));
-                } catch (IllegalArgumentException expected) {
-                    easy = false;
-                }
-                check(!easy, "the fixed rules read the request: it is too easy for this check");
+                Uno.Action rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player)).action();
+                check(rules instanceof Uno.Action.None, "the fixed rules read the request: it is too easy for this check: " + rules);
                 Uno.ask(server, player, REQUEST, claude, Uno.TIMEOUT_MS, answers::add);
             })
             .thenWaitUntil(() -> check(answers.size() == 1, "Claude did not answer yet"))
@@ -79,7 +75,8 @@ public class LiveTests {
                 Job job = rig.job();
                 check(job.keepStock() && job.quantity == 64 && job.reserve == 32 && job.owner.equals(player.id()), rig.describe());
             })
-            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().delivered == 48, rig.describe()))
+            // A failed check above does not stop the sequence. Without a job, this check fails instead of a crash of the server.
+            .thenWaitUntil(() -> check(rig.job() != null && rig.job().state == State.WAITING && rig.job().delivered == 48, rig.describe()))
             .thenExecute(() -> check(rig.coal(rig.dest) == 58 && rig.coal(rig.source) == 32, rig.describe()));
         for (int i = 0; i < NO_ORDER.size(); i++) {
             int index = i + 1;
@@ -94,6 +91,13 @@ public class LiveTests {
                     check(answers.get(index).startsWith("I cannot propose a job: "), answers.get(index));
                 });
         }
-        sequence.thenSucceed();
+        sequence
+            .thenExecute(() -> {
+                // The counter of the session: four requests to Claude, with the tokens that the service reported.
+                Uno.Usage usage = Uno.usage(player);
+                MindCraft.LOGGER.info("t18_claude_live counter: {}", usage);
+                check(usage.requests() == 4 && usage.inputTokens() > 0 && usage.outputTokens() > 0, "the counter: " + usage);
+            })
+            .thenSucceed();
     }
 }

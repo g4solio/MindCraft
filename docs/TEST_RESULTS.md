@@ -157,6 +157,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 125 | 98 of 98 | None. Ticket #24, the committed code `97cd020`. Server line: `All 98 required tests passed :)` |
 | 126 | 98 of 98 | None. Ticket #24, one more step in `a_notices_call_no_provider` (`dfa1d29`). Server line: `All 98 required tests passed :)` |
 | 127 | 103 of 103 | None. The integration branch after the merge of tickets #20 and #24. Server line: `All 103 required tests passed :)` |
+| 128 | 104 of 104 | None. The integration branch after the merge of ticket #23. Server line: `All 104 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -175,6 +176,7 @@ Runs 108 to 112 are the runs of ticket #20. Its merge changed no file, thus run 
 Runs 113 to 115 are the runs of ticket #23, on the integration branch at `bbe9478`.
 Runs 120 to 126 are the runs of ticket #24, on the integration branch at `8df1f39`. See "Increment B — the low fuel notice (ticket #24)". The numbers start at 120: other tickets run at the same time. No run of ticket #24 called the real Claude service.
 Run 127 is the run of the integration branch after the merge of ticket #24.
+Run 128 is the run of the integration branch after the merge of ticket #23.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 

@@ -17,6 +17,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -84,6 +87,21 @@ public final class Uno {
 
     /** The answer of a provider: one action, and the tokens that the answer used. */
     public record Answer(Action action, long inputTokens, long outputTokens) {
+    }
+
+    /**
+     * A failure of a provider after the model answered: a refusal, or an answer that the model did not end (D42, point 17).
+     * The service billed the tokens of that answer. Thus they count in the counter of the session and in the record of the request.
+     * The message is the reason that the player reads.
+     */
+    public static final class UnusableAnswer extends Exception {
+        final long inputTokens, outputTokens;
+
+        public UnusableAnswer(String reason, long inputTokens, long outputTokens) {
+            super(reason);
+            this.inputTokens = inputTokens;
+            this.outputTokens = outputTokens;
+        }
     }
 
     /**
@@ -269,7 +287,10 @@ public final class Uno {
     enum Voice {
         /** The sentence of a report or of "none" passed the checks: Uno says it. */
         PASSED,
-        /** The sentence failed a check: Uno uses the fixed template. An empty sentence fails too. */
+        /**
+         * The sentence failed a check: Uno uses the fixed template. An empty sentence fails too, and a sentence with a number that is
+         * uncertain at the moment of the answer (see uncertainNow).
+         */
         FAILED,
         /** The answer needs no sentence: the server writes the text of an action. The fixed rules give no sentence either. */
         NOT_NEEDED,
@@ -280,7 +301,8 @@ public final class Uno {
     /**
      * The record of one written request to a provider with a model (D33, and D42): the model that the provider names, the input tokens
      * and the output tokens of the answer, the time of the answer in milliseconds, the action of the model and the result of the checks.
-     * The action is null when the provider gave no answer: a failure or the time limit. Then the tokens are zero, as in the counter.
+     * The action is null when the provider gave no answer: a failure or the time limit. Then the tokens are those of an UnusableAnswer,
+     * or zero, as in the counter.
      * Uno keeps the record of the newest request of each actor in the server session, and nothing more (D24).
      */
     record ModelRequest(String model, long inputTokens, long outputTokens, long millis, Action action, Voice voice) {
@@ -302,12 +324,16 @@ public final class Uno {
     private static final RuleProvider RULES = new RuleProvider();
     private static final String LIMIT_REACHED = "You reached the limit of " + MODEL_REQUESTS + " model requests in this server session. "
         + "Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. ";
-    /** The sentence before the answer of the fixed rules when the model gave no valid action (D42, point 17). %s is the reason. */
-    private static final String NO_VALID_ACTION = "The model gave no valid answer (%s), "
+    /** The start of the sentence before the answer of the fixed rules when the model gave no valid action (D42, point 17). */
+    static final String NO_VALID_ANSWER = "The model gave no valid answer";
+    /** The whole sentence before the answer of the fixed rules when the model gave no valid action (D42, point 17). %s is the reason. */
+    private static final String NO_VALID_ACTION = NO_VALID_ANSWER + " (%s), "
         + "thus I read your request with the fixed rules: they understand only simple sentences. ";
     private static final String INVALID = "I did not get a valid configuration. I created no proposal.";
+    /** The start of the answer to the "none" of the fixed rules, before their reason: the template of increment A. */
+    static final String CANNOT_PROPOSE = "I cannot propose a job: ";
     /** The answer to "none" when its sentence fails a check (D42, point 15). */
-    private static final String CANNOT_ANSWER = "I cannot answer that. I did nothing.";
+    static final String CANNOT_ANSWER = "I cannot answer that. I did nothing.";
     /** The limits of a sentence of a provider (D42, point 5). Initial values. A cut can remove a caution: a longer sentence fails. */
     static final int MAX_SENTENCES = 2, MAX_SENTENCE_LENGTH = 300;
     /** A run of digits, in each script: a number as a sentence writes it. */
@@ -514,6 +540,7 @@ public final class Uno {
      * In each other case the fixed rules read the request.
      * If the model gives no valid action, the fixed rules read the same request, and Uno says so first (D42, point 17).
      * A provider without a model keeps the failure sentence.
+     * The context of the provider has the facts of the moment of the request. The answer uses the record of the moment of the answer.
      */
     public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
         Session mine = session;
@@ -525,7 +552,7 @@ public final class Uno {
         mine.proposals.remove(actor.id());
         Route route = route(mine, actor, provider);
         Provider chosen = route == Route.MODEL || route == Route.NO_MODEL ? provider : RULES;
-        // A request counts when Uno sends it. A failure and the time limit add no tokens.
+        // A request counts when Uno sends it. Its tokens count with its answer: see billed.
         if (route == Route.MODEL) mine.usage.merge(actor.id(), new Usage(1, 0, 0), Usage::plus);
         // Uno says one time that the limit is reached. The screen tells a player who is not an operator why the fixed rules answer.
         String limit = route == Route.AT_LIMIT && mine.toldLimit.add(actor.id()) ? LIMIT_REACHED : "";
@@ -547,23 +574,26 @@ public final class Uno {
                     // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
                     if (server.isStopped() || mine != session) return;
                     mine.pending.remove(actor.id());
-                    if (error == null && route == Route.MODEL) {
-                        mine.usage.merge(actor.id(), new Usage(0, answer.inputTokens(), answer.outputTokens()), Usage::plus);
-                    }
+                    Usage billed = billed(answer, error);
+                    if (route == Route.MODEL) mine.usage.merge(actor.id(), billed, Usage::plus);
                     MindRuntime runtime = MindRuntime.get(server);
                     long now = server.overworld().getGameTime();
                     // A model that gives no valid action (D42, point 17): the request still counts, and the fixed rules read it with the same context.
                     String why = route == Route.MODEL ? noValidAction(answer, error) : null;
+                    // The result of the checks, one time for each answer. The fixed sentences and the voice come from the moment of the
+                    // answer: a number of the sentence that is uncertain now fails the check, as a number that the server did not send.
+                    Voice voice = error == null ? voice(answer.action(), request, context) : null;
+                    if (voice == Voice.PASSED && uncertainNow(sentence(answer.action()), context, context(runtime, actor, now))) voice = Voice.FAILED;
                     // The record of a request to a model, and its line in the server log (D33, D42). It comes before the answer.
                     if (route == Route.MODEL) {
-                        ModelRequest record = new ModelRequest(provider.model(), error == null ? answer.inputTokens() : 0,
-                            error == null ? answer.outputTokens() : 0, millis, error == null ? answer.action() : null,
-                            why != null ? Voice.NO_VALID_ACTION : voice(answer.action(), request, context));
+                        ModelRequest record = new ModelRequest(provider.model(), billed.inputTokens(), billed.outputTokens(), millis,
+                            error == null ? answer.action() : null, why != null ? Voice.NO_VALID_ACTION : voice);
                         mine.requests.put(actor.id(), record);
                         MindCraft.LOGGER.info("{}", line(record, request));
                     }
-                    String said = why != null ? NO_VALID_ACTION.formatted(why) + act(mine, runtime, actor, request, context, RULES.answer(request, context), now)
-                        : error == null ? act(mine, runtime, actor, request, context, answer, now) : failure(error);
+                    // The fixed rules give no sentence: their answer needs none.
+                    String said = why != null ? NO_VALID_ACTION.formatted(why) + act(mine, runtime, actor, RULES.answer(request, context), Voice.NOT_NEEDED, now)
+                        : error == null ? act(mine, runtime, actor, answer, voice, now) : failure(error);
                     reply.accept(limit + said);
                 });
             });
@@ -592,7 +622,7 @@ public final class Uno {
 
     /**
      * Why a model gave no valid action, or null if it gave one (D42, point 17): a failure of the service, the time limit of Uno,
-     * a refusal, or an answer that Uno cannot read. The Claude provider gives a refusal as an exception with its reason.
+     * a refusal, or an answer that Uno cannot read. The Claude provider gives a refusal and a cut answer as an UnusableAnswer.
      */
     private static String noValidAction(Answer answer, Throwable error) {
         if (error instanceof TimeoutException) return "the request reached the time limit";
@@ -659,18 +689,18 @@ public final class Uno {
      * The sentence of Uno for the answer of a provider. Uno reads the answer and does not trust it: a provider can give anything.
      * "Pause" and "report" run immediately (D29). "Start", "change", "resume" and "cancel" become a proposal.
      * "None" gives its sentence, or the reason of the fixed rules.
-     * The request and the context are the ones that the provider got: the check of the numbers of a sentence reads them (D42, point 4).
+     * The voice is the result of the checks of the sentence of the action (D42, points 4 and 5).
      */
-    private static String act(Session mine, MindRuntime runtime, Actor actor, String request, Context context, Answer answer, long now) {
+    private static String act(Session mine, MindRuntime runtime, Actor actor, Answer answer, Voice voice, long now) {
         Action action = answer.action();
         if (action instanceof Action.Start start) return start(mine, runtime, actor, start.order());
-        if (action instanceof Action.None none) return none(none, request, context);
+        if (action instanceof Action.None none) return none(none, voice);
         // An Unreadable answer, or no action at all.
         if (!(action instanceof Action.OnJob job) || job.target() == null) return INVALID;
         return switch (job.kind()) {
             case PAUSE -> pause(runtime, actor, job.target());
             // A report with a sentence that passes the checks gets the voice. Each other report gets the fixed report of A (D42, point 16).
-            case REPORT -> voice(action, request, context) == Voice.PASSED ? voiced(runtime, actor, job, now) : report(runtime, actor, job.target(), now);
+            case REPORT -> voice == Voice.PASSED ? voiced(runtime, actor, job, now) : report(runtime, actor, job.target(), now);
             case CHANGE -> change(mine, runtime, actor, job);
             case RESUME, CANCEL -> control(mine, runtime, actor, job.target(), job.kind());
             // A start and a "none" have actions of their own.
@@ -716,12 +746,39 @@ public final class Uno {
     }
 
     /**
+     * Whether the sentence gives a number that is uncertain at the moment of the answer. The facts go with the request. The fixed
+     * sentences and the voice come with the answer, up to the time limit later. In that time a job can enter RECOVERY, its robot can
+     * stop, or an observation can become old (D42, point 3). Thus Uno builds the facts again for the moment of the answer: "later".
+     * A number is uncertain now when the facts of the request give it and the facts of the answer do not give it for the same job.
+     * A job that is not in the facts of the answer gives none of its numbers. The sentence fails when one of its runs of digits is such a
+     * number, as it fails for a number that the server did not send (D42, point 4). A sentence without that number keeps the voice.
+     */
+    static boolean uncertainNow(String sentence, Context sent, Context later) {
+        Map<Integer, Context.Facts> now = new HashMap<>();
+        for (Context.Facts facts : later.jobs()) now.put(facts.job(), facts);
+        Set<String> lost = new HashSet<>();
+        for (Context.Facts facts : sent.jobs()) {
+            List<Integer> before = numbers(facts), after = now.containsKey(facts.job()) ? numbers(now.get(facts.job())) : null;
+            for (int i = 0; i < before.size(); i++) {
+                if (before.get(i) != null && (after == null || after.get(i) == null)) lost.add(before.get(i).toString());
+            }
+        }
+        return !Collections.disjoint(runs(sentence), lost);
+    }
+
+    /** The numbers of the facts of a job that can be uncertain, in a fixed order. Null for a number that the facts do not give. */
+    private static List<Integer> numbers(Context.Facts facts) {
+        return Arrays.asList(facts.delivered(), facts.onBoard(), facts.source() == null ? null : facts.source().count(),
+            facts.destination() == null ? null : facts.destination().count(), facts.stillToCarry(), facts.aboveReserve(), facts.fuel(), facts.trips());
+    }
+
+    /**
      * The answer to "none". The voice of a provider stands alone: the sentence, or one fixed sentence if it fails a check (D42, point 15).
      * The fixed rules give a reason: their answer is the template of increment A.
      */
-    private static String none(Action.None none, String request, Context context) {
-        if (none.sentence() == null) return "I cannot propose a job: " + none.reason() + (none.reason().endsWith(".") ? "" : ".");
-        return voice(none, request, context) == Voice.PASSED ? none.sentence().strip() : CANNOT_ANSWER;
+    private static String none(Action.None none, Voice voice) {
+        if (none.sentence() == null) return CANNOT_PROPOSE + none.reason() + (none.reason().endsWith(".") ? "" : ".");
+        return voice == Voice.PASSED ? none.sentence().strip() : CANNOT_ANSWER;
     }
 
     /**
@@ -1036,8 +1093,22 @@ public final class Uno {
 
     /** The reason of a failure of a provider: the message of the exception, or its name. */
     private static String reason(Throwable error) {
-        Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
+        Throwable cause = cause(error);
         return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
+
+    /**
+     * The tokens that the service billed for the answer to a request: those of the answer, or those of an UnusableAnswer (D42, point 17).
+     * None after another failure or the time limit: no usage is known. The number of requests is zero: a request counts when Uno sends it.
+     */
+    static Usage billed(Answer answer, Throwable error) {
+        if (error == null) return new Usage(0, answer.inputTokens(), answer.outputTokens());
+        return cause(error) instanceof UnusableAnswer unusable ? new Usage(0, unusable.inputTokens, unusable.outputTokens) : Usage.NONE;
+    }
+
+    /** The exception of the provider inside the exception of the thread of the provider. */
+    private static Throwable cause(Throwable error) {
+        return error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
     }
 
     /**

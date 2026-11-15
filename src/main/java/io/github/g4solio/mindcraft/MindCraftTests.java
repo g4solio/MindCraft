@@ -1650,7 +1650,7 @@ public class MindCraftTests {
                 return answer("{}");
             }), 300, noAction::add))
             .thenWaitUntil(() -> check(noAction.size() == 2, "Uno did not answer yet"))
-            // The Claude provider gives a refusal of the model as this exception.
+            // The reason of a refusal of the Claude provider. The provider gives it with its tokens: see b_model_of_the_setting.
             .thenExecute(() -> Uno.ask(server, player, "Carry 8 coal from " + rig.from + " to " + rig.to + " with robot " + rig.id,
                 new CountingModel((r, c) -> {
                     throw new IllegalStateException("the model declined the request");
@@ -1945,8 +1945,10 @@ public class MindCraftTests {
      * D42, point 6: the model of the Claude provider is the setting "model" of config/mindcraft-common.toml. The start is Haiku 5.5.
      * A provider reads the setting when it is built: the server builds it at its start. The request names the model of the setting.
      * Only a model with a server-side fallback for a refusal gets the fallback parameter: Sonnet 5.5 has one, Haiku 5.5 has none (D33).
-     * A refusal without a fallback, and a model that the service does not know, are failures of the model: the fixed rules read
-     * the request (D42, point 17). A local stand-in is in the place of the API: no request reaches the real service.
+     * A refusal without a fallback, a cut answer, and a model that the service does not know, are failures of the model: the fixed
+     * rules read the request (D42, point 17). The service billed the tokens of a refusal and of a cut answer: they count in the counter
+     * of the session and in the record of the request. An error of the service has no usage: zero tokens.
+     * A local stand-in is in the place of the API: no request reaches the real service.
      * It has its own batch, because it changes a value of the whole server. It changes the setting only while it builds a provider,
      * and puts the value of before back at once, also when a check fails.
      */
@@ -1981,15 +1983,33 @@ public class MindCraftTests {
         String none = "You did not give the source.", rules = ", thus I read your request with the fixed rules: they understand only simple sentences. ";
         String notFound = "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: " + unknown + "\"}}";
         List<String> answers = new CopyOnWriteArrayList<>();
+        // The record of the newest request of the operator: the model of the setting, these tokens, no action and no valid action.
+        BiConsumer<Long, Long> noAction = (input, output) -> {
+            Uno.ModelRequest record = Uno.modelRequest(operator);
+            check(record != null && record.equals(new Uno.ModelRequest("claude-haiku-5-5", input, output, record.millis(), null,
+                Uno.Voice.NO_VALID_ACTION)), "the record of the request: " + record);
+        };
         GameTestSequence sequence = helper.startSequence().thenExecute(() -> {
             status.set(200);
             body.set(claudeMessage("end_turn", modelAction("none", none)));
         });
         sequence = ask(sequence, server, operator, "x", sonnet, 15_000, answers);
         sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
-            .thenExecute(() -> body.set(claudeMessage("refusal", null)));
+            .thenExecute(() -> {
+                usage(operator, 2, 2, 2);
+                body.set(claudeMessage("refusal", null, 40, 3));
+            });
+        // A refusal and a cut answer: the service billed their tokens. They count in the counter and in the record.
         sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
             .thenExecute(() -> {
+                usage(operator, 3, 42, 5);
+                noAction.accept(40L, 3L);
+                body.set(claudeMessage("max_tokens", "{\"action\":", 50, 4096));
+            });
+        sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
+            .thenExecute(() -> {
+                usage(operator, 4, 92, 4101);
+                noAction.accept(50L, 4096L);
                 status.set(404);
                 body.set(notFound);
             });
@@ -1997,25 +2017,31 @@ public class MindCraftTests {
             .thenExecute(() -> {
                 api.stop(0);
                 MindCraft.LOGGER.info("b_model_of_the_setting answers: {}", answers);
-                check(answers.size() == 4 && sent.size() == 4 && betas.size() == 4, answers + "\n" + sent);
+                check(answers.size() == 5 && sent.size() == 5 && betas.size() == 5, answers + "\n" + sent);
+                // An error of the service gives no usage: the request counts with zero tokens.
+                usage(operator, 5, 92, 4101);
+                Uno.ModelRequest record = Uno.modelRequest(operator);
+                check(record != null && record.equals(new Uno.ModelRequest(unknown, 0, 0, record.millis(), null, Uno.Voice.NO_VALID_ACTION)),
+                    "the record of the request: " + record);
                 // Each request names the model of the setting of its provider. The effort stays low.
                 List<JsonObject> messages = sent.stream().map(text -> JsonParser.parseString(text).getAsJsonObject()).toList();
                 List<String> models = messages.stream().map(message -> message.get("model").getAsString()).toList();
-                check(models.equals(List.of("claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-5-5", unknown)), models.toString());
+                check(models.equals(List.of("claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-5-5", "claude-haiku-5-5", unknown)), models.toString());
                 check(messages.stream().allMatch(message -> message.getAsJsonObject("output_config").get("effort").getAsString().equals("low")), sent.toString());
                 // Only Sonnet 5.5 has the server-side fallback for a refusal, with its beta header.
                 check(messages.get(0).has("fallbacks") && messages.get(0).get("fallbacks").getAsString().equals("default")
                     && betas.get(0).contains("server-side-fallback-2026-07-01"), messages.get(0) + "\n" + betas.get(0));
-                for (int i = 1; i < 4; i++) {
+                for (int i = 1; i < 5; i++) {
                     check(!messages.get(i).has("fallbacks") && !betas.get(i).contains("server-side-fallback"), "a fallback for " + models.get(i)
                         + ": " + messages.get(i) + "\n" + betas.get(i));
                 }
-                // The sentence of the model with a model of each kind. A refusal without a fallback, and a model that the service
-                // does not know: the fixed rules read the request, and the answer gives the reason first.
+                // The sentence of the model with a model of each kind. A refusal without a fallback, a cut answer, and a model that
+                // the service does not know: the fixed rules read the request, and the answer gives the reason first.
                 check(answers.get(0).equals(none) && answers.get(1).equals(none), answers.subList(0, 2).toString());
                 check(answers.get(2).equals("The model gave no valid answer (the model declined the request)" + rules + RULES_X), answers.get(2));
-                check(answers.get(3).equals("The model gave no valid answer (the model service does not know the model '" + unknown + "')"
-                    + rules + RULES_X), answers.get(3));
+                check(answers.get(3).equals("The model gave no valid answer (the answer of the model is incomplete)" + rules + RULES_X), answers.get(3));
+                check(answers.get(4).equals("The model gave no valid answer (the model service does not know the model '" + unknown + "')"
+                    + rules + RULES_X), answers.get(4));
                 check(MindCraft.MODEL.get().equals(before), "the setting is not back: " + MindCraft.MODEL.get());
             })
             .thenSucceed();
@@ -2810,6 +2836,78 @@ public class MindCraftTests {
         said(sequence, server, player, second, noProposal)
             .thenExecute(() -> a.runtime.control(player, a.id, "cancel"))
             .thenSucceed();
+    }
+
+    /**
+     * Sends one request "x" to a provider of the test with a model. The provider waits inside its answer until the test ran "during"
+     * on the server thread. Then it gives the action of the JSON, with 12 input tokens and 3 output tokens.
+     */
+    private static GameTestSequence askDuring(GameTestSequence sequence, MinecraftServer server, Actor actor, Supplier<String> json,
+                                              Runnable during, List<String> answers) {
+        CountDownLatch held = new CountDownLatch(1);
+        int[] before = new int[1];
+        return sequence
+            .thenExecute(() -> {
+                before[0] = answers.size();
+                String action = json.get();
+                Uno.ask(server, actor, "x", new CountingModel((request, context) -> {
+                    held.await(10, TimeUnit.SECONDS);
+                    return new Uno.Answer(Uno.parse(action), 12, 3);
+                }), 15_000, answers::add);
+            })
+            .thenExecute(() -> {
+                during.run();
+                held.countDown();
+            })
+            .thenWaitUntil(() -> check(answers.size() > before[0], "Uno did not answer yet"));
+    }
+
+    /**
+     * Review of increment B: the facts go with the request, and the fixed sentences and the voice come with the answer, up to the time
+     * limit later. At the answer Uno builds the facts again, for the moment of the fixed sentences. A run of digits of the sentence that
+     * is a number of the facts of the request, and that the facts of the answer do not give for the same job, fails the check. Then a
+     * report gets the fixed report of A, "none" gets the fixed sentence, and the record has FAILED and the unused sentence.
+     * A provider of the test waits inside its answer, and the test changes the job in that time. The job delivers 10 of 24, then it waits.
+     * 1. A report says "10". Then the job goes to RECOVERY: the delivered total is not given any more.
+     * 2. The owner resumes. A "none" says "10", the stock of the destination. Then that observation becomes old.
+     * 3. A report without a number. Then the job goes to RECOVERY again: the voice stays, after the fixed sentence of that moment.
+     * The player is an operator: the request is on the route of the model, with its record. An operator owns each job of the server.
+     * Thus the sentence that keeps the voice has no digit: a job of a different test can change at the same time.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_voice_at_the_moment_of_the_answer(GameTestHelper helper) {
+        Actor operator = operator("b_moment");
+        Rig rig = new Rig(helper, "b_moment", 10, 1000, operator);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        String delivered = "I delivered 10 of 24 so far.", stock = "The destination had 10 at my last look.", voice = "Something here needs your eyes.";
+        Runnable recovery = () -> rig.runtime.recovery(rig.job(), Cause.LOAD_DIFFERS, "the test changed the record");
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job() != null && rig.job().state == State.WAITING && rig.job().delivered == 10, rig.describe()));
+        sequence = askDuring(sequence, server, operator, () -> modelAction("report", delivered, "robot", rig.id), recovery, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Job " + rig.job().id + ", robot #" + rig.id + ": carry 24 items") && last.get().contains("I cannot say how it went.")
+                    && !last.get().contains(delivered), last.get());
+                recorded(operator, Uno.parse(modelAction("report", delivered, "robot", rig.id)), 12, 3, Uno.Voice.FAILED, delivered, 0);
+                rig.runtime.control(operator, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().recoveries == 1, rig.describe()));
+        sequence = askDuring(sequence, server, operator, () -> modelAction("none", stock),
+            () -> rig.job().toSeenAt = rig.level.getGameTime() - JobAccount.OLD_TICKS - 1, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot answer that. I did nothing."), last.get());
+                recorded(operator, Uno.parse(modelAction("none", stock)), 12, 3, Uno.Voice.FAILED, stock, 0);
+            });
+        sequence = askDuring(sequence, server, operator, () -> modelAction("report", voice, "robot", rig.id), recovery, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Job " + rig.job().id + " on robot #" + rig.id + ": I cannot say how it went.")
+                    && last.get().endsWith(". " + voice), last.get());
+                recorded(operator, Uno.parse(modelAction("report", voice, "robot", rig.id)), 12, 3, Uno.Voice.PASSED, null, 0);
+                rig.runtime.control(operator, rig.id, "cancel");
+            });
+        sequence.thenSucceed();
     }
 
     /**

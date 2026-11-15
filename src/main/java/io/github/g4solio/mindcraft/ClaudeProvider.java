@@ -152,7 +152,7 @@ final class ClaudeProvider implements Uno.Provider {
     }
 
     @Override
-    public Uno.Answer answer(String request, Uno.Context context) {
+    public Uno.Answer answer(String request, Uno.Context context) throws Uno.UnusableAnswer {
         BetaJsonOutputFormat.Schema.Builder schema = BetaJsonOutputFormat.Schema.builder();
         Map<?, ?> fields = new Gson().fromJson(SCHEMA, Map.class);
         fields.forEach((key, value) -> schema.putAdditionalProperty((String) key, JsonValue.from(value)));
@@ -188,11 +188,13 @@ final class ClaudeProvider implements Uno.Provider {
         }
 
         // A refusal or a cut answer has no usable content. Thus the stop reason comes before the content.
+        // The service billed their tokens: the failure carries them (D42, point 17).
+        long input = message.usage().inputTokens(), output = message.usage().outputTokens();
         BetaStopReason stop = message.stopReason().orElse(null);
-        if (BetaStopReason.REFUSAL.equals(stop)) throw new IllegalStateException("the model declined the request");
-        if (!BetaStopReason.END_TURN.equals(stop)) throw new IllegalStateException("the answer of the model is incomplete");
+        if (BetaStopReason.REFUSAL.equals(stop)) throw new Uno.UnusableAnswer("the model declined the request", input, output);
+        if (!BetaStopReason.END_TURN.equals(stop)) throw new Uno.UnusableAnswer("the answer of the model is incomplete", input, output);
         // The one reader of the JSON of an action. Uno still checks the values against the world.
         String json = message.content().stream().flatMap(block -> block.text().stream()).map(text -> text.text()).collect(Collectors.joining());
-        return new Uno.Answer(Uno.parse(json), message.usage().inputTokens(), message.usage().outputTokens());
+        return new Uno.Answer(Uno.parse(json), input, output);
     }
 }

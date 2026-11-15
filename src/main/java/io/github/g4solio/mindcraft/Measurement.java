@@ -306,7 +306,7 @@ final class Measurement {
      * The provider of one request: it gives the request to the provider of the run, and keeps the context and the record of the request.
      * It says that it calls no model: the player of the measurement is not an operator (see PLAYER). The record has the values that Uno
      * writes on the route of the model (D42, choices of the implementation): the result of the checks is Uno.voice, and a failure or an
-     * answer that Uno cannot read has no valid action. The time is the time of the answer of the provider.
+     * answer that Uno cannot read has no valid action. The tokens of a failure are Uno.billed. The time is the time of the answer of the provider.
      */
     private static final class Measured implements Uno.Provider {
         private final Uno.Provider provider;
@@ -331,7 +331,10 @@ final class Measurement {
             } catch (Exception e) {
                 // The failure first: a reader that finds the record finds its failure too.
                 failure = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                record = new Uno.ModelRequest(provider.model(), 0, 0, since(sent), null, Uno.Voice.NO_VALID_ACTION);
+                // A refusal and a cut answer have the tokens that the service billed. Each other failure has none.
+                Uno.Usage billed = Uno.billed(null, e);
+                record = new Uno.ModelRequest(provider.model(), billed.inputTokens(), billed.outputTokens(), since(sent), null,
+                    Uno.Voice.NO_VALID_ACTION);
                 throw e;
             }
         }

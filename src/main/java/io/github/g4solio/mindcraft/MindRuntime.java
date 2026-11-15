@@ -409,11 +409,19 @@ public class MindRuntime extends SavedData {
 
     /** The ordinary validation of an order. Each source of orders goes through it: a command, a test or Uno. */
     public RobotApi check(Actor actor, Order order) {
+        return check(actor, order, UNKNOWN);
+    }
+
+    /**
+     * The ordinary validation of an order. "Replaced" is the ID of the open job that the new job replaces, or UNKNOWN.
+     * Thus a replacement is valid as an order for a free robot: only the open job that it names does not refuse it.
+     */
+    private RobotApi check(Actor actor, Order order, int replaced) {
         int robotId = order.robot();
         if (Behaviour.of(order.module()) == null) throw new Refusal("Unknown module '" + order.module() + "'.");
         requireRobot(actor, robotId);
         Job current = jobs.get(robotId);
-        if (current != null && current.state.open()) {
+        if (current != null && current.state.open() && current.id != replaced) {
             throw new Refusal("Robot #" + robotId + " already has job " + current.id + " (" + current.state + ").");
         }
         RobotApi robot = RobotApi.live(robotId);
@@ -457,6 +465,25 @@ public class MindRuntime extends SavedData {
         setDirty();
         robot.wake();
         return job;
+    }
+
+    /**
+     * Cancels the open job of the robot of the order, and starts the job of the order, in the same tick (D42, point 10).
+     * The request names the job that it replaces: a request about an earlier job of the robot is refused.
+     * The new order must be valid as for a free robot. A refusal changes nothing: the open job stays.
+     * The cancellation is the cancellation of control(). The new job adopts the load of the robot, as in start().
+     */
+    public Job replace(Actor actor, int jobId, Order order) {
+        checkReplace(actor, jobId, order);
+        // After the check nothing refuses: the cancellation frees the robot, and start() checks the same order again.
+        control(actor, order.robot(), jobId, "cancel");
+        return start(actor, order);
+    }
+
+    /** The validation of replace(), without the change. Uno checks a replacement with it before the proposal. replace() checks again. */
+    RobotApi checkReplace(Actor actor, int jobId, Order order) {
+        openJob(actor, order.robot(), jobId);
+        return check(actor, order, jobId);
     }
 
     /**

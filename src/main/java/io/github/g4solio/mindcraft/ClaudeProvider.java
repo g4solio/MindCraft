@@ -44,12 +44,15 @@ final class ClaudeProvider implements Uno.Provider {
 
         The fields of "start":
         - module: "transport" carries a fixed quantity one time. "keep_stock" keeps at least a quantity in the destination and continues to work.
-        - robot: the id of a robot from the context. If the player names no robot and exactly one robot is free, use that robot.
+        - robot: the id of a robot from the context. If the player names no robot, use the only free robot. \
+        If no robot is free and the context has exactly one robot, use that robot. In each other case the action is "none": ask for the robot number.
         - from, to: the source station and the destination station. Write each name exactly as it is in the context. \
         The player can write a name with a different case, with an article, with other words around it or with a small error.
         - item: a Minecraft item id, for example "minecraft:coal". Translate the name of the item from the language of the player.
         - quantity: for transport, the number of items to carry. For keep_stock, the level to keep in the destination.
         - reserve: the number of items that must stay in the source station. 0 if the player gives no reserve.
+        A "start" for a robot that is not free replaces the open job of that robot: Uno proposes to cancel that job and to start the new one. \
+        Thus a new destination for a job is a "start" with the same robot, module, item, quantity, reserve and source, and the new destination.
 
         "change", "pause", "resume", "cancel" and "report" name a job with these fields:
         - robot: the id of the robot of the job, if the player gives it.

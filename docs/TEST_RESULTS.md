@@ -170,6 +170,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 151 | 106 of 106 | None. Ticket #26: the harness of the measurement. Server line: `All 106 required tests passed :)` |
 | 152 | 106 of 106 | None. Ticket #26: the build script reads `-Pmodel` from the command line, and one more note in the record. Server line: `All 106 required tests passed :)` |
 | 153 | 106 of 106 | None. Ticket #26, the code of the commit: one comment of the test changed after run 152. Server line: `All 106 required tests passed :)` |
+| 154 | 107 of 107 | None. The integration branch after the merge of ticket #26. Server line: `All 107 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -194,6 +195,7 @@ Run 132 is the run of the integration branch after the merge of ticket #22.
 Runs 140 to 142 are the runs of ticket #25, on the integration branch at `c075de7`.
 Run 143 is the run of the integration branch after the merge of ticket #25.
 Runs 150 to 153 are the runs of ticket #26, on the integration branch at `002c636`.
+Run 154 is the run of the integration branch after the merge of ticket #26.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 

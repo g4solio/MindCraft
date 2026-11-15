@@ -122,12 +122,17 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 86 | 82 of 86, expected | Ticket #17, red run: three new tests and `t14_cancel`, with the old code |
 | 87 | 85 of 86, expected | Ticket #17, green run of the runtime, red run of the proposal: `b_adoption_in_the_proposal` failed as expected |
 | 88 | 86 of 86 | None. Ticket #17: a job adopts the load on board. Server line: `All 86 required tests passed :)` |
+| 89 | 84 of 91, expected | Ticket #18, red run: five new tests and two changed tests, with the old code |
+| 90 | 91 of 91 | None. Ticket #18: a job replaces a job. Server line: `All 91 required tests passed :)` |
+| 91 | 92 of 92 | None. Ticket #18, with one more test of the replacement in each open state. Server line: `All 92 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
 Runs 82 to 84 are the runs of the architecture review after increment A (D41).
 
 Runs 85 to 88 are the runs of ticket #17 of increment B. The tickets of increment B run at the same time, each in a working folder of its own. The numbers can change at the merge.
+
+Runs 89 to 91 are the runs of ticket #18 of increment B.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -166,6 +171,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 82, D41 | All four | Passed. See "The architecture review after increment A" |
 | Run 84, D41, decision 4 | All four | Passed |
 | Run 88, ticket #17 | All four | Passed. See "Increment B — a job adopts the load on board (ticket #17)" |
+| Run 91, ticket #18 | All four | Passed. See "Increment B — a job replaces a job (ticket #18)" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1088,6 +1094,69 @@ The restart test starts its job with an empty turtle. Thus it does not test an a
 - The proposal and the answers on the screen of a client. The play session of increment B has a step for an adoption.
 - The singular in the sentences: "1 items" for one item.
 
+## Increment B — a job replaces a job (ticket #18)
+
+Date: 2026-11-15. A start by words for a robot with an open job is one proposal: cancel that job, and start the new one. One confirmation does both, in one tick. Thus the player changes the destination of a job with words. See D42, point 10, and D34.
+The code is the branch of increment B at `60443b5`, with the changes of the ticket. No Lua module changed. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests, except `b_fixed_rules_choose_the_robot`: it needs no robot and no world. Each one uses the fixed rules or a provider written in the test. `t18_claude_provider` uses a false server in place of the API.
+
+| Test | What it does | Result in run 91 |
+| --- | --- | --- |
+| `b_replacement_changes_the_destination` | The destination is full: the transport of 24 waits with 24 on board (`DESTINATION_FULL`). The console sends `/mindcraft job transport` for the busy robot. Then the player writes "Carry 24 coal from … to …" with a third station and no robot number. The player has one robot. The confirmation comes 20 ticks after an attempt of the robot to deliver | Passed. The command is refused: "Robot #N already has job M (WAITING)." The words give the proposal of a replacement, with "The robot holds 24 x minecraft:coal". Before the confirmation the job, the robot and the chests do not change. The answer: "Job M on robot #N is cancelled. Job K started on robot #N. It counts the 24 x minecraft:coal on board as its first load." The diary of the old job is `RUNNING`, `WAITING DESTINATION_FULL`, `CANCELLED`. The cancellation is a request, and the first entry of the new job has the same game time and the next number. At the end: `DONE`, source 40, third station 24, destination 0 coal, robot 0, taken 0, delivered 24. No notice about the old job |
+| `b_replacement_in_recovery` | The turtle loses 14 of its 24 coal: `RECOVERY`. The player writes a transport of 10 without a robot number. Before the confirmation the test leaves 6 coal in the turtle | Passed. The proposal says "The robot holds 10 x minecraft:coal". The answer says "It counts the 6 x minecraft:coal on board as its first load." The diary of the old job is `RUNNING`, `RECOVERY`, `CANCELLED`. The new job delivers 6, takes 4 and is `DONE`: source 36, destination 10, robot 0, no recovery |
+| `b_replacement_in_each_open_state` | Four replacements in a row, from a provider of the test. The old job is `SATISFIED` (a stock at its level), `PAUSED`, `BLOCKED` (an impediment of an unknown kind), and `RUNNING` (a resume in the tick of the confirmation) | Passed. Each answer: "Job M on robot #N is cancelled. Job K started on robot #N. The robot holds no minecraft:coal: the new job starts without a load." Each old job ends `CANCELLED` after its state. Each cancellation has the game time of the first entry of the new job |
+| `b_replacement_refused` | Three replacements that must change nothing. 1: a new order with an unknown station. 2: a proposal, then the robot gets a different job. 3: a proposal, then the computer of the robot shuts down | Passed. 1: "I cannot propose this job: Unknown station '…'." No proposal, and the job stays. 2: "I cannot replace the job: Robot #N has job K now, not job M. Read it again." The different job stays. 3: "I cannot replace the job: Robot #N is not running. Load its area and turn it on." The job stays open, and its diary has no `CANCELLED` |
+| `b_replacement_through_the_view` | The "ask" action of the screen, with the fixed rules of the server, and no robot number. A different player looks at the screen, presses the button of the owner, sends `/uno confirm`, and asks a start for the robot of the owner. Then the owner presses the button | Passed. The view has "Waiting for your confirmation: cancel job M on robot #N (…), and start in its place: carry 8 x …" and the button "Confirm #P". The other player sees no button and no station of the owner, and confirms nothing: "I have no pending proposal". Its start: "I cannot propose this job: Robot #N is not yours." The proposal of the owner stays. After the button of the owner: the old job is `CANCELLED`, and the view says "… is cancelled. Job K started on robot #N. The robot holds no minecraft:coal: the new job starts without a load." |
+| `b_fixed_rules_choose_the_robot` | A start without a robot number, with six sets of robots | Passed. One busy robot: that robot. One busy and one free: the free one. One free: that one. Two busy, two free, or none: "you have N free robots: write 'robot N'" |
+| `a_confirmation_of_older_values`, changed | Before: a start for the busy robot was refused. Now the test expects the proposal of a replacement, and the next request replaces it | Passed. The proposal names the job, and the job does not change |
+| `t18_claude_provider`, changed | The request that goes to the false server of the API | Passed. The system text has the rule of a request without a robot number, and the sentence about the replacement. The schema keeps its ten fields |
+
+The texts of the proposals, from the log of run 90. The test compares the whole text.
+
+- `b_replacement_changes_the_destination`: "Proposal: cancel job 38 on robot #45 (carry minecraft:coal from 'b_replace_source' to 'b_replace_destination'), and start in its place: carry 24 x minecraft:coal from 'b_replace_source' to 'b_replace_other'. Reserve to leave in 'b_replace_source': 0. Robot #45. The robot holds 24 x minecraft:coal: the job counts them as its first load. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm."
+- Its confirmation: "Job 38 on robot #45 is cancelled. Job 86 started on robot #45. It counts the 24 x minecraft:coal on board as its first load."
+- `b_replacement_through_the_view`, a robot that holds nothing: "… Reserve to leave in 'b_replace_view_source': 0. Robot #60. The load can change until the confirmation: the new job counts the load that the robot holds then." The button: "Confirm #25".
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 89, red | The new and changed tests, without the new code. `b_replacement_in_each_open_state` did not exist yet | 84 of 91, expected. `b_fixed_rules_choose_the_robot`: one busy robot gave "you have 0 free robots". `b_replacement_changes_the_destination`, `b_replacement_in_recovery` and `b_replacement_through_the_view`: "I cannot propose a job: you have 0 free robots: write 'robot N'." `b_replacement_refused` and `a_confirmation_of_older_values`: "I cannot propose this job: Robot #… already has job … (WAITING)." `t18_claude_provider`: the system text without the new rule |
+| 90, green | The runtime, Uno, the fixed rules and the system text | **91 of 91**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `91 GAME TESTS COMPLETE`, `All 91 required tests passed :)` |
+| 91 | One more test, `b_replacement_in_each_open_state`, and the name of a local variable in `Uno.Replace` | **92 of 92**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `92 GAME TESTS COMPLETE`, `All 92 required tests passed :)` |
+
+`b_replacement_in_each_open_state` passed at its first run: the code of run 90 already had the behaviour. It has no red run.
+
+The four restart phases after run 91, one at a time, on the same world. Type: in the game, automatic.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24 |
+| `check` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0 |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY`. The first stable state: source 40, destination 0, robot 24. After `resume`: the diary `RUNNING`, `DONE`, `RECOVERY`, `RUNNING`, `DONE` |
+
+The restart test does not replace a job. A proposal is not saved (D24): thus no replacement crosses a restart.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| A confirmation runs on the server thread: the command `/uno confirm` and the action of a button. `MindRuntime.replace` checks, cancels and starts in one call. Thus no step of a robot comes between the cancellation and the start | `Uno.confirm`, `UnoView.act`, `MindRuntime.replace` | |
+| The cancellation of `control` has no rule that depends on the state of an open job. Thus a replacement works in each open state | `MindRuntime.checkControl` | |
+| If the open job ends by itself before the confirmation, `checkReplace` refuses: "Robot #N has no open job." Nothing starts | `MindRuntime.openJob` | No test builds it |
+| A call of the old Lua run can reach the new job. The module reads the job, and then it moves or transfers. One or two ticks are between the two. At a dock of a different station that call fails, and the agent reports a module error for the new job. This is the limit of D26 | `transport.lua`, `keep_stock.lua`, the agent `mindcraft.lua`, `RobotApi` | That it occurs. No run saw it. `b_replacement_changes_the_destination` confirms while the old module sleeps |
+
+### Not covered
+
+- The new system text with the real Claude service. No `-Plive` run used it. CLAUDE.md asks for one run before the merge into `main`. Ticket #27 has the paid runs of increment B.
+- A change of the destination that a model builds from the facts of the job. The facts come with a later ticket of increment B.
+- The proposal, the button and the answers on the screen of a client. The play session of increment B has a step for a replacement.
+- An operator who replaces the job of a different player.
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1156,6 +1225,8 @@ Third manual test, on the projector and its hologram:
 | Increment A: a confirmation and the buttons of a job with a provider that counts its calls | The tests count the calls only for the notices, the summary and the "Report" button. The rest is a code examination |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
+| Increment B: the system text of the Claude provider after ticket #18, with the real service | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B |
+| Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
 
 ## Known limits

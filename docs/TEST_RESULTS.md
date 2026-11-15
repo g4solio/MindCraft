@@ -1,12 +1,13 @@
 # Test results
 
-Dates: 2026-11-12 (S0 to S2 and the review) and 2026-11-13 (increment A). Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: Tweaked 1.121.0.
+Dates: 2026-11-12 (S0 to S2 and the review), 2026-11-13 and 2026-11-14 (increment A), and 2026-11-15 (increment B). Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: Tweaked 1.121.0.
 
 ## Types of test
 
 | Type | Meaning |
 | --- | --- |
-| **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer` |
+| **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer`. The provider is the fixed rules, a provider written in the test, or a local stand-in of the service. No request leaves the computer |
+| **In the game, automatic, with the real service** | The same server runs a test of `LiveTests` that calls the real Claude service: `gradlew runGameTestServer -Plive` or `-Pmeasure`. Each run costs money and needs the consent of the project owner. It is not part of the normal run. Runs 15 and 19 of S2, and runs 76, 78 and 81 of increment A, are of this type. No run of increment B is of this type |
 | **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0`, or of the compiled code of Minecraft and Forge with `javap`. A code examination is not a test: it says what the code does, not that it was seen to do it |
 | **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" and "Increment A — the play session" |
 | **Observed in one manual run** | A condition built by hand around an automatic run. No command of the repository repeats it. Only ticket #7 has one |
@@ -171,6 +172,9 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 152 | 106 of 106 | None. Ticket #26: the build script reads `-Pmodel` from the command line, and one more note in the record. Server line: `All 106 required tests passed :)` |
 | 153 | 106 of 106 | None. Ticket #26, the code of the commit: one comment of the test changed after run 152. Server line: `All 106 required tests passed :)` |
 | 154 | 107 of 107 | None. The integration branch after the merge of ticket #26. Server line: `All 107 required tests passed :)` |
+| 155 | 106 of 107 | Ticket #28, the final code of increment B. `b_replacement_refused` failed one time: "the computer is not off yet". See "Increment B — final runs and evidence (ticket #28)" |
+| 156 | 107 of 107 | None. Ticket #28, the same code. Server line: `All 107 required tests passed :)` |
+| 157 | 107 of 107 | None. Ticket #28, the same code, one more time. Server line: `All 107 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -196,6 +200,7 @@ Runs 140 to 142 are the runs of ticket #25, on the integration branch at `c075de
 Run 143 is the run of the integration branch after the merge of ticket #25.
 Runs 150 to 153 are the runs of ticket #26, on the integration branch at `002c636`.
 Run 154 is the run of the integration branch after the merge of ticket #26.
+Runs 155 to 157 are the runs of ticket #28, on the integration branch at `8b0d3e2`. Ticket #28 changed only documents.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -241,6 +246,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 101, ticket #19 of increment B | All four | Passed. See "Increment B — the facts of the jobs go to the model (ticket #19)" |
 | Run 125, ticket #24 of increment B | All four | Passed. See "Increment B — the low fuel notice (ticket #24)" |
 | Run 127, tickets #20 and #24 after the merge | All four | Passed |
+| Run 156, ticket #28: the final code of increment B | All four | Passed. See "Increment B — final runs and evidence (ticket #28)" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -251,7 +257,7 @@ Lesson from run 21: a test that passed 12 times can hide a defect that depends o
 Lesson from the restart test after run 25: the normal run does not contain the restart test. A change of the transfer rules needs the four restart phases too. One case of them is now also in the normal run.
 Lesson from run 28: a test must not depend on which thread is faster. A fast provider can answer inside the call that sends the request.
 
-The real Claude service was not called after run 19. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases.
+The real Claude service was not called between run 19 and run 76. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases. Runs 76, 78 and 81 called it, with `-Plive`. No run of increment B called it: not runs 85 to 157, and not the restart phases.
 
 The test world is flat and has no structures. See D14 for the reason.
 
@@ -1893,6 +1899,66 @@ This ticket changed no part of the runtime and no Lua module. Thus the four rest
 
 Not done. **No paid run occurred.** Ticket #27 puts here the section of each run, as the harness wrote it. Then come the marks of the agent and the decision of the project owner (D42, point 20).
 
+## Increment B — final runs and evidence (ticket #28)
+
+Ticket #28 of spec #15, on 2026-11-15. It changed only documents: the checklist [PLAY_SESSION_B.md](PLAY_SESSION_B.md), the README, the decision log and this file.
+The code of its runs is the integration branch of increment B at `8b0d3e2`, with tickets #16 to #26. No part of the runtime, no Lua module and no test changed after it. No run called the real Claude service.
+
+| Run | Type | Result |
+| --- | --- | --- |
+| 155, the normal run | In the game, automatic | 106 of 107. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `107 GAME TESTS COMPLETE`, `1 required tests failed :(`. `b_replacement_refused` failed: "the computer is not off yet". See below |
+| 156, the normal run | In the game, automatic | **107 of 107**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `107 GAME TESTS COMPLETE`, `All 107 required tests passed :)`. Uno used the fixed rules: "Uno interprets requests with the fixed rules, without a language model." |
+| `stop` | In the game, automatic | Passed. `All 1 required tests passed :)`. The status at the stop, at the game time 82: `RUNNING`, taken 24, delivered 0, on board 24, "fuel: 999, about 166 trips between the stations" |
+| `check` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart, at the game time 84: the diary `RUNNING`, and the fuel 999 of the record. At the end: `DONE`, source 40, destination 24, robot 0, and the diary `RUNNING, DONE`. The summary: "Since you last opened this screen:" and "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." |
+| `crash` | In the game, automatic | The test halted the process at the game time 422, as expected. The record said `DONE`, delivered 24, on board 0 |
+| `check-crash` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart, at the game time 85: `RECOVERY` ("the world is older than the record of this job"), the diary `RUNNING, DONE, RECOVERY WORLD_OLDER`, source 40, destination 0, robot 24. At the end: `DONE`, "1 recovery. The totals can be inexact.", and the diary `RUNNING, DONE, RECOVERY WORLD_OLDER, RUNNING, DONE`. The summary has the `RECOVERY` with its recorded reason, then the delivery |
+| 157, the normal run | In the game, automatic | **107 of 107**. The same three log lines as run 156 |
+
+The four phases ran after run 156, one at a time, on the same world. After them the data folder has `mindcraft.dat` and no temporary file.
+
+The failure of run 155:
+
+- `b_replacement_refused`, part 3: the test sends `computercraft shutdown` one time for the robot. Then it waits until the computer of the robot is off. The computer was still on at the time limit of the test: 2400 ticks.
+- Runs 156 and 157, on the same code, passed. The cause is not known. Ticket #28 changes no code: the failure is reported, not corrected.
+- Two more tests wait for a shutdown in the same way. They passed in the three runs.
+
+The evidence of increment B, by ticket. "Automatic" is a test in the game, automatic, with the fixed rules, providers written in the tests or the local stand-in of the service. Each section above gives the tests.
+
+| Ticket | What it verified | Kind of evidence | Runs | Not verified |
+| --- | --- | --- | --- | --- |
+| #16, the kinds of a diary entry and the causes of `RECOVERY` | The kinds "change" and "long wait". A record of increment A loads with the same diary and summary. `LOAD_DIFFERS` and `WORLD_OLDER` | Automatic, and the four restart phases | 89 to 91 | A real world of increment A. A long wait across a real restart |
+| #17, the adoption | A new job counts the load on board, by the command and by words. A load above the quantity. A load of a different item. The sentences of the proposal | Automatic, and the four restart phases | 85 to 88 | An adoption across a restart. The burn of an item of a different kind. The proposal in a client |
+| #18, the replacement | One proposal, and one confirmation in one tick, in each open state. The refusals. A change of the destination by words. The robot of a request that names none | Automatic, and the four restart phases | 93 to 95 | The new system text with the real service. The limit of D26. The screen of a client |
+| #19, the facts | The facts and the diary lines in the context of a provider and in the body of a request. No position. A different player gets nothing. The numbers that are not given | Automatic, and the four restart phases | 98 to 102 | A request with the facts to the real service |
+| #21, the fixed rules after a model without a valid action | The sentence first, then the answer of the fixed rules. The request counts | Automatic | 104 to 106 | A failure of the real service |
+| #20, the voice and its checks | The voice of a report and of "none". The check of the numbers and of the length. The fixed sentences before the voice. No voice for an action. The system text in the body of a request | Automatic | 108 to 112 | A sentence of the real model |
+| #23, the record of a request | The record for each result of the checks | Automatic. The log line: a code examination | 113 to 115 | A line with the real service |
+| #24, the low fuel notice | The threshold. One notice, also after a save and a load. A second notice after a refuel. The notice at the start of a job. The fuel in the report, the status, the facts and the screen | Automatic, and the four restart phases | 120 to 126 | A server where turtles need no fuel. The notice in a client |
+| #22, the setting of the model | The start value. The model of the setting in each request. The fallback only for Opus 5.5 and Sonnet 5.5. The reason of an answer 404 | Automatic | 129 to 131 | The real service with Haiku 5.5. The file on a real installation |
+| #25, the conversation part first | The order of the view | Automatic | 140 to 142 | The look and the height in a client |
+| #26, the harness of the measurement | The set of 19 requests, its world and its record | Automatic. The build script: a static check | 150 to 153 | The measurement itself |
+| #28, the final runs | Each test of the increment on the final code | Automatic, and the four restart phases. `gradlew check`: a static check | 155 to 157 | |
+
+The evidence of increment B, by kind:
+
+| Kind | What it covers |
+| --- | --- |
+| **In the game, automatic** | The 107 tests of runs 156 and 157. 24 tests are new in increment B: the tests with the prefix `b_`. Increment B also changed older tests: each section above lists them. The four restart phases after run 156 |
+| **In the game, automatic, with the real service** | None. No paid run occurred in increment B |
+| **Code examination** | The log line of a request. No Lua module changed. The way of a notice calls no provider. A trip from the docks. The read of the fuel at each contact. The order of the widgets in `UnoScreen`. The rows "Code examination" of each section above |
+| **Static check** | `gradlew check` before each commit of ticket #28. The evaluation of the build script of ticket #26 |
+| **In the game, manual** | None yet. The play session of ticket #29 uses [PLAY_SESSION_B.md](PLAY_SESSION_B.md) |
+| **Not executed** | The rows of increment B in "Not executed" below |
+
+What stays not verified for increment B:
+
+- The real model and its sentences. No sentence of the real model passed or failed a check. The facts and the fuel fields did not go to the real service.
+- The system text of `ClaudeProvider` with the real service: the `-Plive` run that CLAUDE.md asks for before the merge into `main`. Ticket #27 has it.
+- The measurement and the choice of the model (ticket #27).
+- The screen of a client: the voice, the fixed sentences before it, the proposals of an adoption and of a replacement, the line about low fuel, the order and the height of the screen, and the confirmation of "Cancel". The notices in the chat of a client.
+- The configuration file on a real installation, and the log lines with a key.
+- The play session (ticket #29).
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1961,12 +2027,14 @@ Third manual test, on the projector and its hologram:
 | Increment A: a confirmation and the buttons of a job with a provider that counts its calls | The tests count the calls only for the notices, the summary and the "Report" button. The rest is a code examination |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
-| Increment B: the system text of the Claude provider after ticket #18, with the real service | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B |
-| Increment B: the new system text of the Claude provider after ticket #20 (the voice), with the real service. Thus no sentence of the real model passed or failed a check | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B. The tests use providers written in the tests. See "Increment B — the voice of Uno and its checks (ticket #20)" |
+| Increment B: the `-Plive` run that CLAUDE.md asks for before the merge into `main`, after the change of the system text of `ClaudeProvider` (tickets #18 and #20). Thus no sentence of the real model passed or failed a check | A `-Plive` run costs money and needs the consent of the project owner. Ticket #27 has it, with the paid runs of the measurement. The automatic tests use providers written in the tests. See "Increment B — the voice of Uno and its checks (ticket #20)" |
 | Increment B: a failure of the real Claude service after ticket #21: an error, a refusal, the time limit, or an answer that Uno cannot read | No run with the real service tested it. Such a run costs money and needs the consent of the project owner. The tests use providers written in the tests. See "Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)" |
 | Increment B: the measurement of the models with the real service (ticket #26 built its harness) | Each run costs money and needs the consent of the project owner. Ticket #27 has the paid runs. See "Increment B — the harness of the measurement (ticket #26)" |
 | Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
 | Increment B: the screen with the conversation part first, in a client: the look, and the height in a small window | It needs a person at the game. The play session of increment B has a step for it. See "Increment B — the conversation part comes first on the screen (ticket #25)" |
+| Increment B: the other parts that the player sees in a client: the voice, the fixed sentences before it, the proposals of an adoption and of a replacement, the low fuel notice in the chat, the fuel line of a panel, and the confirmation of "Cancel" | It needs a person at the game. The automatic tests read the answers of Uno, the view that the server builds and the exit of the notices. [PLAY_SESSION_B.md](PLAY_SESSION_B.md) has a step for each |
+| Increment B: the configuration file on a real installation, and the log lines of the provider and of a request with a key | The game test server never uses Claude. Steps S2, S3 and C7 of [PLAY_SESSION_B.md](PLAY_SESSION_B.md) read them in the development client. The installed jar is deferred (D27) |
+| Increment B: the play session (ticket #29) | It needs the project owner at the game. It comes after the measurement (ticket #27). The checklist is [PLAY_SESSION_B.md](PLAY_SESSION_B.md) |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
 
 ## Known limits

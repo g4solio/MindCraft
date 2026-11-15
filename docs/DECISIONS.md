@@ -487,7 +487,19 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Not verified:** `SOURCE_KEEPS` and `DESTINATION_UNLOADED`. No test reaches them. The destination uses the same code as the source.
 - **Counterexample:** `BLOCKED` and `RECOVERY` still have only a free text. Uno prints it as the recorded reason and does not interpret it.
 - **Changed in increment A:** `BLOCKED` has causes too, and an obstacle is a wait with the cause `PATH_OBSTRUCTED`. See D34. `RECOVERY` still has only a free text.
-- **Decided on 2026-11-15, not implemented:** `RECOVERY` gets two causes with fixed values. See D42, point 2.
+- **Decided on 2026-11-15:** `RECOVERY` gets two causes with fixed values. See D42, point 2.
+- **Implemented on 2026-11-15 (ticket #16), verified with automatic in-game tests:** this ends the limit "`RECOVERY` still has only a free text".
+
+| Cause | The runtime writes it when |
+| --- | --- |
+| `LOAD_DIFFERS` | A robot with an active job holds a different quantity of the item of the job than the record expects (`RobotApi.status`) |
+| `WORLD_OLDER` | At the start of the server, the last transfer of the record is later than the game time of the world (`MindRuntime.get`) |
+| `NONE` | A record of an older version of the mod. Its `RECOVERY` has no cause |
+
+- The runtime writes the cause together with the state, in one function (`MindRuntime.recovery`). The diary entry carries it. Minecraft saves it with the job and with the entry.
+- The recorded reason stays. The report, the notice and the screen give it as before. No sentence of Uno reads the cause yet. The facts for the model read it (ticket #19).
+- **Evidence:** test `b_causes_of_recovery` for `LOAD_DIFFERS`, a save and a load, and a record of increment A, in run 87. It failed in run 86, before the runtime wrote the cause. The phases `crash` and `check-crash` of the restart test for `WORLD_OLDER`, after run 87: the diary after the restart is `RUNNING, DONE, RECOVERY WORLD_OLDER`. See "Increment B — the kinds of a diary entry and the causes of RECOVERY" in `TEST_RESULTS.md`.
+- **Proposed, a consequence of the rule of D31:** a change of the cause writes an entry, also from `RECOVERY` to `RECOVERY`. Thus a job that is in `RECOVERY` with `LOAD_DIFFERS` at a start of the server with a world older than the record gets one more entry, `RECOVERY WORLD_OLDER`, and its notice. Before ticket #16 the state and the cause stayed the same, and only the reason changed: no entry. This comes from a code examination. No test builds it.
 
 ## D26 — One run of a Lua module executes one job
 
@@ -722,6 +734,7 @@ Notices, as built (ticket #8). The choices of detail are **proposed**: the proje
 - **Changed after the code review of increment A (finding P6), proposed:** spec #1 says "A pause, a resume and a cancellation by the owner give no notice". Thus only a request of the owner of the job is not selected. A request of an operator for the job of a different player is an event for that owner. Effect: when the resume of an operator completes the job of a player, the player gets the notice of `DONE`. A pause and a cancellation of an operator still give no notice: the attention rule does not select `PAUSED` and `CANCELLED`. Verified with the automatic in-game test `a_notice_for_a_resume_by_an_operator`. It failed before the change.
 - **No remedy:** the sentences do not say "give fuel" or "resume". The report still says it, as before.
 - **`RECOVERY`** has no cause (D25). The sentence gives the recorded reason. The runtime writes it without coordinates: "the robot holds N, the record says M", or "the world is older than the record of this job".
+- **Changed in increment B (ticket #16):** `RECOVERY` has two causes (D25). The sentence of the notice still gives the recorded reason. `b_causes_of_recovery` verifies it.
 - **One exit:** `Notices.exit` gets the server, the owner and the text. In the game it sends the system message "Uno › …" to the owner, if the owner is connected. If not, nothing is sent and nothing waits: the diary keeps the event for the summary.
 - **Moment:** the notice leaves in the tick of the change, from `MindRuntime.set`, the one function that sets the state of a job.
 - **Console:** a job of the console has no player to warn. It gives no notice. Its diary entries exist.
@@ -746,6 +759,7 @@ Long wait, as built (ticket #9). The choices of detail are **proposed**: the pro
 - **The check:** `MindRuntime.checkWait(job, now)`. The server tick calls it for each job, at each tick, with the game time of the overworld. A test gives a later moment as the parameter `now`.
 - **The entry:** after 6000 ticks or more, one diary entry of the kind "long wait". It has the time of the check, the state `WAITING`, the cause and the quantities at that moment. It is never "requested". The attention rule selects it. Thus its notice leaves through the one exit, in the tick of the check.
 - **One for each wait:** the job records that its current wait has its long wait. The record of the job saves this flag and the start of the wait. Thus a save and a load, or a restart, give no second entry. The next wait starts with a new time and without the flag.
+- **Changed in increment B (ticket #16):** the module of the one-time warnings holds this record (D41, decision 5). The long wait is its first kind. The record of the job saves the list of the given warnings in place of the flag. The load converts the flag of a record of increment A. The behaviour does not change: the tests of the long wait keep their expectations.
 - **A restart is not an interruption:** the game time does not pass while the server is stopped. After a restart the wait keeps its recorded start.
 - **A record of an older version:** a job that waits has no recorded start. The time of its wait starts at the first check after the load. The same applies to a start after the current game time: a world older than the record.
 - **No remedy:** the sentence names the cause. It does not say what the owner must do.
@@ -804,6 +818,7 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 - **Changed after the code review of increment A (finding P1), proposed:** each entry also has a number. The numbers follow the order of the diary of all owners, and do not go back after a crash, as the game time can (D08.1). The record saves the number of the next entry. A diary of the format before the numbers gets its numbers at the load, in its order. The summary of D30 uses the numbers. Verified with automatic in-game tests: `a_diary_of_a_job` (the numbers of a diary without them) and `a_diary_limit` (the number of the newest removed entry), and the four restart phases.
 - **The recorded reason** is not in the list of spec #1. The sentence of a `BLOCKED` without a cause and of a `RECOVERY` needs it.
 - **The second kind of entry (ticket #9):** a long wait. A flag "long wait" marks it. It has the state `WAITING` and the cause at that moment. See "Long wait, as built" in D30. A record without the flag loads its entries as changes.
+- **Changed in increment B (ticket #16):** an entry has a kind, a change or a long wait, in place of the flag (D41, decision 5). The attention rule and the summary read the kind. The record saves the kind. The load converts a record of increment A: an entry with the flag gets the kind "long wait", each other entry gets the kind "change". Verified with automatic in-game tests: `a_long_wait` and `a_summary_has_the_long_wait` load such a record, in runs 86 and 87. Both failed in run 85, before the conversion.
 - **"Requested"** says that a request of an actor made the change: the start, a pause, a resume or a cancellation. The other changes come from what the runtime observed. The attention rule of D30 reads it.
 - **Changed after the code review of increment A (finding P6), proposed:** "requested" says that the owner of the job made the request. A request of an operator for the job of a different player is not "requested". See D30.
 - **Limit:** above 200 entries of one owner, the runtime removes the oldest entries of that owner only. For each owner it records how many entries it removed, and the game time of the newest removed one. Since the code review, also the number of the newest removed one. The summary (ticket #10, D30) says from this where the memory of Uno starts.
@@ -1060,7 +1075,7 @@ Gates before a second player:
 
 ## D41 — The architecture review after increment A: the account and the behaviour of a job
 
-**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is implemented and verified with automatic in-game tests: run 84 and the four restart phases. 5 and 6 wait for increments B and C.
+**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is implemented and verified with automatic in-game tests: run 84 and the four restart phases. 5 is implemented in increment B with its first kind, the long wait (ticket #16): verified with automatic in-game tests, runs 86 and 87 and the four restart phases. Its second kind, low fuel, waits for ticket #24. 6 waits for increments B and C.
 
 - **Problem:** one concept of a job was spread over many modules. Increments B and C change exactly these places (D32, D34, D35). The review weighted the files that changed most in increment A.
 - **Decision 1, the account of a job:** `JobAccount` reads a job with three explicit inputs: the record, whether the robot runs, and the game time. The report, the screen and the status command read a job through it. The ages have one unit, the second. The doubt about the robot is in one place. Increment B adds here the facts for the model and the check of its numbers (D32).
@@ -1069,6 +1084,9 @@ Gates before a second player:
 - **Decision 3, the seam of the provider:** it carries a typed context and a typed action. One function parses and validates the JSON of an answer. `RuleProvider` builds the types directly. The provider describes itself: its name for the log, its line for the screen, its model. The JSON schema and the system text for Claude stay the same. Thus no `-Plive` run is needed (CLAUDE.md).
 - **Decision 4, one path for an action on a job:** the buttons build the same `Request` as the words, and get the same sentences. A button acts at once, except "Cancel": it gives a proposal with "Confirm #N". This closes the deferral of the button "Cancel" in D40. The words keep their rule: a pause and a report at once, the other actions as proposals. The `/mindcraft` commands stay as they are: they are the tool of an operator.
 - **Decision 5, a module for the one-time warnings:** in increment B, as the first step of the low fuel notice. Then the module has two adapters. A diary entry gets a kind, and the load converts the flags of an older record.
+  - **Implemented (ticket #16):** the module `Warnings` holds the given warnings of a job. A kind has a condition. While the condition holds, `MindRuntime.warn` writes one entry of its kind: thus one notice. The end of the condition arms the warning again. The long wait is the first kind: `checkWait` checks its condition, and the end of the wait in `MindRuntime.set` ends it. A diary entry has a kind: `CHANGE` or `LONG_WAIT`. The record saves the kind of an entry and the list of the given warnings of a job. The load converts the "long wait" flags of a record of increment A: of an entry and of a job.
+  - **Verified with automatic in-game tests:** the tests of the long wait keep their expectations, in run 87. `a_long_wait` and `a_summary_has_the_long_wait` load a record of increment A: the same diary, no second entry after a later check, and the same summary. The four restart phases passed after run 87.
+  - **Not done:** the second adapter, low fuel, with its kind and its entry (ticket #24).
 - **Decision 6, a read of the record limited to the actor:** in increment B the context of the model reads the jobs of the actor through one question to the runtime. The map of the jobs becomes private in increment C, when a robot can have more than one job.
 - **The tests of 3 and 4:** replace, do not layer. The bad answers of a provider are tested on the parse function, without a robot. The reference sentences compare typed actions. A new test covers the button "Cancel".
 - **No manual test, decided by the project owner:** these changes get no test in the game by a person. The confirmation of "Cancel" in the screen of a client stays not verified manually. The automatic tests read the view that the server builds.
@@ -1078,7 +1096,7 @@ Gates before a second player:
 
 ## D42 — Increment B: the decisions of the design discussion
 
-**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Nothing is implemented. No test supports a point of this entry. The facts below come from code examinations.
+**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Ticket #16 implemented a part of point 2, the causes of `RECOVERY`, and a part of point 12, the kinds "change" and "long wait": verified with automatic in-game tests, runs 86 and 87 and the four restart phases. Each other point is not implemented, and no test supports it. The facts below come from code examinations.
 
 - **Spec and tickets:** the spec of increment B is issue #15. Its tickets are issues #16 to #29, with their blocking edges. Tickets #27 (the measurement) and #29 (the play session) need the project owner.
 - **Problem:** D32, D33 and D34 decide the direction of increment B. They leave open: where the model speaks, which data it gets, which numbers are uncertain, how the check works, where the setting is, when the measurement runs, how a job adopts a load, and when the fuel is low. D40 and D41 defer three points to B.
@@ -1106,6 +1124,7 @@ The voice (D32)
    - the 20 newest diary entries of the actor, as data.
    - Never: a coordinate, the name of the player, the free text of a reason.
    - `RECOVERY` gets two causes with fixed values: the load differs from the record, and the world is older than the record. This ends the limit of D25, "`RECOVERY` still has only a free text".
+   - **Implemented (ticket #16):** `LOAD_DIFFERS` and `WORLD_OLDER`. A record of an older version has no cause for its `RECOVERY`. Verified: see D25. The facts are not implemented (ticket #19).
 3. **Uncertain numbers.** The model does not get an uncertain number. The player gets it only in a fixed sentence, with its caution. The fixed sentence comes before the voice (D32).
 
 | Case | The model does not get | The fixed sentence |
@@ -1161,6 +1180,7 @@ The low fuel notice (D34, and D41 decision 5)
     - A server without a need for fuel gives no notice.
 12. **One time.** One notice for each job, when the level goes below the threshold. It also comes at the start of a job with a low level. A level at or above the threshold arms the notice again.
     - The notice is a diary entry of the kind "low fuel". A diary entry gets a kind: a change, a long wait or low fuel. The load converts the "long wait" flag of an older record (D41, decision 5).
+    - **Implemented (ticket #16):** the kinds "change" and "long wait", and the conversion of the flag. Verified: see D41, decision 5. The kind "low fuel" is not implemented (ticket #24).
     - The attention rule selects the entry: one chat line, and the summary (D30).
     - The sentence proposes no remedy (D30): "Job 3 on robot #7 (…) has little fuel: 120, about 4 trips between its stations."
     - The state of the job and the hologram do not change.

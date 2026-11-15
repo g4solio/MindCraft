@@ -118,10 +118,15 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 82 | 81 of 81 | None. D41: the account and the behaviour of a job. Server line: `All 81 required tests passed :)` |
 | 83 | 82 of 82 | None. D41, decision 3: the typed seam of the provider. One new test: `a_parse_of_an_answer` |
 | 84 | 83 of 83 | None. D41, decision 4: the buttons of a job go through the requests of the words. One new test: `a_cancel_button_asks_a_confirmation` |
+| 85 | 81 of 83, expected | Ticket #16, red run 1: the kind of a diary entry, without the conversion of a record of increment A. `a_long_wait` and `a_summary_has_the_long_wait` failed |
+| 86 | 82 of 84, expected | Ticket #16, green run 1 and red run 2: the conversion passed. The new test `b_causes_of_recovery` and the changed test `a_no_notice_for_a_resume_that_completes_the_job` failed: the runtime did not write the cause of `RECOVERY` yet |
+| 87 | 84 of 84 | None. Ticket #16: the kinds of a diary entry and the causes of `RECOVERY`. Server line: `All 84 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
 Runs 82 to 84 are the runs of the architecture review after increment A (D41).
+
+Runs 85 to 87 are the runs of ticket #16 of increment B. See "Increment B — the kinds of a diary entry and the causes of RECOVERY".
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -159,6 +164,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 75, ticket #12 | All four | **Passed**. See "Increment A — final runs and evidence" |
 | Run 82, D41 | All four | Passed. See "The architecture review after increment A" |
 | Run 84, D41, decision 4 | All four | Passed |
+| Run 87, ticket #16 of increment B | All four | Passed. `check-crash`: the diary after the restart is `RUNNING, DONE, RECOVERY WORLD_OLDER` |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1018,6 +1024,50 @@ Date: 2026-11-14. Type: in the game, automatic. Code: the branch `increment-a` a
 - Not run for decision 3: the restart phases, because the runtime and the Lua modules did not change. `-Plive`, because the schema and the system text of the Claude provider did not change. The JSON of the context is the same: `t18_claude_provider` compares it with the text of S2.
 - Run 84, decision 4: `All 83 required tests passed :)`. The new test `a_cancel_button_asks_a_confirmation` presses "Pause", "Resume" and "Cancel" of a job. "Pause" and "Resume" act at once, with the sentences of the words. "Cancel" gives a proposal: the job stays open until "Confirm #N", then it is `CANCELLED`. The tests of an old view and of another player still get a refusal. The four restart phases passed after run 84.
 - Not verified for decision 4: the proposal of "Cancel" on the screen of a client. The project owner decided that these changes get no manual test.
+
+## Increment B — the kinds of a diary entry and the causes of RECOVERY (ticket #16)
+
+Date: 2026-11-15. Ticket #16 of spec #15. See D41 (decision 5), D42 (points 2 and 12), D25, D30 and D31.
+A prefactoring of the record: no sentence of Uno changes.
+All tests of this section are in the game and automatic. No test called the real Claude service. No test has a connected player: the tests read the notices through the exit of the notices.
+The table "Runs" gives the runs of this ticket the numbers 85 to 87.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 85: red 1 | The module of the one-time warnings, the kind of a diary entry, and the new keys of the record. The load reads only the new keys | 81 of 83. `a_long_wait` failed as expected: "a record of increment A: [RUNNING, WAITING SOURCE_AT_RESERVE, WAITING ROBOT_FULL, WAITING ROBOT_FULL]". The long wait loaded as a change, and a later check wrote a second long wait. `a_summary_has_the_long_wait` failed as expected: "a record of increment A: Tell me what you need." |
+| 86: green 1, red 2 | The load converts the flags of a record of increment A. The two causes of `RECOVERY` exist, but the runtime does not write them | 82 of 84. The two tests of run 85 passed. `b_causes_of_recovery` failed as expected: "RECOVERY (the robot holds 0, the record says 24)", without a cause. `a_no_notice_for_a_resume_that_completes_the_job` failed as expected: "[RUNNING, WAITING DESTINATION_FULL, RECOVERY, DONE]" |
+| 87: green 2 | The runtime writes the cause together with `RECOVERY` | **84 of 84**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `84 GAME TESTS COMPLETE`, `All 84 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash` | The code of run 87 | Passed, each phase. `stop` and `check`: `All 1 required tests passed :)`. `check`: the diary after the restart is `RUNNING`, at the end `RUNNING, DONE`. `crash` ended with its halt. `check-crash`: after the restart `RUNNING, DONE, RECOVERY WORLD_OLDER`, at the end `RUNNING, DONE, RECOVERY WORLD_OLDER, RUNNING, DONE`, and `All 1 required tests passed :)`. The summary after the restart has the `RECOVERY` with its recorded reason, then the delivery. After the four phases the data folder has no temporary file |
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `b_causes_of_recovery` (new) | A transport of 24 for a player. After the pickup the test empties the robot. Then it reads the job, the diary, the report, the notice and the screen. It saves and loads the record. It loads the record in the format of increment A | The job is `RECOVERY` with the cause `LOAD_DIFFERS` and the reason "the robot holds 0, the record says 24". The diary is `RUNNING`, `RECOVERY LOAD_DIFFERS`, and the entry has the reason. The report has "I cannot say how it went. Recorded reason: the robot holds 0, the record says 24." The one notice: "Job N on robot #R (minecraft:coal from 'b_recovery_source' to 'b_recovery_destination') needs a check: I cannot say how it went. Recorded reason: …". The screen has "Recorded reason: …". After a save and a load: the same cause and the same diary. The record of increment A: the cause is `NONE`, the diary is `RUNNING`, `RECOVERY`, and the report and the sentence of the notice are the same |
+| `a_long_wait` (one more check) | The record after the long wait, in the format of increment A: the flag "longWait" on each entry and on the job. The test loads it, then checks the wait 12000 ticks after its start | The loaded diary is the same as the diary of the server: the long wait has the kind "long wait". The later check writes no second entry. The other expectations of the test did not change |
+| `a_summary_has_the_long_wait` (one more check) | The opening of the screen on a copy of the record in the format of increment A | The same summary as on the server: "From the start of my memory:" and "2 min ago: … has waited for 5 minutes: nothing remains in 'a_summary_wait_source'." |
+| `a_no_notice_for_a_resume_that_completes_the_job` (changed) | As before | The diary is `RUNNING`, `WAITING DESTINATION_FULL`, `RECOVERY LOAD_DIFFERS`, `DONE`. The test expected `RECOVERY` without a cause before. The notice is the same |
+| `t11_server_restart`, phase `check-crash` (changed) | As before | The `RECOVERY` of the load has the cause `WORLD_OLDER` in the job and in the diary. The phase expected `RECOVERY` without a cause before |
+
+Conditions built artificially:
+
+- **A record of increment A:** the test helper `incrementA` changes a saved record. Each diary entry gets the flag "longWait" in place of its kind. Each job gets the flag "longWait" in place of the list of its given warnings. A `RECOVERY` gets the cause `NONE`. No world of increment A was loaded.
+- **The moment of a check and of an opening:** a parameter, as in ticket #9.
+- **The stand-ins of a `RECOVERY`:** `t11_resume_when_the_world_is_older`, `a_notices_call_no_provider` and `a_summary_after_the_time_went_back` set `RECOVERY` themselves. They now call the function of the runtime with the cause: `MindRuntime.recovery`. Their expectations did not change.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| One module holds the one-time warnings: `Warnings`. `MindRuntime.warn` writes the entry of a warning. The long wait is its only kind now | `Warnings.java`, `MindRuntime.java` | That the low fuel notice can use it. Ticket #24 adds that kind |
+| The attention rule selects each entry whose kind is not a change. The sentence of a long wait comes from its kind | `Notices.selected`, `Notices.sentence` | |
+| The two writes of `RECOVERY` in the runtime give a cause: `RobotApi.status` and `MindRuntime.get` | `RobotApi.java`, `MindRuntime.java` | |
+| The report, the screen and the status command still read the recorded reason of a `RECOVERY`. No sentence reads its cause | `JobAccount.java`, `UnoView.java` | |
+| A change from `RECOVERY LOAD_DIFFERS` to `RECOVERY WORLD_OLDER` writes one more entry and gives its notice. Before the ticket it wrote none | `MindRuntime.set` | Its effect in a run. No test builds it. See D25 |
+
+Not covered:
+
+- A real world of increment A. The test builds the older format from a saved record.
+- A long wait across a real restart. The restart phases build no wait, as in ticket #9.
+- The kind "low fuel": ticket #24. The facts for the model, that read the kind and the cause: ticket #19.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

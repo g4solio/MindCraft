@@ -146,6 +146,9 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 110 | 97 of 100, expected | Ticket #20, green run 2 and red run 3: two new tests of the fixed sentences, and `t18_claude_provider` with the old system text |
 | 111 | 100 of 100 | None. Ticket #20: the voice of Uno and its checks. Server line: `All 100 required tests passed :)` |
 | 112 | 100 of 100 | None. Ticket #20, the committed code `cb6161f`. Server line: `All 100 required tests passed :)` |
+| 113 | 100 of 101, expected | Ticket #23, red run: the new test `b_record_of_a_request`, and nothing writes the record |
+| 114 | 101 of 101 | None. Ticket #23: each request is in the server log. Server line: `All 101 required tests passed :)` |
+| 115 | 101 of 101 | None. Ticket #23, the code of the commit. Server line: `All 101 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -1465,6 +1468,79 @@ This ticket changed no part of the runtime and no Lua module. Thus the four rest
 - A sentence of the real model. No `-Plive` run used the new system text. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B.
 - The voice on the screen of a client. The play session of increment B.
 - A silent robot through the conversation: the robot calls each 10 s at most, and the test cannot stop the calls without a stop of the computer. `b_fixed_sentences_of_uncertain_numbers` covers the case with a record that the test writes.
+
+## Increment B — each request is in the server log (ticket #23)
+
+Date: 2026-11-15. Uno records each written request to a provider with a model, and the server log gets one line for each such request. See D33, and the choices of the implementation at the end of D42.
+The code is the branch of increment B at `bbe9478`, with tickets #16 to #21, and the changes of this ticket. No part of the runtime and no Lua module changed. The schema and the system text of the Claude provider did not change. No run called the real Claude service.
+
+### Automatic in-game tests
+
+The test is in the game and automatic. It uses providers written in the test, with the model flag (`CountingModel`): they call no model and cost nothing. Their model is `test-model`. The requester is an operator: only an operator uses a provider with a model (D33.1). The test needs no robot.
+
+| Test | What it does | Result in run 114 |
+| --- | --- | --- |
+| `b_record_of_a_request` (new) | An operator sends five requests, one after the other. 1: "Which stations do I have?", and a "none" with a sentence without a digit, after 300 ms, with 120 input tokens and 30 output tokens. 2: "x", and a "none" with "You have 987654 stations.", with 10 and 2 tokens. 3: "x", and a pause of robot #999999 with the sentence "Done, as you asked.", with 10 and 2 tokens. 4: "x", and an answer that Uno cannot read, with 7 and 3 tokens. 5: "x", and the exception "model offline". Then the operator sends "x" to the fixed rules, and a player who is not an operator sends "x" to a provider with the model flag | Passed. See below |
+
+The records of `b_record_of_a_request`. The test compares the model, the tokens, the action, the result of the checks and the unused sentence with the values of the table. The model of each record is `test-model`. The time of the answer is at least 300 ms for request 1, and less than 5 s for each request.
+
+| Request | Answer of Uno | Action in the record | Tokens: in, out | Result of the checks | Unused sentence |
+| --- | --- | --- | --- | --- | --- |
+| 1 | The sentence of the provider | "none" with that sentence | 120, 30 | `PASSED` | None |
+| 2 | "I cannot answer that. I did nothing." | "none" with that sentence | 10, 2 | `FAILED` | "You have 987654 stations." |
+| 3 | "You have no job on robot #999999. Tell me the robot number of the job. I did nothing." | A pause of robot #999999, without a sentence | 10, 2 | `NOT_NEEDED` | None |
+| 4 | "The model gave no valid answer (I cannot read its answer), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." | An answer that Uno cannot read (`Unreadable`) | 7, 3 | `NO_VALID_ACTION` | None |
+| 5 | The same, with "model offline" | None: the provider gave no answer | 0, 0 | `NO_VALID_ACTION` | None |
+
+After the request to the fixed rules, the record of the operator is the record of request 5: the same object. The player who is not an operator has no record. The counter of the operator: 5 requests, 147 input tokens, 37 output tokens. Thus the record does not change the counter.
+
+Tests that did not change and that cover parts of this ticket, in run 114:
+
+- `a_model_requests_count`, `a_model_limit`, `a_new_session_restarts_the_counters` and `a_screen_model_lines`: the counter of the session and the lines of the screen, as before.
+- `t18_provider_failures`: the answers after a model without a valid action, as before.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 113, red | The new test. `Uno` has the record and its reader, but nothing writes the record | 100 of 101, expected. `b_record_of_a_request` failed at its first request: "the record of the request: null" |
+| 114, green | The code of the ticket | **101 of 101**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `101 GAME TESTS COMPLETE`, `All 101 required tests passed :)` |
+| 115 | The code of the commit: the code of run 114, with one comment of `Uno.Voice` changed | **101 of 101**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `101 GAME TESTS COMPLETE`, `All 101 required tests passed :)` |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+The log line as text has a code examination only (spec #15). The record behind it has the test above.
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| Uno writes the record and the line on the server thread, before the answer of Uno. Thus the consumer of the answer reads the record of its request | `Uno.ask` | |
+| The line is at the level INFO. It has the model, the input tokens, the output tokens, the time in milliseconds, the kind of the action, the result of the checks, and the text of the request of the player. After a failed check it also has the unused sentence. Each text is in JSON quotes: a line break in a text does not start a new line of the log | `Uno.line` | No test reads the server log |
+| The line has no API key. The model is a value of the provider. The key is only in the client of the SDK (D21) | `Uno.line`, `ClaudeProvider.model` | |
+| The line has no coordinate. It has no data of the context. The model gets no coordinate (D42, point 2): thus the unused sentence has none either | `Uno.line` | The request is the text of the player: a player can write a coordinate in it |
+| Only the route of the model gives a record and a line. A provider without a model, a request after the limit of the session, a player who is not an operator, and a request that finds an open request get none | `Uno.ask`, `Uno.route` | |
+| The time of the answer: from the send of the request to the answer of the provider, or to the time limit. The wait for the server thread does not count | `Uno.ask` | |
+| The model of the record is the model that the provider names (`Uno.Provider.model`). The Claude provider names its model of each request | `ClaudeProvider.model` | With the server-side fallback of D21, a different model can answer a request that the first one declined. The record still names the first model. Not seen in a run |
+| The record is in the session of Uno: one record for each actor, the newest. A new server session starts without a record (D24) | `Uno.Session`, `Uno.modelRequest` | No test starts a new session after a record |
+| The counter and the screen did not change | `Uno.ask`, `UnoView` | |
+
+Examples of lines from the log of run 114: an output of automatic tests. No test reads them. The first five lines are the requests of `b_record_of_a_request`. The last line is from `a_screen_model_lines`: the Claude provider with the local stand-in of the service.
+
+```
+Uno request: model test-model, 120 input tokens, 30 output tokens, 300 ms, action none, checks PASSED, request "Which stations do I have?"
+Uno request: model test-model, 10 input tokens, 2 output tokens, 0 ms, action none, checks FAILED, unused sentence "You have 987654 stations.", request "x"
+Uno request: model test-model, 10 input tokens, 2 output tokens, 0 ms, action pause, checks NOT_NEEDED, request "x"
+Uno request: model test-model, 7 input tokens, 3 output tokens, 0 ms, action unreadable, checks NO_VALID_ACTION, request "x"
+Uno request: model test-model, 0 input tokens, 0 output tokens, 0 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model claude-opus-5-5, 1234 input tokens, 56 output tokens, 4 ms, action none, checks PASSED, request "x"
+```
+
+### Not covered
+
+- A line with the tokens and the time of the real service. Ticket #27 has the paid runs of increment B.
+- The log line as text: see the code examination above.
+- The record after the time limit: the time of a late answer, and its tokens. A request that reaches the time limit can still cost tokens (D33.1). The record shows zero, as the counter.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

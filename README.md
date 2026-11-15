@@ -220,7 +220,8 @@ A new job for a robot with an open job of yours is one proposal: cancel that job
 
 - The proposal names the job that it cancels and the new job. Nothing changes before you confirm.
 - Uno checks the new job as for a free robot. If the runtime refuses it, Uno gives the reason and creates no proposal.
-- The proposal says what the robot holds now, as for a new job. The robot can work until you confirm: the new job counts the load that the robot holds at the confirmation. The answer gives that number.
+- The proposal says what the robot holds now, as for a new job. A robot that holds no item of the job gets one sentence, for example "The robot holds no minecraft:coal now."
+- The robot can work until you confirm: the new job counts the load that the robot holds at the confirmation. The answer gives that number.
 - The confirmation cancels the open job and starts the new job in the same moment. The robot is never without a job between the two. This holds in each open state of the job, also `RECOVERY`.
 - If the runtime refuses the new job at the confirmation, for example because the robot is not running, nothing is cancelled. If the robot has a different job at the confirmation, Uno refuses too.
 - The cancellation is your request: it gives no notice. The diary keeps the entries of the cancelled job.
@@ -292,7 +293,9 @@ Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has little 
 - The notice comes one time for each job. It also comes at the start of a job with little fuel, and at a level of 0. A level of 5 trips or more arms it again: after a refuel, a new drop gives a new notice. A restart of the server gives no second notice.
 - The job continues, and the hologram keeps its colour. A robot without fuel still stops: its job goes to `BLOCKED`, with the notice of the block.
 - A server where turtles need no fuel gives no such notice.
-- The report, `/mindcraft job status` and the data for Claude give the fuel level and the trips: the level of the last contact with an active job. The panel of the job on the screen has a line about the fuel only when the fuel is low: "Little fuel: 24, about 4 trips between the stations."
+- The report, `/mindcraft job status` and the data for Claude give the fuel level and the trips: the level of the last contact with an active job.
+- For a robot that is not running, or that has not called for a while, the report says "My last recorded fuel level is 24: about 4 trips between the stations." Claude does not get that level.
+- The panel of the job on the screen has a line about the fuel only when the fuel is low: "Little fuel: 24, about 4 trips between the stations."
 - Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
 - A request of an operator for your job is not your request. If the resume of an operator completes your job, you get the notice of `DONE`.
 - A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
@@ -326,7 +329,7 @@ Uno › Since you last opened this screen:
 
 The runtime writes a diary: each change of the state of a job, and each change of the cause of a wait or of a block.
 A repeated report of the same state and cause writes nothing. A long wait writes one more entry, with the cause at that moment. Low fuel writes one more entry too.
-An entry has a number in the order of the diary, the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason, the quantities, and the fuel level and the trips at that moment.
+An entry has a number in the order of the diary, the game time, the job, the robot, the two stations and the item. It also has the state, the cause, the recorded reason, the quantities, and the fuel level and the trips at that moment.
 Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
 The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
 Only the owner and an operator read the entries of a job. The summary shows the events of the diary that give a notice. No screen and no command shows the whole diary.
@@ -343,7 +346,7 @@ The server log says which provider is active: look for the line `Uno interprets 
 - Each written request of an operator is a paid call on the account of the key. The buttons, the confirmation, `/uno report`, the notices, the summary and the jobs do not call the model.
 - Each operator has a limit of 100 requests to Claude in one server session. The console is one more actor with its own limit. In a single-player game a session ends when you close the world.
 - At the limit Uno says so one time. Then it reads your requests with the fixed rules until the server restarts. The buttons and the commands work as before.
-- The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
+- The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A refusal of the model and a cut answer count with the tokens that the service billed. A request that fails in another way, or reaches the time limit, counts with zero tokens.
 
 #### What Claude does
 
@@ -358,7 +361,8 @@ The server log says which provider is active: look for the line `Uno interprets 
 
 - With each written request Anthropic gets the text of the request and the data of your jobs:
   - the names of your stations, the numbers of your robots, and whether each robot is free;
-  - for each job: its number, the robot, the module, the item, the two stations, the quantity, the reserve, the state and its cause, the delivered total, the load on board, the two observed stocks with their age, and the fuel level of the robot;
+  - for each job: its number, the robot, the module, the item, the two stations, the quantity, the reserve, the state and its cause;
+  - for each job also the delivered total, the load on board, the two observed stocks with their age, and the fuel level of the robot;
   - three numbers that the server calculates: the quantity still to carry, the stock of the source above the reserve, and the trips that the fuel gives;
   - the 20 newest lines of your diary: the age, the job, the robot, the kind, the state, the cause and the quantities.
 - No position leaves the server: no coordinate, no player name and no recorded reason. A recorded reason can hold a position.
@@ -392,7 +396,7 @@ Uno › The model gave no valid answer (the model service is not reachable), thu
 
 #### The server log
 
-- The server log gets one line for each written request to Claude: the model, the input tokens, the output tokens, the time of the answer, the action, the result of the checks, and the text of your request. After a failed check of the voice, the line also has the sentence of Claude that Uno did not use. For example:
+- The server log gets one line for each written request to Claude. The line has the model, the input tokens, the output tokens, the time of the answer, the action, the result of the checks, and the text of your request. After a failed check of the voice, the line also has the sentence of Claude that Uno did not use. For example:
 
 ```
 Uno request: model claude-haiku-5-5, 1234 input tokens, 56 output tokens, 812 ms, action report, checks FAILED, unused sentence "I delivered 987654 items.", request "How is the furnace?"
@@ -416,7 +420,8 @@ Uno › Job 3 on robot #7 waits at the reserve: 32 remain in 'depot', and 16 are
 - When Uno acts, the server writes the answer, as before: a proposal, and the answer to a pause. Claude can write a sentence for a start, a change, a pause, a resume or a cancellation: Uno does not use it.
 - The server checks each sentence of Claude before Uno says it:
   - two sentences and 300 characters at most, and not empty;
-  - each number in digits must be a number that the server sent to Claude, or a number of your request. Claude must not calculate: the server sends the quantity still to carry and the stock above the reserve.
+  - each number in digits must be a number that the server sent to Claude, or a number of your request. Claude must not calculate: the server sends the quantity still to carry and the stock above the reserve;
+  - the answer can come up to 20 seconds after the request. If a number of the sentence is uncertain at that moment, the check fails. For example, the job went to `RECOVERY` during the request.
 - If a check fails for a report, the answer is the fixed report, as without Claude. A request about a station of two jobs then asks for the robot number, as before.
 - If a check fails for a request that is no action, Uno says "I cannot answer that. I did nothing."
 - The answer to a request that is no action is the sentence alone. It does not start with "I cannot propose a job". Thus Uno can answer a question such as "Which stations do I have?".
@@ -424,11 +429,11 @@ Uno › Job 3 on robot #7 waits at the reserve: 32 remain in 'depot', and 16 are
 - Claude does not get a number that Uno does not know for certain (see above). The server gives that number before the voice, in a fixed sentence with its caution. For example:
 
 ```
-Uno › Robot #7 of job 3 is not running or not loaded. The last recorded data, not the current state: 0 on board, 32 in 'depot' (seen 2 min ago) and 40 in 'furnace' (seen 2 min ago). The furnace job is idle: its robot is off.
+Uno › Robot #7 of job 3 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 52 (about 8 trips between the stations), 32 in 'depot' (seen 2 min ago) and 40 in 'furnace' (seen 2 min ago). The furnace job is idle: its robot is off.
 ```
 
 - The fixed sentences are about the job that the request names. If the request names no job, or a station of no open job or of two, they are about each of your jobs.
-- There are four fixed sentences. A job that needs a check: "I cannot say how it went", with the recorded data. A job after a recovery: the delivered total, which can be inexact. A robot that is not running, or that has not called for a while: the last recorded data. An old observation: "I last observed 'depot' 12 min ago: it had 32 then."
+- There are four fixed sentences. A job that needs a check: "I cannot say how it went", with the recorded data. A job after a recovery: the delivered total, which can be inexact. A robot that is not running, or that has not called for a while: the last recorded data, with the fuel level. An old observation: "I last observed 'depot' 12 min ago: it had 32 then."
 - Uno does not remember an earlier sentence of the conversation. Claude has the rule to say so when you ask.
 - The check stops an invented number. It does not stop a number in words, a true number about the wrong job, or a wrong description with true numbers. The panel of the job next to the sentence shows the state.
 - The "Report" button and `/uno report` give the fixed report, as before. They call no model.
@@ -472,7 +477,7 @@ A request without the words of an action and without two stations gets the reaso
 | `RUNNING` | The robot works | |
 | `WAITING` | The source has no material above the reserve, the destination is full, the robot is full, the area of an inventory is not loaded, or the path is obstructed. The runtime records which one: the cause. The robot tries again each 5 seconds. A robot that cannot move first tries 10 times at 1 second. For an obstacle the reason contains the position, the direction and the block in front of the robot | It unblocks by itself. After an obstacle the robot continues at the first move that succeeds |
 | `SATISFIED` | Only for a stock: at the last observation the destination had the requested level. A load can stay on board, if the owner lowered the level after the pickup, or if the job started with a load above the level | It starts again by itself when the stock goes down |
-| `BLOCKED` | The fuel ended, a station has no inventory, or a transport has a load on board above its quantity: the owner lowered the quantity after the pickup, or the job started with a load above its quantity. The runtime records the cause. A module error, or an impediment of a kind that the runtime does not know, is a block without a cause | The owner, with `resume`. Without fuel: give fuel first. For a load above the quantity: raise the quantity first, or cancel |
+| `BLOCKED` | The fuel ended, a station has no inventory, or a transport has a load on board above its quantity. A load above the quantity comes after the owner lowered the quantity after the pickup, or from a job that started with that load. The runtime records the cause. A module error, or an impediment of a kind that the runtime does not know, is a block without a cause | The owner, with `resume`. Without fuel: give fuel first. For a load above the quantity: raise the quantity first, or cancel |
 | `PAUSED` | The owner asked for a pause. The cargo stays on board | The owner, with `resume` |
 | `RECOVERY` | The real cargo of the robot is different from the recorded cargo, or the world is older than the record. The runtime does not know the result | The owner, with `resume` (accepts the observed cargo) or `cancel` |
 | `DONE` | The requested quantity was delivered and no load of the job is on board | |

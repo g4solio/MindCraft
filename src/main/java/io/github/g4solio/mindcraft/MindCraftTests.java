@@ -4173,8 +4173,9 @@ public class MindCraftTests {
 
     /**
      * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job of a player waits for 5 minutes,
-     * goes to BLOCKED and goes to RECOVERY. In one step, each change goes through the function that calls it in the game:
-     * the check of the long wait of the server tick, the impediment of a Lua module, and the state change of the runtime.
+     * has little fuel (since ticket #24), goes to BLOCKED and goes to RECOVERY. In one step, each change goes through the function that calls
+     * it in the game: the check of the long wait of the server tick, a contact of the robot, the impediment of a Lua module, and the state
+     * change of the runtime.
      * The test changes the provider of the server only inside that step (withServerProvider), also when a check fails.
      * The source is empty: the job waits. The test moves the start of the wait back by 6000 ticks: thus the check finds a long wait.
      * It is a provider with a model. It gives the answers of the provider of before.
@@ -4194,10 +4195,12 @@ public class MindCraftTests {
                 withServerProvider(model, () -> {
                     job.waitingSince -= MindRuntime.LONG_WAIT;
                     rig.runtime.checkWait(job, rig.level.getGameTime());
+                    fuel(rig, 29);
                     impediment(rig, MindRuntime.NO_FUEL, "the robot cannot move and has no fuel item");
                     rig.runtime.recovery(job, Cause.LOAD_DIFFERS, "the robot holds 0, the record says 0");
                 });
                 check(notices(player).equals(List.of(longWait(rig, job) + "nothing remains in '" + rig.from + "'.",
+                    subject(rig, job) + " has little fuel: 29, about 4 trips between its stations.",
                     subject(rig, job) + " is blocked: the robot has no fuel.",
                     subject(rig, job) + " needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 0.")),
                     notices(player).toString());

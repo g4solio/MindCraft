@@ -339,6 +339,7 @@ final class Measurement {
             }
         }
 
+        /** The model of the run, for the record. callsModel() stays false: the route of an operator does not apply (see PLAYER). */
         @Override
         public String model() {
             return provider.model();
@@ -350,7 +351,7 @@ final class Measurement {
             String note = done == null ? "the request reached the time limit" : failure != null ? "the provider failed: " + failure
                 : done.action() instanceof Uno.Action.Unreadable ? "Uno cannot read the answer of the provider" : null;
             if (done == null) done = new Uno.ModelRequest(provider.model(), 0, 0, Uno.TIMEOUT_MS, null, Uno.Voice.NO_VALID_ACTION);
-            return new Result(test, expected, done, right(expected, done.action(), runtime), sentence(done.action()), answer, context, note);
+            return new Result(test, expected, done, right(expected, done.action(), runtime), Uno.sentence(done.action()), answer, context, note);
         }
 
         private static long since(long sent) {
@@ -379,12 +380,6 @@ final class Measurement {
         return Uno.find(runtime, PLAYER, on.target()).job() == named
             && Objects.requireNonNullElse(on.quantity(), named.quantity).equals(Objects.requireNonNullElse(job.quantity(), named.quantity))
             && Objects.requireNonNullElse(on.reserve(), named.reserve).equals(Objects.requireNonNullElse(job.reserve(), named.reserve));
-    }
-
-    /** The sentence of an action of the model: only a report and a "none" have one. */
-    private static String sentence(Uno.Action action) {
-        if (action instanceof Uno.Action.None none) return none.sentence();
-        return action instanceof Uno.Action.OnJob job && job.kind() == Uno.Kind.REPORT ? job.sentence() : null;
     }
 
     /** An action in words, for the record. */

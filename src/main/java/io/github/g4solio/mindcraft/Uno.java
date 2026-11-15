@@ -71,7 +71,11 @@ public final class Uno {
             return "the fixed rules, without a language model";
         }
 
-        /** The model that a provider with a model asks, for the record of each request (D41, decision 3). Null without a model. */
+        /**
+         * The model that the provider asks, for the record of each request (D41, decision 3), or null if it asks none.
+         * It does not say whether the operator rule and the limit of the session apply: callsModel() says that. A provider of the
+         * measurement names the model of the run and says that it calls no model (Measurement.Measured).
+         */
         default String model() {
             return null;
         }
@@ -719,7 +723,7 @@ public final class Uno {
     }
 
     /** The sentence of the action of a provider, or null: only a report and a "none" have one. */
-    private static String sentence(Action action) {
+    static String sentence(Action action) {
         return action instanceof Action.None none ? none.sentence()
             : action instanceof Action.OnJob job && job.kind() == Kind.REPORT ? job.sentence() : null;
     }

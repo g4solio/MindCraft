@@ -13,7 +13,7 @@ Dates: 2026-11-12 (S0 to S2 and the review) and 2026-11-13 (increment A). Enviro
 | **Static check** | A program reads the files of the repository without a start of the game. Command: `gradlew checkRules`, a part of `gradlew check` |
 
 No test uses a simulation of the game. Where a condition is built artificially, the table says so.
-Two tests use a false server in place of the Anthropic API: `t18_claude_provider` and, since increment A, `a_screen_model_lines`. They verify the code of the provider and of the screen, not the language model.
+Three tests use a false server in place of the Anthropic API: `t18_claude_provider`, since increment A `a_screen_model_lines`, and since increment B `b_model_of_the_setting`. They verify the code of the provider and of the screen, not the language model.
 One test calls the real Claude service: `t18_claude_live`. It is not part of the normal run. Command: `gradlew runGameTestServer -Plive`.
 Reasons: each run costs four requests on the account of the key owner, and a language model can answer differently at each run.
 
@@ -154,6 +154,9 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 125 | 98 of 98 | None. Ticket #24, the committed code `97cd020`. Server line: `All 98 required tests passed :)` |
 | 126 | 98 of 98 | None. Ticket #24, one more step in `a_notices_call_no_provider` (`dfa1d29`). Server line: `All 98 required tests passed :)` |
 | 127 | 103 of 103 | None. The integration branch after the merge of tickets #20 and #24. Server line: `All 103 required tests passed :)` |
+| 128 | 103 of 104, expected | Ticket #22, red run: the new test `b_model_of_the_setting`, with the model still a constant of the provider |
+| 129 | 104 of 104 | None. Ticket #22: the model is a setting. Server line: `All 104 required tests passed :)` |
+| 130 | 104 of 104 | None. Ticket #22, the committed code `260efdc`. Server line: `All 104 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -1542,6 +1545,54 @@ The restart test does not check the fuel. The fuel lines above are observations 
 - The notice in the chat of a client, the line of the screen in a client, and the report with the fuel in a client. The play session of increment B has a step for the notice.
 - The fuel in a request to the real service. No `-Plive` run sent it.
 - A robot that burns the fuel items on board at the level 0. `transport.lua` does it (code examination, D12).
+
+## Increment B — the model is a setting (ticket #22)
+
+Date: 2026-11-15. The model of the Claude provider is the value `model` of `config/mindcraft-common.toml`. The start value is `claude-haiku-5-5`. Only a model with a server-side fallback for a refusal gets the fallback parameter. See D42, point 6, D33 and D21.
+The code is the integration branch of increment B at `c63d75c`, with tickets #16 to #21 and #24, and the changes of this ticket. No part of the runtime and no Lua module changed. The system text and the schema of the Claude provider did not change.
+No run called the real Claude service. **No run with the real service used Haiku 5.5 yet.** It is still not known from a run whether the service refuses the `fallbacks` parameter for Haiku 5.5. The provider no longer sends it.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. Each one uses the local stand-in of the service in the place of the API: no request reaches the real service.
+
+| Test | What it does | Result in run 129 |
+| --- | --- | --- |
+| `b_model_of_the_setting` (new), in the batch `b_model_setting` | The test reads the start value of the setting. It builds three Claude providers, with the setting at `claude-sonnet-5-5`, at `claude-haiku-5-5` and at `claude-haiku-9-9`. It puts the value of before back after each one. An operator sends "x" four times through Uno. The stand-in answers: a "none" with a sentence for Sonnet, the same for Haiku, a refusal for Haiku, and an answer 404 `not_found_error` with "model: claude-haiku-9-9" for the third model | Passed. The start value is `claude-haiku-5-5`. The setting has its value of before after the three providers, and at the end. The names for the log line: "Claude (claude-sonnet-5-5)" and "Claude (claude-haiku-5-5)". The four requests name `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-haiku-5-5` and `claude-haiku-9-9`, each with the effort `low`. Only the request for Sonnet has `fallbacks: "default"` and the beta header `server-side-fallback-2026-07-01`. The answers: "You did not give the source." two times. Then "The model gave no valid answer (the model declined the request), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." Then the same with "(the model service does not know the model 'claude-haiku-9-9')" |
+| `t18_claude_provider` (changed) | As before. Its check of the model and of the fallback moved to `b_model_of_the_setting` | Passed. The request names the model of the setting of the test server. Each other check is as before |
+
+The file of the setting. Type: in the game, automatic: the game test server of the normal run wrote it, and the agent read it after the run. It is the file of a test server, not of a real installation.
+
+- Before runs 129 and 130 the agent deleted `run-gametest/config/mindcraft-common.toml`. At the start of each run Forge wrote it again. Its log line "Configuration file … is not correct. Correcting" is the message of Forge for a new file.
+- After each run the file had three lines of comment and `model = "claude-haiku-5-5"`. `b_model_of_the_setting` changed the value six times during the run, and Forge saved the file at each change. Thus the file after the run also shows that the test put the value back.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 128, red | The new test `b_model_of_the_setting`. The setting exists in the Forge file, but the provider still has the constant `claude-opus-5-5` | 103 of 104, expected. `b_model_of_the_setting` failed at its check of the names: "Claude (claude-opus-5-5), Claude (claude-opus-5-5)" |
+| 129, green | The provider reads the setting. The fallback only for Opus 5.5 and Sonnet 5.5. The reason of an answer 404 | **104 of 104**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `104 GAME TESTS COMPLETE`, `All 104 required tests passed :)` |
+| 130 | The commit `260efdc`: the code of run 129 | **104 of 104**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `104 GAME TESTS COMPLETE`, `All 104 required tests passed :)` |
+
+The three branches of the code came in one step: the read of the setting, the fallback and the reason of a 404. Thus run 128 is the red run of all three. Its first failed check stopped the test before the requests.
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The server builds the Claude provider at its start, only with a key and never on a game test server. Thus the server reads the setting at its start. The log line "Uno interprets requests with …" uses the name of the provider: it names the model | `MindCraft.aboutToStart`, `ClaudeProvider.fromEnv` | The log line with a key: no run had a key |
+| The key stays in the environment: the SDK reads it in `fromEnv`. The file of the setting holds no key | `ClaudeProvider.fromEnv`, `MindCraft.MODEL` | |
+| Forge loads the file again after a change while the server runs. The provider keeps the model of the start | `ConfigFileTypeHandler.ConfigWatcher` of Forge 47.4.28, with `javap` | No test changes the file while a server runs |
+| `t18_claude_live` gets its provider through `fromEnv`: it uses the model of the setting, and its log names it | `LiveTests.java` | It did not run |
+
+### Not covered
+
+- A request to the real service with the setting. No run with the real service used Haiku 5.5 yet. The paid runs of increment B are ticket #27.
+- Whether the service refuses the `fallbacks` parameter for Haiku 5.5. The provider no longer sends it.
+- The answer of the real service to a model that it does not know. The stand-in gives the shape of the guide of the API: 404, `not_found_error`, "model: <id>".
+- The file on a real installation, a change of the setting by a person, and the log line with a key. The play session of B.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

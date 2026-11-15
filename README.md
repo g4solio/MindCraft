@@ -74,7 +74,7 @@ The server restart test uses two starts on the same world. Run the phases in thi
 ./gradlew runGameTestServer -PrestartPhase=check-crash
 ```
 
-The test of the Claude provider with the real service is separate. It needs `ANTHROPIC_API_KEY` in the environment and costs four requests to the model:
+The test of the Claude provider with the real service is separate. It needs `ANTHROPIC_API_KEY` in the environment and costs four requests to the model. It uses the model of the setting in `run-gametest/config/mindcraft-common.toml` (see "Uno with Claude"):
 
 ```bash
 ./gradlew runGameTestServer -Plive
@@ -344,7 +344,13 @@ The server log says which provider is active: look for the line `Uno interprets 
 - Claude gives the action. For a report and for a request that is no action, Claude also writes the sentence of Uno: see "The voice of Uno". The server writes each other sentence of Uno, as before.
 - The screen says "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
 - A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
-- The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
+- The model is a setting: the value `model` in `config/mindcraft-common.toml`. The file is common to the installation: the `config` folder of the game, or of the dedicated server. Forge writes it at the first start, with the start value.
+- The start value is `claude-haiku-5-5`, until the measurement of increment B gives a different model. The other values are `claude-sonnet-5-5` and `claude-opus-5-5`.
+- The server reads the value at its start. Change it while the server or the game is stopped. The log line `Uno interprets requests with` names the model, for example `Claude (claude-haiku-5-5)`.
+- Opus 5.5 and Sonnet 5.5 have a server-side fallback for a refusal: the service tries a declined request again on a model that Anthropic chooses. Haiku 5.5 has none, and a different value gets none: there a refusal is a failure of the model.
+- A model that the service does not know, or does not offer to the key, is a failure of the service. Each written request then gets an answer such as "The model gave no valid answer (the model service does not know the model 'claude-haiku-9-9'), thus I read your request with the fixed rules: …". Each one still counts in the counter of the session. Correct the setting and start the server again. The server log has the answer of the service.
+- The effort of the model is low. It is not a setting.
+- You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, its sentence says what is missing.
 - If Claude gives no valid action, Uno reads the same request with the fixed rules (see below). This holds when the model service fails, when the request reaches the time limit, when the model declines the request, and when Uno cannot read the answer. The answer starts with one sentence that says so, with the reason. Then comes the answer of the fixed rules: a proposal, an immediate action, or the reason why they cannot propose a job. For example:
 

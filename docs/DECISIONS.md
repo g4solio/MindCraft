@@ -413,6 +413,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Decided on 2026-11-13:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). These two points are not implemented: they are increment B. By default only an operator uses Claude, with a session limit and a counter on the screen (D33). Increment A implements this point: see the next line.
 - **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
 - **Decided on 2026-11-15, not implemented:** the facts that leave the server in increment B, and the new line of the screen. See D42, points 2 and 18.
+- **Changed on 2026-11-15, increment B, ticket #19:** each written request also carries the facts of the jobs of the player and the 20 newest lines of the diary, without a position. The screen has the new line. Verified with automatic in-game tests and the stand-in of the service. Not verified with the real service: no `-Plive` run sent the facts. See D42, points 2 and 18.
 
 ## D22 — License: MIT
 
@@ -847,6 +848,7 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 - **Open:** the language of the voice. D15 says English.
 - **Review condition:** the tests with the real service show sentences that contradict the record.
 - **Decided on 2026-11-15, not implemented:** the model speaks only for `report` and `none`. The facts, the uncertain numbers, the check of the numbers and the character are in D42.
+- **Implemented on 2026-11-15 (ticket #19):** the data that leave the server, without the uncertain numbers. The model does not speak yet. See D42, points 2 and 3.
 
 ## D33 — The model and its cost
 
@@ -1077,7 +1079,7 @@ Gates before a second player:
 
 ## D41 — The architecture review after increment A: the account and the behaviour of a job
 
-**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is implemented and verified with automatic in-game tests: run 84 and the four restart phases. 5 is implemented in increment B with its first kind, the long wait (ticket #16): verified with automatic in-game tests, runs 90 and 91 and the four restart phases. Its second kind, low fuel, waits for ticket #24. 6 waits for increments B and C.
+**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is implemented and verified with automatic in-game tests: run 84 and the four restart phases. 5 is implemented in increment B with its first kind, the long wait (ticket #16): verified with automatic in-game tests, runs 90 and 91 and the four restart phases. Its second kind, low fuel, waits for ticket #24. 6 is implemented in increment B for the context of the model (ticket #19): verified with automatic in-game tests, runs 95 and 96. The private map of the jobs waits for increment C.
 
 - **Problem:** one concept of a job was spread over many modules. Increments B and C change exactly these places (D32, D34, D35). The review weighted the files that changed most in increment A.
 - **Decision 1, the account of a job:** `JobAccount` reads a job with three explicit inputs: the record, whether the robot runs, and the game time. The report, the screen and the status command read a job through it. The ages have one unit, the second. The doubt about the robot is in one place. Increment B adds here the facts for the model and the check of its numbers (D32).
@@ -1090,6 +1092,9 @@ Gates before a second player:
   - **Verified with automatic in-game tests:** the tests of the long wait keep their expectations, in run 91. `a_long_wait` and `a_summary_has_the_long_wait` load a record of increment A: the same diary, no second entry after a later check, and the same summary. The four restart phases passed after run 91.
   - **Not done:** the second adapter, low fuel, with its kind and its entry (ticket #24).
 - **Decision 6, a read of the record limited to the actor:** in increment B the context of the model reads the jobs of the actor through one question to the runtime. The map of the jobs becomes private in increment C, when a robot can have more than one job.
+  - **Implemented (ticket #19):** the question is `MindRuntime.jobs(actor)`: the jobs that the actor owns. `Uno.context` reads the facts of the jobs through it, and the diary through `MindRuntime.diary(actor)`. The map of the jobs stays public. The report, the screen and the search of a job still read it.
+  - **Verified with automatic in-game tests:** a different player gets no fact and no diary line of the owner (`b_facts_in_the_context`, runs 95 and 96). That the context reads the jobs only through the question is a code examination.
+  - **Proposed, a choice of the implementation:** the "free" flag of a robot (D21) still reads the job of each robot of the actor, as in increment A. Thus a job of an operator on the robot of a player still makes that robot not free. The flag gives no data of that job. Reason: the answers of Uno do not change in ticket #19.
 - **The tests of 3 and 4:** replace, do not layer. The bad answers of a provider are tested on the parse function, without a robot. The reference sentences compare typed actions. A new test covers the button "Cancel".
 - **No manual test, decided by the project owner:** these changes get no test in the game by a person. The confirmation of "Cancel" in the screen of a client stays not verified manually. The automatic tests read the view that the server builds.
 - **Rejected by the review:** the save and the load of the record are already in one module. The global seams of the tests stay: the tests share one server (D24). The Lua composition passes the deletion test.
@@ -1098,7 +1103,7 @@ Gates before a second player:
 
 ## D42 — Increment B: the decisions of the design discussion
 
-**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Ticket #16 implemented a part of point 2, the causes of `RECOVERY`, and a part of point 12, the kinds "change" and "long wait": verified with automatic in-game tests, runs 90 and 91 and the four restart phases. Ticket #17 implemented point 9: verified with automatic in-game tests on 2026-11-15, see "As built" under point 9. Each other point is not implemented, and no test supports it. The facts below come from code examinations.
+**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Ticket #16 implemented a part of point 2, the causes of `RECOVERY`, and a part of point 12, the kinds "change" and "long wait": verified with automatic in-game tests, runs 90 and 91 and the four restart phases. Ticket #17 implemented point 9: verified with automatic in-game tests on 2026-11-15, see "As built" under point 9. Ticket #19 implemented point 2 without the fuel, the part of points 3 and 4 that is about the facts, and point 18: verified with automatic in-game tests on 2026-11-15, runs 95 and 96, see "As built" under point 2. Each other point is not implemented, and no test supports it. The facts below come from code examinations.
 
 - **Spec and tickets:** the spec of increment B is issue #15. Its tickets are issues #16 to #29, with their blocking edges. Tickets #27 (the measurement) and #29 (the play session) need the project owner.
 - **Problem:** D32, D33 and D34 decide the direction of increment B. They leave open: where the model speaks, which data it gets, which numbers are uncertain, how the check works, where the setting is, when the measurement runs, how a job adopts a load, and when the fuel is low. D40 and D41 defer three points to B.
@@ -1126,7 +1131,18 @@ The voice (D32)
    - the 20 newest diary entries of the actor, as data.
    - Never: a coordinate, the name of the player, the free text of a reason.
    - `RECOVERY` gets two causes with fixed values: the load differs from the record, and the world is older than the record. This ends the limit of D25, "`RECOVERY` still has only a free text".
-   - **Implemented (ticket #16):** `LOAD_DIFFERS` and `WORLD_OLDER`. A record of an older version has no cause for its `RECOVERY`. Verified: see D25. The facts are not implemented (ticket #19).
+   - **Implemented (ticket #16):** `LOAD_DIFFERS` and `WORLD_OLDER`. A record of an older version has no cause for its `RECOVERY`. Verified: see D25.
+   - **As built (ticket #19).** The facts are implemented without the fuel: ticket #24 adds the fuel level and the trips. **Verified** with automatic in-game tests on 2026-11-15, runs 95 and 96. The four restart phases passed after run 95. The choices of detail below are **proposed**: the project owner did not confirm them one by one.
+     - `JobAccount.facts()` builds the facts of one job from the three inputs of the account: the record, whether the robot runs, and the game time. `JobAccount.lines` builds the diary lines. `Uno.context` puts both in the typed context of the provider, with the game time of the request. The Claude provider sends the context as JSON in the body of its request.
+     - The facts of a job: the job ID, the robot, the module, the item, the two station names, the quantity, the reserve, the state, the cause, the delivered total, the load on board, the two observed stocks with their age, the quantity still to carry and the stock of the source above the reserve.
+     - The quantity still to carry: for a transport, the quantity minus the delivered total. For a stock job, the level minus the observed stock of the destination. Never below 0. The load on board is still to carry: it is not delivered. The stock above the reserve: the observed stock of the source minus the reserve, never below 0.
+     - An age is in words, as in the summary: "12 s ago", "5 min ago".
+     - The lines: the 20 newest entries of the diary of the actor, the oldest first. A line has no station names, no item and no reason.
+     - A number that is not given is not in the JSON. In its place, the list `uncertain` of the facts has one fixed sentence: which value is not given, and why. Example: "The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."
+     - A stock that no robot observed is not given, with the sentence "No robot observed 'furnace' yet. Its stock is unknown." Unknown is not zero (T02).
+     - **Evidence:** `b_facts_in_the_context` reads the context that a provider of the test gets, through the conversation with Uno. A job that is done, a job that is `BLOCKED` with a position in its recorded reason, and a job in `RECOVERY` after the owner emptied the robot. The context has no position, no recorded reason and no owner. `t18_claude_provider` reads the facts and the lines in the body of the request to the stand-in of the service. See TEST_RESULTS.md, "Increment B — the facts of the jobs go to the model (ticket #19)".
+     - **Not verified:** a request with the facts to the real service. No `-Plive` run sent the facts. The system text and the schema of the Claude provider did not change.
+     - **Counterexample:** until ticket #20, the reason of `none` is a sentence of the model without a check (D29.1). With the facts in the context, it can name a number of the facts. The system text still says to speak only about the request, the stations and the robots.
 3. **Uncertain numbers.** The model does not get an uncertain number. The player gets it only in a fixed sentence, with its caution. The fixed sentence comes before the voice (D32).
 
 | Case | The model does not get | The fixed sentence |
@@ -1138,9 +1154,17 @@ The voice (D32)
 
    - An observation is old after 6000 ticks of game time: 5 minutes, the length of a long wait (D30). This closes "not decided" in D34.
    - 300 ticks is the existing value `JobAccount.SILENT_TICKS`.
+   - **Implemented in part (ticket #19):** the facts do not give the numbers of the second column. Each case has a fixed sentence in the facts. The value 6000 is `JobAccount.OLD_TICKS`. **Verified** with automatic in-game tests, runs 95 and 96: `b_facts_of_uncertain_numbers` gives the account a record that the test writes, the flag of the robot and a game time, without a robot. It checks each case of the table and the limits: 300 and 6000 ticks give the numbers, 301 and 6001 ticks do not. `b_facts_in_the_context` checks a real `RECOVERY` through the conversation. **Not implemented:** the fixed sentence before the voice (ticket #20).
+   - **Proposed, choices of the implementation:**
+     - The doubt about the robot holds in each state of the job. The fixed report of increment A has it only for an open job that is not paused.
+     - A derived number is not given when its number is not given. Thus a transport in `RECOVERY` or after a recovery has no quantity still to carry.
+     - A line of the diary gives no number that the facts of its job do not give. A line in `RECOVERY` has no delivered total and no load on board. A job with a `RECOVERY` line in the diary has no delivered total in its lines: this also holds for a job that a new job replaced on its robot.
+     - "After a recovery" is the counter of the record: a resume of a `RECOVERY`, as in the fixed report.
+   - **Limit:** a job that the owner cancelled in `RECOVERY` had no resume. Thus its facts give its delivered total, as the fixed report of increment A does. Its lines do not. The record of a job does not keep its `RECOVERY`: only the diary does.
 4. **The check of the numbers.** Each run of digits in the sentence of the model must be a run of digits of the facts that the server sent, or of the request of the player.
    - The server also sends the derived numbers: the quantity still to carry, the stock above the reserve, and each age in words ("12 min"). The model does not calculate.
    - If the check fails, Uno uses the fixed template of A. The server log records the failure.
+   - **Implemented in part (ticket #19):** the derived numbers and the ages in words are in the facts. **Verified** with automatic in-game tests, runs 95 and 96: `b_facts_in_the_context` and `b_facts_of_uncertain_numbers`. **Not implemented:** the check of the numbers (ticket #20).
 5. **Character and length.** The system text gives Uno the character of the brief (2.4): competent, curious and slightly ironic, in the first person.
    - Two sentences and 300 characters at most. A longer answer gets the fixed template: a cut can remove a caution.
    - Uno can say what the owner can do, as the fixed report already does.
@@ -1233,6 +1257,7 @@ The answers of Uno, and the measurement: the second round
     - The request still counts in the counter of the session.
     - **Change:** this ends a counterexample of D29.1. There the fixed rules did not take over.
 18. **The line of the screen about the data.** "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." This changes the line of D21 and D33.1.
+    - **Implemented (ticket #19)** and **verified** with automatic in-game tests, runs 95 and 96: `a_screen_model_lines` reads the line on the screen of an operator. A player who is not an operator, and an operator at the limit, do not see it. **Not verified:** the line in the screen of a client.
 19. **Where the fuel shows.** The fixed report, the status command and the facts give the fuel level and the trips. The screen shows one line in the panel of a job, only when the fuel is low.
 20. **Who judges the sentences of the measurement.** The run writes each sentence next to its facts in `TEST_RESULTS.md`. The agent marks each sentence that can contradict the record. The project owner decides whether a sentence contradicts the record. Thus the project owner decides which model stays.
 

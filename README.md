@@ -298,15 +298,27 @@ The server log says which provider is active: look for the line `Uno interprets 
 - Each operator has a limit of 100 requests to Claude in one server session. The console is one more actor with its own limit. In a single-player game a session ends when you close the world.
 - At the limit Uno says so one time. Then it reads your requests with the fixed rules until the server restarts. The buttons and the commands work as before.
 - The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
-- Anthropic gets the text of the request, the names of the stations and the numbers of the robots. An operator owns each station and each robot of the server: thus these are the names and numbers of all players.
-- The screen says "Written requests go to Claude" only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
+- With each written request Anthropic gets the text of the request and the data of your jobs:
+  - the names of your stations, the numbers of your robots, and whether each robot is free;
+  - for each job: its number, the robot, the module, the item, the two stations, the quantity, the reserve, the state and its cause, the delivered total, the load on board, and the two observed stocks with their age;
+  - two numbers that the server calculates: the quantity still to carry, and the stock of the source above the reserve;
+  - the 20 newest lines of your diary: the age, the job, the robot, the kind, the state, the cause and the quantities.
+- No position leaves the server: no coordinate, no player name and no recorded reason. A recorded reason can hold a position.
+- A number that Uno does not know for certain does not go to Claude. In its place Claude gets a sentence that says which value is missing, and why:
+  - a job that needs a check: no delivered total, no load on board and no stock;
+  - a job after a recovery: no delivered total;
+  - a robot that is not running, or that has not contacted the server for more than 15 seconds of game time: no load on board and no stock;
+  - a stock that a robot observed more than 5 minutes of game time ago: not that stock.
+- An operator owns each station, each robot and each job of the server: thus these are the data of all players.
+- Claude still gives only the action, and the reason of a request that is not an action. The server writes each other sentence of Uno, as before.
+- The screen says "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
 - A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
 - Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
-Details and limits: D21 and D33.1 in [docs/DECISIONS.md](docs/DECISIONS.md).
+Details and limits: D21, D33.1 and D42 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### What Uno understands without Claude
 

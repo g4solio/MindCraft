@@ -266,6 +266,18 @@ public class MindCraftTests {
         throw new GameTestAssertException("the runtime accepted a request that it must refuse: " + expectedMessage);
     }
 
+    /**
+     * A start that the runtime must accept. A refusal fails the test. The test sequence catches only an assertion:
+     * each other exception stops the whole server, and the run gives no result for the other tests.
+     */
+    private static Job accepted(Supplier<Job> start) {
+        try {
+            return start.get();
+        } catch (Refusal refusal) {
+            throw new GameTestAssertException("the runtime refused a request that it must accept: " + refusal.getMessage());
+        }
+    }
+
     /** Places a turtle that is on. A computer ID of -1 lets CC: Tweaked assign the ID. */
     static void placeTurtle(GameTestHelper helper, BlockPos relative, int computerId, int fuel, UUID owner) {
         helper.setBlock(relative, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("computercraft:turtle_normal")));
@@ -901,7 +913,10 @@ public class MindCraftTests {
             .thenSucceed();
     }
 
-    /** T14: cancel during the transport. The load stays in the robot. The status shows it. */
+    /**
+     * T14: cancel during the transport. The load stays in the robot. The status shows it.
+     * D42, point 9: a new job adopts that load. Its quantity is 8: the robot delivers 8 and stops with the rest on board (D16.1).
+     */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t14_cancel(GameTestHelper helper) {
         Rig rig = new Rig(helper, "t14b", 64, 1000);
@@ -918,7 +933,137 @@ public class MindCraftTests {
                 check(rig.robot().turtle.getPosition().equals(stop[0]), "the robot moved after the cancel");
                 check(rig.held() == 24 && rig.coal(rig.dest) == 0 && rig.job().carried == 24, rig.describe());
                 check(rig.describe().contains("on board 24"), rig.describe());
-                refused(() -> rig.startJob(8, 0), "already holds 24");
+                Job next = accepted(() -> rig.startJob(8, 0));
+                check(next.carried == 24 && next.taken == 0, "the new job did not adopt the load: " + rig.describe());
+            })
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                check(rig.job().cause == Cause.LOAD_ABOVE_QUANTITY && rig.job().delivered == 8 && rig.job().carried == 16, rig.describe());
+                check(rig.coal(rig.source) == 40 && rig.coal(rig.dest) == 8 && rig.held() == 16, rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D42, point 9: a new job counts the items of the job that the robot holds as its first load. The start command adopts them too,
+     * and its answer gives the number. The first diary entry has the load. The record agrees with the real load: no RECOVERY.
+     * The robot delivers the adopted load first, and takes only the rest: a transport of 64 with 24 on board takes 40.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_adoption_by_the_command(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "b_adopt", 64, 1000);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new ArrayList<>();
+        rig.begin()
+            .thenExecute(() -> {
+                rig.robot().turtle.getInventory().setItem(3, new ItemStack(Items.COAL, 24));
+                int result = server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSource(sink(answers)),
+                    "mindcraft job transport " + rig.id + " " + rig.from + " " + rig.to + " minecraft:coal 64");
+                check(result == 1 && rig.job() != null, "the command did not start the job: " + answers);
+                check(answers.equals(List.of("Job " + rig.job().id + " started on robot #" + rig.id
+                    + ". It counts the 24 x minecraft:coal on board as its first load.")), answers.toString());
+                check(rig.job().carried == 24 && rig.job().taken == 0, rig.describe());
+                List<Entry> first = entries(rig.runtime, rig.actor, rig.job().id);
+                check(first.size() == 1 && first.get(0).state() == State.RUNNING && first.get(0).carried() == 24, first.toString());
+            })
+            // The robot delivers the adopted load first. The source does not change yet.
+            .thenWaitUntil(() -> check(rig.job() != null && rig.job().delivered == 24, rig.describe()))
+            .thenExecute(() -> check(rig.coal(rig.source) == 64 && rig.coal(rig.dest) == 24 && rig.job().taken == 0, rig.describe()))
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                rig.assertTransferred(24, 64);
+                check(rig.job().taken == 40 && rig.job().delivered == 64 && rig.job().recoveries == 0, rig.describe());
+                List<String> states = states(rig.runtime, rig.actor, rig.job().id);
+                check(states.equals(List.of("RUNNING", "DONE")), states.toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D42, point 9, for a stock: the job uses the adopted load at the first need. The destination has 50 of 64, and the robot holds 24.
+     * The robot delivers 14 from its load and keeps 10 for the next need. It takes nothing from the source until the load is used.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_adoption_keep_stock(GameTestHelper helper) {
+        Rig rig = new Rig(helper, "b_adopt_keep", 64, 1000);
+        Container dest = rig.chest(rig.dest);
+        dest.setItem(0, new ItemStack(Items.COAL, 50));
+        rig.begin()
+            .thenExecute(() -> {
+                rig.robot().turtle.getInventory().setItem(0, new ItemStack(Items.COAL, 24));
+                check(accepted(() -> rig.runtime.start(rig.actor, rig.order(MindRuntime.KEEP_STOCK, 64, 0))).carried == 24, rig.describe());
+            })
+            .thenWaitUntil(() -> check(rig.job() != null && rig.job().state == State.SATISFIED && rig.job().delivered == 14, rig.describe()))
+            .thenExecute(() -> {
+                check(rig.coal(rig.dest) == 64 && rig.held() == 10 && rig.coal(rig.source) == 64, rig.describe());
+                check(rig.job().carried == 10 && rig.job().taken == 0 && rig.job().reason.contains("10 stay on board"), rig.describe());
+                // Something uses 30. The robot delivers its 10 first, then takes 20.
+                dest.removeItem(0, 30);
+            })
+            .thenWaitUntil(() -> check(rig.job().state == State.SATISFIED && rig.job().delivered == 44, rig.describe()))
+            .thenExecute(() -> {
+                check(rig.coal(rig.dest) == 64 && rig.held() == 0 && rig.coal(rig.source) == 44 && rig.job().taken == 20, rig.describe());
+                List<String> states = states(rig.runtime, rig.actor, rig.job().id);
+                check(!states.contains("RECOVERY"), states.toString());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * D42, point 9: the proposal of a start says what the robot holds, before the confirmation. A robot that holds nothing: the text of A.
+     * Items of other kinds stay on board, and the job does not count them. A load above the quantity: the proposal says so.
+     * After the confirmation the transport delivers the quantity, and stops with the rest on board (D16.1).
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_adoption_in_the_proposal(GameTestHelper helper) {
+        Actor player = player("b_proposal");
+        Rig rig = new Rig(helper, "b_proposal", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        String carry = "Carry %d coal from " + rig.from + " to " + rig.to;
+        Function<Integer, String> order = quantity -> "Proposal: carry " + quantity + " x minecraft:coal from '" + rig.from + "' to '" + rig.to
+            + "'. Reserve to leave in '" + rig.from + "': 0. Robot #" + rig.id + ".";
+        String others = " 5 items that are not minecraft:coal stay on board: the job does not count them."
+            + " When its fuel ends, the robot burns those that can burn.";
+        String coal = " The robot holds 10 x minecraft:coal: the job counts them as its first load.";
+        String end = " I have done nothing yet. Confirm with /uno confirm.";
+        GameTestSequence sequence = rig.begin();
+        sequence = ask(sequence, server, player, carry.formatted(24), new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals(order.apply(24) + end), last.get());
+                rig.robot().turtle.getInventory().setItem(5, new ItemStack(Items.COBBLESTONE, 5));
+            });
+        sequence = ask(sequence, server, player, carry.formatted(24), new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                check(last.get().equals(order.apply(24) + others + end), last.get());
+                rig.robot().turtle.getInventory().setItem(2, new ItemStack(Items.COAL, 10));
+            });
+        sequence = ask(sequence, server, player, carry.formatted(24), new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> check(last.get().equals(order.apply(24) + coal + others + end), last.get()));
+        sequence = ask(sequence, server, player, "Keep at least 6 coal in " + rig.to + ", taking them from " + rig.from,
+            new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> check(last.get().endsWith("Robot #" + rig.id + "." + coal
+                + " That is more than the level: the rest stays on board for the next need." + others + end), last.get()));
+        sequence = ask(sequence, server, player, carry.formatted(8), new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> {
+                MindCraft.LOGGER.info("b_adoption_in_the_proposal above the quantity: {}", last.get());
+                check(last.get().equals(order.apply(8) + coal
+                    + " That is more than the quantity: the job delivers at most 8, then it stops with the rest on board for your decision."
+                    + others + end), last.get());
+                check(rig.job() == null, "a proposal started a job: " + rig.describe());
+                String started = Uno.confirm(server, player);
+                check(rig.job() != null && started.equals("Job " + rig.job().id + " started on robot #" + rig.id
+                    + ". It counts the 10 x minecraft:coal on board as its first load."), started);
+                check(rig.job().carried == 10, "the job must count only the coal: " + rig.describe());
+            });
+        sequence
+            .thenWaitUntil(() -> rig.state(State.BLOCKED))
+            .thenExecute(() -> {
+                check(rig.job().cause == Cause.LOAD_ABOVE_QUANTITY && rig.job().delivered == 8 && rig.job().carried == 2, rig.describe());
+                check(rig.coal(rig.source) == 64 && rig.coal(rig.dest) == 8 && rig.held() == 2, rig.describe());
+                check(rig.robot().turtle.getInventory().countItem(Items.COBBLESTONE) == 5
+                    && rig.chest(rig.dest).countItem(Items.COBBLESTONE) == 0, "the cobblestone moved: " + rig.describe());
             })
             .thenSucceed();
     }

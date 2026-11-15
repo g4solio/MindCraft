@@ -90,6 +90,17 @@ public class RobotApi implements ILuaAPI {
         return count(new InvWrapper(turtle.getInventory()), item);
     }
 
+    /** The items on board of each other kind. A new job of this item does not count them (D42, point 9). */
+    int others(Item item) {
+        IItemHandler hold = new InvWrapper(turtle.getInventory());
+        int total = 0;
+        for (int slot = 0; slot < hold.getSlots(); slot++) {
+            ItemStack stack = hold.getStackInSlot(slot);
+            if (!stack.isEmpty() && !stack.is(item)) total += stack.getCount();
+        }
+        return total;
+    }
+
     @Override
     public String[] getNames() {
         return new String[]{"mindcraft"};

@@ -211,7 +211,7 @@ public class MindCraft {
         Job job = runtime.start(actor, new Order(module, robotId(context), StringArgumentType.getString(context, "from"),
             StringArgumentType.getString(context, "to"), ItemArgument.getItem(context, "item").getItem(),
             IntegerArgumentType.getInteger(context, "quantity"), reserve));
-        return "Job " + job.id + " started on robot #" + robotId(context) + ".";
+        return Uno.started(job);
     }
 
     /** The arguments of an order: robot, from, to, item, quantity and an optional reserve. */

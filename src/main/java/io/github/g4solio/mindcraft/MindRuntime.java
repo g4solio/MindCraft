@@ -85,7 +85,10 @@ public class MindRuntime extends SavedData {
         OUT_OF_FUEL,
         /** The robot is at the dock, but the station has no inventory at its position. */
         SOURCE_NO_INVENTORY, DESTINATION_NO_INVENTORY,
-        /** A transport reached its quantity with a load on board: the owner lowered the quantity after the pickup. */
+        /**
+         * A transport reached its quantity with a load on board: the owner lowered the quantity after the pickup,
+         * or the job adopted a load above its quantity at the start.
+         */
         LOAD_ABOVE_QUANTITY
     }
 
@@ -426,11 +429,14 @@ public class MindRuntime extends SavedData {
         }
         if (order.item() == null || order.item() == Items.AIR) throw new Refusal("Unknown item.");
         requireQuantities(order.quantity(), order.reserve());
-        int held = robot.held(order.item());
-        if (held > 0) throw new Refusal("Robot #" + robotId + " already holds " + held + " of this item. Empty it first.");
         return robot;
     }
 
+    /**
+     * Starts the job of a valid order. The items of the job that the robot holds are the first load of the job (D42, point 9).
+     * The robot delivers them first, and the need already counts them. A load above the quantity follows D16.1.
+     * The items of other kinds stay on board. The job does not count them.
+     */
     public Job start(Actor actor, Order order) {
         RobotApi robot = check(actor, order);
         Job job = new Job();
@@ -443,6 +449,8 @@ public class MindRuntime extends SavedData {
         job.item = order.item();
         job.quantity = order.quantity();
         job.reserve = order.reserve();
+        // The same count as the check of the load at each step of the robot. Thus the first step finds no difference.
+        job.carried = robot.held(order.item());
         jobs.put(order.robot(), job);
         // The first entry of the job: it is RUNNING from now on.
         write(job, true, false, now());
@@ -703,7 +711,7 @@ public class MindRuntime extends SavedData {
 
     /**
      * Sets the state from the record, after a transfer or an observation that nothing refused.
-     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup.
+     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup, or the job adopted more.
      * A job that does not end keeps that load for the next need. A job that ends cannot use it: it stops and the owner decides.
      */
     void settle(Job job) {

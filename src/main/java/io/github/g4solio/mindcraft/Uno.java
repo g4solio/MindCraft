@@ -185,7 +185,7 @@ public final class Uno {
     record Start(Order order) implements Request {
         @Override
         public String send(MindRuntime runtime, Actor actor) {
-            return "Job " + runtime.start(actor, order).id + " started on robot #" + order.robot() + ".";
+            return started(runtime.start(actor, order));
         }
 
         @Override
@@ -609,14 +609,40 @@ public final class Uno {
         return name + ": " + (before == after ? before + ", unchanged" : "from " + before + " to " + after);
     }
 
-    /** A start becomes a proposal, after the ordinary validation of the order. */
+    /** A start becomes a proposal, after the ordinary validation of the order. The proposal says what the robot holds. */
     private static String start(Session mine, MindRuntime runtime, Actor actor, Order order) {
+        RobotApi robot;
         try {
-            runtime.check(actor, order);
+            robot = runtime.check(actor, order);
         } catch (Refusal refusal) {
             return "I cannot propose this job: " + refusal.getMessage();
         }
-        return propose(mine, actor, describe(order), new Start(order));
+        return propose(mine, actor, describe(order) + adoption(order, robot), new Start(order));
+    }
+
+    /**
+     * What a new job does with the load of the robot, in the words of a proposal (D42, point 9). Empty for a robot that holds nothing.
+     * The items of the job are its first load. A load above the quantity follows D16.1. The items of other kinds stay on board.
+     * Each sentence starts with ". ", as the other parts of the text of a proposal. The proposal of a replacement repeats these sentences.
+     */
+    static String adoption(Order order, RobotApi robot) {
+        String item = MindRuntime.itemName(order.item()), text = "";
+        int held = robot.held(order.item()), others = robot.others(order.item());
+        if (held > 0) {
+            text += ". The robot holds " + held + " x " + item + ": the job counts them as its first load";
+            // A job that ends stops with the rest on board. A job that does not end keeps the rest for its next need.
+            if (held > order.quantity()) {
+                text += MindRuntime.Behaviour.of(order.module()).ends
+                    ? ". That is more than the quantity: the job delivers at most " + order.quantity() + ", then it stops with the rest on board for your decision"
+                    : ". That is more than the level: the rest stays on board for the next need";
+            }
+        }
+        // The Lua module burns each item that is not the item of the job when the fuel ends (D12). The runtime does not know which items burn.
+        if (others > 0) {
+            text += ". " + others + " items that are not " + item + " stay on board: the job does not count them"
+                + ". When its fuel ends, the robot burns those that can burn";
+        }
+        return text;
     }
 
     /** The proposal of the actor: one for each player, the newest (D23). The server writes its text. The screen shows the same text. */
@@ -632,6 +658,15 @@ public final class Uno {
             ? "keep at least " + order.quantity() + " x " + item + " in '" + order.to() + "', taken from '" + order.from() + "'"
             : "carry " + order.quantity() + " x " + item + " from '" + order.from() + "' to '" + order.to() + "'";
         return what + ". Reserve to leave in '" + order.from() + "': " + order.reserve() + ". Robot #" + order.robot();
+    }
+
+    /**
+     * The answer to a start that the runtime accepted, for each source of orders: a confirmation and the start command.
+     * It gives the load that the job adopted at the start (D42, point 9). That load can differ from the load at the proposal.
+     */
+    static String started(Job job) {
+        return "Job " + job.id + " started on robot #" + job.robot + "."
+            + (job.carried > 0 ? " It counts the " + job.carried + " x " + MindRuntime.itemName(job.item) + " on board as its first load." : "");
     }
 
     /** The /uno confirm command: starts the proposal that the player has now. */

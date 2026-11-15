@@ -1229,7 +1229,7 @@ public class MindCraftTests {
                     + " started on robot #" + rig.id + ". It counts the 6 x minecraft:coal on board as its first load."), confirmed);
                 check(old[0].state == State.CANCELLED && next.carried == 6 && next.quantity == 10, rig.describe());
                 List<String> states = states(rig.runtime, player, old[0].id);
-                check(states.equals(List.of("RUNNING", "RECOVERY", "CANCELLED")), states.toString());
+                check(states.equals(List.of("RUNNING", "RECOVERY LOAD_DIFFERS", "CANCELLED")), states.toString());
             })
             .thenWaitUntil(() -> rig.state(State.DONE))
             .thenExecute(() -> {

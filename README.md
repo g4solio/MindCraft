@@ -5,8 +5,9 @@
 MindCraft is an addon of [CC: Tweaked](https://tweaked.cc) for Minecraft 1.20.1 with Forge.
 The player works together with **Uno**, an intelligence that acts in the world through turtles.
 
-Status: increments S0, S1 and S2 of the [brief](docs/MINDCRAFT_CLAUDE_BRIEF.md), and increment A of the plan after S2. S3 did not start. This is an early version, not a release.
-The plan after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md). The automatic tests of increment A pass. The project owner played its session on 2026-11-14 with [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md). The exit of increment A is reached: see D27 and D40.
+Status: increments S0, S1 and S2 of the [brief](docs/MINDCRAFT_CLAUDE_BRIEF.md), and increments A and B of the plan after S2. S3 did not start. This is an early version, not a release.
+The plan after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md). The exit of increment A is reached: see D27 and D40.
+The automatic tests of increment B pass. Its measurement of the models (ticket #27) and its play session with [docs/PLAY_SESSION_B.md](docs/PLAY_SESSION_B.md) (ticket #29) are not done. Thus the exit of increment B is not reached: see D42, point 14.
 The mod is for one player now. Do not open the world to other players: see D37 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 What this version contains:
@@ -14,7 +15,9 @@ What this version contains:
 - A runtime in the server that owns stations, robots and jobs, and saves them with the world. It writes its record through a temporary file.
 - Two Lua modules for the turtle: transport, and keep a stock. A robot that cannot move waits, and continues by itself when the path is free.
 - Uno: it changes a written request into one action. It starts, changes, resumes and cancels a job after your confirmation. It pauses a job and reports on it at once.
-- A diary of each job. Uno warns you in the chat when a job needs you, and gives a summary when you open its screen.
+- A new job counts the items of the job that the robot already holds. A new job for a busy robot replaces its job after one confirmation.
+- With Claude, Uno answers a report and a question in its own words. The server checks each number of that sentence.
+- A diary of each job. Uno warns you in the chat when a job needs you and when the fuel of a robot is low. It gives a summary when you open its screen.
 - Two contact points that open the screen of Uno: a tablet and a projector.
 - Commands for each operation.
 
@@ -26,6 +29,7 @@ Without an API key Uno understands only simple sentences. With an Anthropic API 
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Decisions, evidence and review conditions |
 | [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md) | Tests that ran, tests that did not run, and limits |
 | [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md) | The checklist of the play session of increment A |
+| [docs/PLAY_SESSION_B.md](docs/PLAY_SESSION_B.md) | The checklist of the play session of increment B. Not played yet |
 
 ## Versions
 
@@ -104,7 +108,7 @@ The load of this jar on an installed Forge is not verified yet.
 ## Manual test in the game
 
 No automatic test does this procedure with a client. See [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md).
-This procedure uses the commands. The play session of increment A uses commands only at the setup: see [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md).
+This procedure uses the commands. The play sessions use commands only at the setup: see [docs/PLAY_SESSION_A.md](docs/PLAY_SESSION_A.md) and [docs/PLAY_SESSION_B.md](docs/PLAY_SESSION_B.md).
 
 1. Start the development client with `./gradlew runClient`. Create a world in creative mode with commands enabled.
 2. Place two chests. Put the coal in the first chest.
@@ -333,11 +337,25 @@ Uno uses Claude if the server process has the environment variable `ANTHROPIC_AP
 Set the variable outside the project. Do not write the key in a file of the repository.
 The server log says which provider is active: look for the line `Uno interprets requests with`.
 
+#### Who uses Claude, and what it costs
+
 - Only an operator uses Claude. In a single-player game you are an operator if the world allows commands. Uno reads the requests of each other player with the fixed rules (see below).
 - Each written request of an operator is a paid call on the account of the key. The buttons, the confirmation, `/uno report`, the notices, the summary and the jobs do not call the model.
 - Each operator has a limit of 100 requests to Claude in one server session. The console is one more actor with its own limit. In a single-player game a session ends when you close the world.
 - At the limit Uno says so one time. Then it reads your requests with the fixed rules until the server restarts. The buttons and the commands work as before.
 - The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
+
+#### What Claude does
+
+- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. For a report and for a request that is no action, Claude also writes the sentence of Uno: see "The voice of Uno". The server writes each other sentence of Uno, and the text of each proposal.
+- A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
+- A pause and a report from Claude run immediately. The server finds the job, as described in "Talk with Uno". A written report request is a paid call. The "Report" button and `/uno report` are not.
+- A request that does not give a necessary value is no action. Then the sentence of Claude says what is missing.
+- Uno asks Claude to follow the rule of a request that names no robot (see "Talk with Uno"). A new job from Claude for a robot with an open job becomes the proposal of a replacement, as with the fixed rules.
+- You can write the request in any language. Uno answers in English.
+
+#### The data that leave the server
+
 - With each written request Anthropic gets the text of the request and the data of your jobs:
   - the names of your stations, the numbers of your robots, and whether each robot is free;
   - for each job: its number, the robot, the module, the item, the two stations, the quantity, the reserve, the state and its cause, the delivered total, the load on board, the two observed stocks with their age, and the fuel level of the robot;
@@ -350,35 +368,39 @@ The server log says which provider is active: look for the line `Uno interprets 
   - a robot that is not running, or that has not contacted the server for more than 15 seconds of game time: no load on board, no stock and no fuel;
   - a stock that a robot observed more than 5 minutes of game time ago: not that stock.
 - An operator owns each station, each robot and each job of the server: thus these are the data of all players.
-- Claude gives the action. For a report and for a request that is no action, Claude also writes the sentence of Uno: see "The voice of Uno". The server writes each other sentence of Uno, as before.
 - The screen says "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
-- A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
-- The model is a setting: the value `model` in `config/mindcraft-common.toml`. The file is common to the installation: the `config` folder of the game, or of the dedicated server. Forge writes it at the first start, with the start value.
+
+#### The setting of the model
+
+- The model is a setting: the value `model` in `config/mindcraft-common.toml`. The file is common to the installation: the `config` folder of the game, or of the dedicated server. The development client uses `run/config`. Forge writes the file at the first start, with the start value.
 - The start value is `claude-haiku-5-5`, until the measurement of increment B gives a different model. The other values are `claude-sonnet-5-5` and `claude-opus-5-5`.
 - The server reads the value at its start. Change it while the server or the game is stopped. The log line `Uno interprets requests with` names the model, for example `Claude (claude-haiku-5-5)`.
 - Opus 5.5 and Sonnet 5.5 have a server-side fallback for a refusal: the service tries a declined request again on a model that Anthropic chooses. Haiku 5.5 has none, and a different value gets none: there a refusal is a failure of the model.
 - A model that the service does not know, or does not offer to the key, is a failure of the service. Each written request then gets an answer such as "The model gave no valid answer (the model service does not know the model 'claude-haiku-9-9'), thus I read your request with the fixed rules: …". Each one still counts in the counter of the session. Correct the setting and start the server again. The server log has the answer of the service.
 - The effort of the model is low. It is not a setting.
-- You can write the request in any language. Uno answers in English.
-- If Claude cannot find a necessary value, its sentence says what is missing.
-- If Claude gives no valid action, Uno reads the same request with the fixed rules (see below). This holds when the model service fails, when the request reaches the time limit, when the model declines the request, and when Uno cannot read the answer. The answer starts with one sentence that says so, with the reason. Then comes the answer of the fixed rules: a proposal, an immediate action, or the reason why they cannot propose a job. For example:
+
+#### When Claude gives no valid action
+
+- Then Uno reads the same request with the fixed rules (see below). This holds when the model service fails, when the request reaches the time limit, when the model declines the request, and when Uno cannot read the answer.
+- The answer starts with one sentence that says so, with the reason. Then comes the answer of the fixed rules: a proposal, an immediate action, or the reason why they cannot propose a job. For example:
 
 ```
 Uno › The model gave no valid answer (the model service is not reachable), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing.
 ```
 
 - Such a request still counts in the counter of the session. The jobs in progress continue. The fixed rules can read a request in a different way than Claude: read the proposal before you confirm.
-- Uno asks Claude to follow the rule above for a request that names no robot. A new job from Claude for a robot with an open job becomes the proposal of a replacement, as with the fixed rules.
-- Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
-- A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
+
+#### The server log
+
 - The server log gets one line for each written request to Claude: the model, the input tokens, the output tokens, the time of the answer, the action, the result of the checks, and the text of your request. After a failed check of the voice, the line also has the sentence of Claude that Uno did not use. For example:
 
 ```
-Uno request: model claude-opus-5-5, 1234 input tokens, 56 output tokens, 812 ms, action report, checks FAILED, unused sentence "I delivered 987654 items.", request "How is the furnace?"
+Uno request: model claude-haiku-5-5, 1234 input tokens, 56 output tokens, 812 ms, action report, checks FAILED, unused sentence "I delivered 987654 items.", request "How is the furnace?"
 ```
 
 - The result of the checks is `PASSED`: Uno said the sentence of Claude. `FAILED`: Uno used the fixed template. `NOT_NEEDED`: the action needs no sentence. `NO_VALID_ACTION`: Claude gave no valid action, and the fixed rules read the request.
-- Thus the server log holds the text of each written request to Claude. Each person who reads the log of the server reads it. The line has no key and no position. A request that the fixed rules read gets no line.
+- Thus the server log holds the text of each written request to Claude. Each person who reads the log of the server reads it. The line has no key and no position.
+- A request that the fixed rules read without a call of Claude gets no line: the request of a player who is not an operator, and a request after the limit.
 
 Details and limits: D21, D33.1 and D42 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
@@ -410,7 +432,7 @@ Uno › Robot #7 of job 3 is not running or not loaded. The last recorded data, 
 - Uno does not remember an earlier sentence of the conversation. Claude has the rule to say so when you ask.
 - The check stops an invented number. It does not stop a number in words, a true number about the wrong job, or a wrong description with true numbers. The panel of the job next to the sentence shows the state.
 - The "Report" button and `/uno report` give the fixed report, as before. They call no model.
-- No automatic test verifies a sentence of the real model. The tests use providers written in the tests.
+- No test verifies a sentence of the real model yet. The automatic tests use providers written in the tests. The measurement of the models (ticket #27) and the play session (ticket #29) are not done.
 - Without Claude, Uno has no voice: the fixed rules give the fixed sentences, as before.
 
 ### What Uno understands without Claude

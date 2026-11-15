@@ -5,6 +5,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.core.JsonValue;
 import com.anthropic.errors.AnthropicIoException;
 import com.anthropic.errors.AnthropicServiceException;
+import com.anthropic.errors.NotFoundException;
 import com.anthropic.errors.PermissionDeniedException;
 import com.anthropic.errors.RateLimitException;
 import com.anthropic.errors.UnauthorizedException;
@@ -17,6 +18,7 @@ import com.google.gson.Gson;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -26,10 +28,15 @@ import java.util.stream.Collectors;
  * Claude gives back one action of the closed list as JSON, with its parameters. See Uno.Provider.
  * For a report and for "none" the field "reason" also has the sentence of Uno: the voice (D42, point 1). Uno checks it.
  * Uno validates the action, and an order must pass the ordinary validation and the confirmation of the player.
+ * The model is the setting "model" of config/mindcraft-common.toml, read when the provider is built (D42, point 6).
  */
 final class ClaudeProvider implements Uno.Provider {
-    static final String MODEL = "claude-opus-5-5";
     static final String KEY_VARIABLE = "ANTHROPIC_API_KEY";
+    /**
+     * The models with a server-side fallback for a refusal, from the model reference of the API dated 2026-11-03 (D33).
+     * Haiku 5.5 has none. A model that this list does not name gets no fallback: a refusal is then a failure of the model.
+     */
+    private static final Set<String> FALLBACK_MODELS = Set.of("claude-opus-5-5", "claude-sonnet-5-5");
     /** A limit on the cost of one request. The answer is small: this number is mostly room for the thinking. */
     private static final long MAX_TOKENS = 4096;
 
@@ -97,9 +104,11 @@ final class ClaudeProvider implements Uno.Provider {
           "reserve": {"type": ["integer", "null"]}}}""";
 
     private final AnthropicClient client;
+    private final String model;
 
     ClaudeProvider(AnthropicClient client) {
         this.client = client;
+        this.model = MindCraft.MODEL.get();
     }
 
     /** The SDK reads the key from the environment. The key is not in the repository, in the world or in a log. */
@@ -115,13 +124,16 @@ final class ClaudeProvider implements Uno.Provider {
 
     @Override
     public String name() {
-        return "Claude (" + MODEL + ")";
+        return "Claude (" + model + ")";
     }
 
-    /** The model of each request. The record of a request and its line in the server log name it (D42). */
+    /**
+     * The model of each request of this provider: the value of the setting when the provider was built.
+     * The record of a request and its line in the server log name it (D42).
+     */
     @Override
     public String model() {
-        return MODEL;
+        return model;
     }
 
     /**
@@ -144,24 +156,23 @@ final class ClaudeProvider implements Uno.Provider {
         BetaJsonOutputFormat.Schema.Builder schema = BetaJsonOutputFormat.Schema.builder();
         Map<?, ?> fields = new Gson().fromJson(SCHEMA, Map.class);
         fields.forEach((key, value) -> schema.putAdditionalProperty((String) key, JsonValue.from(value)));
-        MessageCreateParams params = MessageCreateParams.builder()
-            .model(MODEL)
+        MessageCreateParams.Builder params = MessageCreateParams.builder()
+            .model(model)
             .maxTokens(MAX_TOKENS)
-            // If the safety classifiers decline the request, the API tries it again on the model that Anthropic recommends.
-            .addBeta("server-side-fallback-2026-07-01")
-            .fallbacksDefault()
             .system(SYSTEM)
-            // Thinking is always on for this model. A low effort keeps the answer fast: the player waits in the game.
+            // Thinking is on by default for the three models of the setting. A low effort keeps the answer fast: the player waits in the game.
             .outputConfig(BetaOutputConfig.builder()
                 .effort(BetaOutputConfig.Effort.LOW)
                 .format(BetaJsonOutputFormat.builder().schema(schema.build()).build())
                 .build())
-            .addUserMessage("Context: " + context.toJson() + "\nRequest: " + request)
-            .build();
+            .addUserMessage("Context: " + context.toJson() + "\nRequest: " + request);
+        // If the safety classifiers decline the request, the API tries it again on the model that Anthropic recommends.
+        // Only a model with this fallback gets the parameter (D42, point 6).
+        if (FALLBACK_MODELS.contains(model)) params.addBeta("server-side-fallback-2026-07-01").fallbacksDefault();
 
         BetaMessage message;
         try {
-            message = client.beta().messages().create(params);
+            message = client.beta().messages().create(params.build());
         } catch (UnauthorizedException | PermissionDeniedException e) {
             throw new IllegalStateException("the API key is not valid or has no permission");
         } catch (RateLimitException e) {
@@ -169,6 +180,8 @@ final class ClaudeProvider implements Uno.Provider {
         } catch (AnthropicServiceException e) {
             // The player gets only the code. The body says why, for example a schema that the service rejects. It holds no key.
             MindCraft.LOGGER.warn("The model service answered with error {}: {}", e.statusCode(), e.body());
+            // The service answers 404 for a model that it does not know, or that it does not offer to this key: a wrong setting.
+            if (e instanceof NotFoundException) throw new IllegalStateException("the model service does not know the model '" + model + "'");
             throw new IllegalStateException("the model service answered with error " + e.statusCode());
         } catch (AnthropicIoException e) {
             throw new IllegalStateException("the model service is not reachable");

@@ -2722,6 +2722,81 @@ public class MindCraftTests {
     }
 
     /**
+     * The record of the newest request of the actor to a model: the model of the provider, these tokens, this action and this result of
+     * the checks, the sentence that Uno did not use or null, and a time of the answer from atLeastMs to 5 s.
+     */
+    private static void recorded(Actor actor, Uno.Action action, long inputTokens, long outputTokens, Uno.Voice voice, String unused, long atLeastMs) {
+        Uno.ModelRequest record = Uno.modelRequest(actor);
+        check(record != null && record.equals(new Uno.ModelRequest(CountingModel.MODEL, inputTokens, outputTokens, record.millis(), action, voice))
+            && (unused == null ? record.unused() == null : unused.equals(record.unused())) && record.millis() >= atLeastMs && record.millis() < 5000,
+            "the record of the request: " + record);
+    }
+
+    /**
+     * Increment B, D33 and D42: Uno records each written request to a provider with a model. The record has the model of the provider,
+     * the input tokens, the output tokens, the time of the answer, the action of the model and the result of the checks.
+     * One request for each result: the voice passed, a check failed, the action needs no sentence, and the model gave no valid action:
+     * an answer that Uno cannot read, and a failure without an answer. After a failed check the record gives the sentence that Uno did
+     * not use. The record is the one of the newest request of the actor. A request to the fixed rules does not change it, and a player
+     * who is not an operator has none. The counter of the session counts each request one time, as before.
+     * The line of the server log is a code examination: see TEST_RESULTS.md.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_record_of_a_request(GameTestHelper helper) {
+        MinecraftServer server = helper.getLevel().getServer();
+        Actor operator = operator("b_record"), guest = player("b_record_guest");
+        // An operator owns each station and each robot of the server: the context has the digits of the tests that run at the same time.
+        // Thus the sentence that passes has no digit, the number that fails is in no test, and no job is on robot #999999.
+        String voice = "You have no station yet: register one with the station command.", invented = "You have 987654 stations.";
+        String rules = ", thus I read your request with the fixed rules: they understand only simple sentences. " + RULES_X;
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Uno.ModelRequest[] last = new Uno.ModelRequest[1];
+        GameTestSequence sequence = ask(helper.startSequence(), server, operator, "Which stations do I have?", new CountingModel((r, c) -> {
+            Thread.sleep(300);
+            return new Uno.Answer(Uno.parse(modelAction("none", voice)), 120, 30);
+        }), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(0).equals(voice), answers.get(0));
+                recorded(operator, new Uno.Action.None(null, voice), 120, 30, Uno.Voice.PASSED, null, 300);
+            });
+        sequence = ask(sequence, server, operator, "x", new CountingModel((r, c) -> new Uno.Answer(Uno.parse(modelAction("none", invented)), 10, 2)), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(1).equals("I cannot answer that. I did nothing."), answers.get(1));
+                recorded(operator, new Uno.Action.None(null, invented), 10, 2, Uno.Voice.FAILED, invented, 0);
+            });
+        // A pause needs no sentence: Uno does not read the sentence of the model, thus it does not record it as unused.
+        sequence = ask(sequence, server, operator, "x", new CountingModel((r, c) ->
+            new Uno.Answer(Uno.parse(modelAction("pause", "Done, as you asked.", "robot", 999999)), 10, 2)), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(2).equals("You have no job on robot #999999. Tell me the robot number of the job. I did nothing."), answers.get(2));
+                recorded(operator, new Uno.Action.OnJob(Uno.Kind.PAUSE, new Uno.Target(999999, null), null, null), 10, 2, Uno.Voice.NOT_NEEDED, null, 0);
+            });
+        sequence = ask(sequence, server, operator, "x", new CountingModel((r, c) -> new Uno.Answer(Uno.parse("this is not JSON"), 7, 3)), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(3).equals("The model gave no valid answer (I cannot read its answer)" + rules), answers.get(3));
+                recorded(operator, new Uno.Action.Unreadable(), 7, 3, Uno.Voice.NO_VALID_ACTION, null, 0);
+            });
+        // A failure gives no action and no tokens.
+        sequence = ask(sequence, server, operator, "x", new CountingModel((r, c) -> {
+            throw new IOException("model offline");
+        }), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(4).equals("The model gave no valid answer (model offline)" + rules), answers.get(4));
+                recorded(operator, null, 0, 0, Uno.Voice.NO_VALID_ACTION, null, 0);
+                last[0] = Uno.modelRequest(operator);
+            });
+        sequence = ask(sequence, server, operator, "x", new Uno.RuleProvider(), 5000, answers)
+            .thenExecute(() -> check(answers.get(5).equals(RULES_X) && Uno.modelRequest(operator) == last[0],
+                "a request to the fixed rules changed the record: " + Uno.modelRequest(operator)));
+        sequence = ask(sequence, server, guest, "x", CountingModel.none(10, 2), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.get(6).equals(RULES_X) && Uno.modelRequest(guest) == null, "a player who is not an operator has a record: " + Uno.modelRequest(guest));
+                usage(operator, 5, 147, 37);
+            });
+        sequence.thenSucceed();
+    }
+
+    /**
      * Increment A: the request of the ticket, "leave only N in the depot", through the fixed rules.
      * The source has 30 and the reserve is 20: the robot delivers 10, then waits at the reserve.
      * The change is a proposal. Its text comes from the server: the old and the new reserve, and the quantity that stays.
@@ -3357,6 +3432,8 @@ public class MindCraftTests {
      * It calls no model and costs nothing. It counts its calls, and gives the answer of the provider inside it.
      */
     static final class CountingModel implements Uno.Provider {
+        /** The model that this provider names in the record of a request. */
+        static final String MODEL = "test-model";
         final AtomicInteger calls = new AtomicInteger();
         private final Uno.Provider inner;
 
@@ -3379,6 +3456,11 @@ public class MindCraftTests {
         @Override
         public boolean callsModel() {
             return true;
+        }
+
+        @Override
+        public String model() {
+            return MODEL;
         }
     }
 

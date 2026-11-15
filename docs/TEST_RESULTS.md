@@ -185,6 +185,7 @@ Work in parallel: each ticket writes its runs in a section of its own, before `#
 | 165 | 107 of 108 | The CI on GitHub, the run of the push of `4396f7d`. `a_diary_of_a_job` failed: "expected two attempts or more". The test waited 140 ticks for a second attempt of the robot, and the robot runs in real time. The run of the pull request on the same commit passed. A test of increment A, not changed by increment B |
 | 166 | 108 of 108 | None. `a_diary_of_a_job` waits for the second attempt of the robot, not for 140 ticks. Server line: `All 108 required tests passed :)` |
 | 167 | 108 of 108 | None. The retrospective of increment B: `t05_pause_and_cancel_during_the_wait`, `t14_pause` and `t14_cancel` wait for the first contact of the robot after the change, not for a number of ticks. Server line: `All 108 required tests passed :)` |
+| 168 | 108 of 108 | None. The integration branch with the retrospective and the correction of ticket #27: the name `tripsWithThisFuel` in the facts, and two sentences of the system text. Server line: `All 108 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -215,6 +216,7 @@ Runs 158 to 163 are the runs of the corrections of the code review of increment 
 Run 164 is the run of the final code of increment B, on the integration branch after the merge of the corrections. The four restart phases passed after it.
 Run 165 is a run of the CI on GitHub, and run 166 is its correction. The correction changed only a test of the normal run: the four restart phases of run 164 still apply to the code of the mod.
 Run 167 is the run after the retrospective of increment B. It changed only tests of the normal run and the rules of `checkRules`.
+Run 168 is the run of the integration branch with the correction of ticket #27. The correction changed the facts for a provider and the system text, not the runtime. Thus the four restart phases of run 164 still apply to the code of the mod.
 The runs of ticket #27 have the labels #27.1 to #27.8, and no row in this table: see "The record of the measurement (ticket #27)". Six of them are the first runs of increment B with the real Claude service.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
@@ -3109,7 +3111,7 @@ Observations about Uno, not about a model:
 **Decided by the project owner on 2026-11-15:** the model of increment B is Haiku 5.5, for the moment. The reason of the project owner: a more capable model stays possible later. The model is a setting (D42, point 6).
 
 - The choice agrees with the rule of D42, point 7 and with the marks of the agent: no model is out, and Haiku 5.5 has the lowest price.
-- The start value of the setting is already `claude-haiku-5-5`. No code changed for the choice. Run #27.4 is the normal run on the code of the choice, and run #27.5 is its `-Plive` run.
+- The start value of the setting is already `claude-haiku-5-5`. No code changed for the choice. Run #27.4 is the normal run on the code of the choice, and run #27.5 is its `-Plive` run. Run 168 of the table "Runs" is the normal run of the integration branch with that code and the retrospective.
 - Before the choice the project owner asked for the cost of a play of 5 or 6 hours. The answer of the agent is a calculation from the tokens of the runs. With 30 written requests: 1 or 2 cents on Haiku 5.5, and 20 to 30 cents on Sonnet 5.5. With 100 written requests, the limit of a session: 4 to 6 cents, and 0.60 to 1.00 $. The number of requests is an assumption.
 - The paid runs of ticket #27 cost 0.60 $ of the budget of 5 $. One pass of three ran.
 

@@ -2582,6 +2582,7 @@ public class MindCraftTests {
      * Increment B, D42 point 3: the fixed sentences about the uncertain numbers. They give the numbers that the facts do not give,
      * with their caution. The cases and the limits are the cases of b_facts_of_uncertain_numbers: the same record that the test writes,
      * the flag of the robot and a game time, without a robot. A stock that no robot observed has no number: it gets no sentence.
+     * Since the review of increment B: the fuel level of a robot that is not running or silent is in the recorded data, also in RECOVERY.
      */
     @GameTest(template = EMPTY)
     public static void b_fixed_sentences_of_uncertain_numbers(GameTestHelper helper) {
@@ -2619,6 +2620,30 @@ public class MindCraftTests {
             job.toSeen = MindRuntime.UNKNOWN;
         }), false, List.of(recovered, stopped + " The last recorded data, not the current state: 4 on board and 50 in 'depot' (seen 5 min ago).")));
         cases.put("a stock never observed", new Case(record(900, now, job -> job.toSeen = MindRuntime.UNKNOWN), true, List.of()));
+        // The fuel of the last contact: 29, thus 4 trips. The facts do not give it for a robot that is not running or silent:
+        // then the recorded data have it (D42, point 3). The facts give it for a robot that runs and calls, also in RECOVERY.
+        Consumer<Job> fuel = job -> {
+            job.fuel = 29;
+            job.trips = 4;
+        };
+        String fuelData = " The last recorded data, not the current state: 4 on board, a fuel level of 29 (about 4 trips between the stations),"
+            + " 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago).";
+        cases.put("certain, with a fuel level", new Case(record(900, now, fuel), true, List.of()));
+        cases.put("a robot that is not running, with a fuel level", new Case(record(900, now, fuel), false, List.of(stopped + fuelData)));
+        cases.put("a silent robot, with a fuel level", new Case(record(900, now, fuel.andThen(job -> job.lastContact--)), true,
+            List.of("Robot #9 of job 900 has not contacted me for a while: I do not know if it is working." + fuelData)));
+        Consumer<Job> recovery = job -> {
+            job.state = State.RECOVERY;
+            job.cause = Cause.LOAD_DIFFERS;
+            job.reason = "the robot holds 0, the record says 4";
+        };
+        String recoveryStart = "Job 900 on robot #9: I cannot say how it went. Recorded reason: the robot holds 0, the record says 4."
+            + " The recorded data can be wrong: 6 delivered, 4 on board, ";
+        String recoveryEnd = "50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago). You decide whether to resume or cancel.";
+        cases.put("RECOVERY of a robot that is not running, with a fuel level", new Case(record(900, now, fuel.andThen(recovery)), false,
+            List.of(recoveryStart + "a fuel level of 29 (about 4 trips between the stations), " + recoveryEnd)));
+        cases.put("RECOVERY of a robot that runs, with a fuel level", new Case(record(900, now, fuel.andThen(recovery)), true,
+            List.of(recoveryStart + recoveryEnd)));
         List<String> wrong = new ArrayList<>();
         cases.forEach((name, test) -> {
             List<String> said = new JobAccount(test.job(), test.running(), now).cautions();
@@ -2752,7 +2777,9 @@ public class MindCraftTests {
                     && !answer.contains("987654") && !answer.contains("The recorded data can be wrong")));
         List<Said> second = List.of(new Said("x", () -> modelAction("report", voice), fixedThenVoice(voice, List.of(
             () -> "After a recovery of job " + a.job().id + " on robot #" + a.id + " the totals can be inexact: the record says 0 delivered.",
-            () -> "Robot #" + b.id + " of job " + b.job().id + " is not running or not loaded. The last recorded data, not the current state: 0 on board, 56 in '"
+            // The robot of job B is not running: the recorded data have the fuel level of its last contact too.
+            () -> "Robot #" + b.id + " of job " + b.job().id + " is not running or not loaded. The last recorded data, not the current state: 0 on board, "
+                + "a fuel level of " + b.job().fuel + " (about " + b.job().trips + " trips between the stations), 56 in '"
                 + b.from + "' (seen N s ago) and 8 in '" + b.to + "' (seen 5 min ago)."))));
         Runnable noProposal = () -> check(!Uno.hasProposal(player), "Uno created a proposal");
         GameTestSequence sequence = helper.startSequence()
@@ -3236,8 +3263,12 @@ public class MindCraftTests {
                 long now = rig.level.getGameTime();
                 MindRuntime copy = MindRuntime.load(rig.runtime.save(new CompoundTag()));
                 String report = Uno.report(rig.runtime, alice, now);
-                check(report.contains("I delivered 8 items.") && report.contains("The job is complete."), report);
-                check(Uno.report(copy, alice, now).equals(report), "the report after a save and a load is different");
+                check(report.contains("I delivered 8 items.") && report.contains("The job is complete.") && report.contains(" My fuel level is "), report);
+                // The last contact of a robot belongs to the server session (D24). After a load the robot has not called yet:
+                // the fuel is the last recorded level (since the review of increment B). Each other word is the same.
+                String loaded = Uno.report(copy, alice, now);
+                check(loaded.equals(report.replace(" My fuel level is ", " My last recorded fuel level is ")),
+                    "the report after a save and a load is different: " + loaded);
                 check(Uno.confirm(server, alice).startsWith("I have no pending proposal"), "Uno remembered a proposal that it did not save");
             })
             .thenSucceed();
@@ -4997,9 +5028,24 @@ public class MindCraftTests {
      * The facts are the facts that a provider of the test gets in the conversation with Uno.
      * A turtle that needs no fuel has no fuel level: the report, the facts and the screen say nothing about the fuel.
      * For a robot that is not running or silent the facts do not give the fuel: see b_facts_of_uncertain_numbers.
+     * Then the report gives the last recorded level, not a level in the present tense (brief 2.4). The test gives the account
+     * a record that it writes, the flag of the robot and a game time, without a robot.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void b_fuel_in_the_report(GameTestHelper helper) {
+        long at = 100_000;
+        Consumer<Job> fuel = job -> {
+            job.fuel = 29;
+            job.trips = 4;
+        };
+        String now = " My fuel level is 29: about 4 trips between the stations. ";
+        String last = " My last recorded fuel level is 29: about 4 trips between the stations. ";
+        for (JobAccount account : List.of(new JobAccount(record(900, at, fuel), false, at),
+            new JobAccount(record(900, at, fuel.andThen(job -> job.lastContact--)), true, at))) {
+            check(account.report().contains(last) && !account.report().contains("My fuel level is"), account.report());
+        }
+        JobAccount linked = new JobAccount(record(900, at, fuel), true, at);
+        check(linked.report().contains(now) && !linked.report().contains("recorded fuel"), linked.report());
         Actor player = player("b_fuel_report");
         Rig rig = new Rig(helper, "b_fuel_report", 0, 1000, player);
         MinecraftServer server = rig.level.getServer();

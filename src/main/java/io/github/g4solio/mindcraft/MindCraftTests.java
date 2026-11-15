@@ -1922,6 +1922,9 @@ public class MindCraftTests {
                 // D42, points 1, 4 and 5: the voice of Uno, its limits, and its numbers. "reason" carries the sentence of a report and of "none".
                 List<String> voice = List.of("competent, curious and slightly ironic", "in the first person", "two sentences and 300 characters at most",
                     "Use only the numbers of the context and of the request", "Do not calculate", "You do not remember an earlier",
+                    // Runs #27.2 and #27.3 of TEST_RESULTS.md: one answer in Italian, and the trips read as a part of the fuel.
+                    "Always write in English, also when the player writes in a different language",
+                    "\"tripsWithThisFuel\" is about how many trips between the two stations of the job that level allows",
                     "\"reason\" is your sentence for the player: only for \"report\" and \"none\"", "For each other action, \"reason\" is empty text.");
                 check(voice.stream().allMatch(system::contains), "the system text has not: "
                     + voice.stream().filter(rule -> !system.contains(rule)).toList() + "\n" + system);
@@ -1947,7 +1950,7 @@ public class MindCraftTests {
                 check(facts.toString().equals(job + ",\"module\":\"transport\",\"item\":\"minecraft:coal\",\"from\":\"" + rig.from + "\",\"to\":\""
                     + rig.to + "\",\"quantity\":8,\"reserve\":0,\"state\":\"DONE\",\"cause\":\"NONE\",\"delivered\":8,\"onBoard\":0,"
                     + "\"sourceStock\":{\"count\":56},\"destinationStock\":{\"count\":8},\"stillToCarry\":0,\"aboveReserve\":56,"
-                    + "\"fuel\":" + level(rig) + ",\"fuelForTrips\":" + level(rig) / 6 + ",\"uncertain\":[]}"), content);
+                    + "\"fuel\":" + level(rig) + ",\"tripsWithThisFuel\":" + level(rig) / 6 + ",\"uncertain\":[]}"), content);
                 List<String> lines = new ArrayList<>();
                 for (JsonElement line : diary.getAsJsonArray()) {
                     JsonObject copy = line.getAsJsonObject().deepCopy();
@@ -5200,7 +5203,7 @@ public class MindCraftTests {
             .thenExecute(() -> {
                 Uno.Context.Facts facts = contexts.get(0).jobs().get(0);
                 check(Integer.valueOf(29).equals(facts.fuel()) && Integer.valueOf(4).equals(facts.trips()), facts.toString());
-                check(contexts.get(0).toJson().contains(",\"fuel\":29,\"fuelForTrips\":4,"), contexts.get(0).toJson());
+                check(contexts.get(0).toJson().contains(",\"fuel\":29,\"tripsWithThisFuel\":4,"), contexts.get(0).toJson());
                 // A turtle that needs no fuel. The next contact of the robot reads the level again: the checks are in the same tick.
                 rig.runtime.checkFuel(rig.job(), 29, false);
                 check(!Uno.report(server, player).contains("My fuel level"), Uno.report(server, player));

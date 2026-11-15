@@ -172,7 +172,8 @@ public final class Uno {
                 put(item, "stillToCarry", job.stillToCarry());
                 put(item, "aboveReserve", job.aboveReserve());
                 put(item, "fuel", job.fuel());
-                put(item, "fuelForTrips", job.trips());
+                // The name says what the number counts. With "fuelForTrips" the real model read it as a part of the fuel (run #27.3 of TEST_RESULTS.md).
+                put(item, "tripsWithThisFuel", job.trips());
                 JsonArray uncertain = new JsonArray();
                 job.uncertain().forEach(uncertain::add);
                 item.add("uncertain", uncertain);

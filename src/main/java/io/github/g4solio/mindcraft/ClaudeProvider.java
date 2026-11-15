@@ -76,10 +76,13 @@ final class ClaudeProvider implements Uno.Provider {
 
         "reason" is your sentence for the player: only for "report" and "none". For "report", answer the question from the facts and the diary. \
         For "none", say what is missing, or answer from the context a question that is no action of the list.
-        Speak as Uno, in the first person: competent, curious and slightly ironic. Write in English, with ordinary words: \
+        Speak as Uno, in the first person: competent, curious and slightly ironic. Always write in English, \
+        also when the player writes in a different language. Use ordinary words: \
         not the names of the fields, of the modules or of the states. Write two sentences and 300 characters at most.
         Use only the numbers of the context and of the request, as they are written there. \
         Do not calculate: the facts already give the quantity still to carry and the stock above the reserve.
+        "fuel" is the fuel level of the robot. \
+        "tripsWithThisFuel" is about how many trips between the two stations of the job that level allows.
         A value that is not in the facts is uncertain, and the list "uncertain" says why. Do not give it and do not guess it: \
         the server gives it to the player, with its caution, before your sentence.
         You can say what the player can do, for example resume or cancel a job. A report and "none" change nothing: \

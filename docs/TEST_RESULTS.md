@@ -129,6 +129,8 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 93 | 84 of 91, expected | Ticket #18, red run: five new tests and two changed tests, with the old code |
 | 94 | 91 of 91 | None. Ticket #18: a job replaces a job. Server line: `All 91 required tests passed :)` |
 | 95 | 92 of 92 | None. Ticket #18, with one more test of the replacement in each open state. Server line: `All 92 required tests passed :)` |
+| 96 | 92 of 93 | The integration branch after the merge of ticket #18. `b_replacement_in_recovery` failed: `[RUNNING, RECOVERY LOAD_DIFFERS, CANCELLED]`. Ticket #16 adds the cause of `RECOVERY` to the diary, and the test of ticket #18 did not expect it. The expectation of the test changed, not the code |
+| 97 | 93 of 93 | None. The integration branch after the merge of ticket #18, with the corrected expectation. Server line: `All 93 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -139,6 +141,7 @@ Runs 89 to 91 are the runs of ticket #16 of increment B. See "Increment B — th
 Run 92 is the run of the integration branch of increment B after the merge of tickets #17 and #16.
 
 Runs 93 to 95 are the runs of ticket #18 of increment B.
+Runs 96 and 97 are the runs of the integration branch after the merge of ticket #18.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -180,6 +183,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 91, ticket #16 of increment B | All four | Passed. `check-crash`: the diary after the restart is `RUNNING, DONE, RECOVERY WORLD_OLDER` |
 | Run 92, tickets #16 and #17 after the merge | All four | Passed |
 | Run 95, ticket #18 | All four | Passed. See "Increment B — a job replaces a job (ticket #18)" |
+| Run 96, ticket #18 after the merge | All four | Passed. Run 97 changed only the expectation of one test of the normal run |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".

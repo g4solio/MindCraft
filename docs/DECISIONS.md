@@ -520,9 +520,10 @@ Initial values, **proposed** and not yet confirmed one by one:
 
 ## D27 — Plan after the first review: four increments
 
-**Status:** decided by the project owner on 2026-11-13, in a design discussion. Increment A is implemented. B, C and D are not implemented.
+**Status:** decided by the project owner on 2026-11-13, in a design discussion. Increments A and B are implemented. C and D are not implemented.
 
 - **Design of B:** decided by the project owner on 2026-11-15, in a design discussion. See D42.
+- **Status of the exit of B:** not reached. The first part is done: the automatic in-game tests pass on the final code (run 156, 107 of 107, and the four restart phases, ticket #28). The measurement of the models (ticket #27) and the play session with [PLAY_SESSION_B.md](PLAY_SESSION_B.md) (ticket #29) are not done. See D42, point 14.
 - **Status of the exit of A:** reached on 2026-11-14, decided by the project owner. The first part: the automatic in-game tests pass on the final code (run 75, 81 of 81, and the four restart phases, ticket #12). The CI passed on the commit `07bbf44` of the session. The second part: the project owner played the session of ticket #13 on 2026-11-14, with the checklist [PLAY_SESSION_A.md](PLAY_SESSION_A.md). Each step reached its expected behaviour. No command was used after the setup. Two differences are deferred to increment B. See D40.
 
 - **Problem:** S3 of the brief is visual composition and Lua customization. After S2, Uno can do one thing with words: create a job. A change, a pause, a question about the state and a report are buttons or commands. Uno never speaks first. An editor does not change this.
@@ -843,7 +844,14 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 
 ## D32 — The model speaks, the server checks
 
-**Status:** decided by the project owner on 2026-11-13. Increment B. Implemented by tickets #19, #20 and #21, and verified with automatic in-game tests with providers written in the tests: see D42, points 1 to 5, 15, 16 and 17. Not verified with the real service: no test verifies a sentence of the real model. Ticket #23 implemented the record of a check that failed, and its line in the server log: the record is verified with automatic in-game tests, runs 114 and 115. The line is a code examination. See D42, "As built" under the choices of the implementation.
+**Status:** decided by the project owner on 2026-11-13. Increment B. D42 changed it on 2026-11-15: see the two bullets "Decided" and "Changed" at the end. Implemented, and **verified** with automatic in-game tests with providers written in the tests:
+
+- The facts that leave the server, without the uncertain numbers (ticket #19): `b_facts_in_the_context` and `b_facts_of_uncertain_numbers`, runs 101 and 102. See D42, points 2 and 3.
+- The fixed rules after a model without a valid action (ticket #21): `t18_provider_failures` and `a_model_requests_count`, runs 105 and 106. See D42, point 17.
+- The voice, the check of the numbers and of the length, and the fixed sentence before the voice (ticket #20): `b_voice_of_a_report`, `b_voice_of_none`, `b_no_voice_for_an_action`, `b_fixed_sentences_of_uncertain_numbers` and `b_voice_after_uncertain_numbers`, runs 111 and 112. See D42, points 1, 4, 5, 15 and 16.
+- The record of a check that failed (ticket #23): `b_record_of_a_request`, runs 114 and 115. Its line in the server log is a code examination.
+- The final run of increment B: run 156 (ticket #28).
+- **Not verified:** a sentence of the real model. The sample of the T21 case with the real service is a part of the measurement: ticket #26 built its harness, and ticket #27 has the paid runs. The measurement is not done. The voice in a client: the play session of B (ticket #29) is not done.
 
 - **Decision:** the model writes the sentences of Uno when the player writes to Uno.
 - **Alternative that the project owner did not choose:** the model gives only the action, and the server writes each sentence from fixed templates. It was the recommendation in the discussion. Its advantages: no sentence without evidence, no new data outside the server, tests that can be repeated.
@@ -857,27 +865,32 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 - **Cost:** the voice has no memory of the sentence before it (D31). It must say so and must not invent.
 - **Open:** the language of the voice. D15 says English.
 - **Review condition:** the tests with the real service show sentences that contradict the record.
-- **Decided on 2026-11-15, not implemented:** the model speaks only for `report` and `none`. The facts, the uncertain numbers, the check of the numbers and the character are in D42.
-- **Implemented on 2026-11-15 (ticket #19):** the data that leave the server, without the uncertain numbers. The model does not speak yet. See D42, points 2 and 3.
-- **Changed on 2026-11-15, implemented (ticket #21):** "the same applies if the model does not answer" became a rule of its own. Without an action Uno has no fixed template to use. Thus the fixed rules read the request, and Uno says so first (D42, point 17). Verified with automatic in-game tests. The voice of D32 is not implemented yet.
-- **Implemented on 2026-11-15 (ticket #20):** the voice for `report` and `none`, the check of the numbers and of the length, and the fixed sentence about the uncertain numbers before the voice. A failed check gives the fixed template. Verified with automatic in-game tests, runs 111 and 112. Not verified with the real service. See D42, "As built" under point 16.
-- **Implemented on 2026-11-15 (ticket #26), not run:** the sample of the T21 case with the real service is a part of the measurement: `LiveTests.b_measurement`. Its harness is verified against the stand-in of the service, runs 151 to 153. No paid run occurred. See D42, "As built" under point 7.
+- **Decided on 2026-11-15 (D42, point 1):** the model speaks only for `report` and `none`. The facts, the uncertain numbers, the check of the numbers and the character are in D42, points 2 to 5.
+- **Changed on 2026-11-15 (D42, point 17):** "the same applies if the model does not answer" became a rule of its own. Without an action Uno has no fixed template to use. Thus the fixed rules read the request, and Uno says so first.
+- **Implemented on 2026-11-15 (ticket #26), not run:** the sample of the T21 case with the real service is a part of the measurement: `LiveTests.b_measurement`. Its harness is **verified** against the stand-in of the service, runs 151 to 153. No paid run occurred. See D42, "As built" under point 7.
 
 ## D33 — The model and its cost
 
-**Status:** decided by the project owner on 2026-11-13. The limits on the calls of increment A are implemented: see D33.1. The line of each request in the server log is implemented (ticket #23): see below. The setting of the model is implemented by ticket #22, and verified with automatic in-game tests: runs 130 and 131, see D42, point 6. The harness of the measurement is implemented by ticket #26, and verified with automatic in-game tests against the stand-in of the service: runs 151 to 153, see D42, point 7. The measurement itself is not done: no paid run occurred (ticket #27). The rest is not implemented. The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
+**Status:** decided by the project owner on 2026-11-13. The limits on the calls of increment A: see D33.1. The parts of increment B are implemented, and **verified** with automatic in-game tests:
+
+- The record of each request (ticket #23): `b_record_of_a_request`, runs 114 and 115. Its line in the server log is a code examination.
+- The setting of the model (ticket #22): `b_model_of_the_setting` with the stand-in of the service, runs 130 and 131. See D42, point 6.
+- The harness of the measurement (ticket #26): `b_measurement_with_the_stand_in`, runs 151 to 153. See D42, point 7.
+- **Not done:** the measurement itself and the choice of the model (ticket #27). No paid run occurred in increment B. Thus no run with the real service used Haiku 5.5.
+- **Not implemented:** a choice of the model by the kind of operation (increment D, D36), and a spending limit that the server operator can set.
+- The prices are a reference with a date. The cost of a request is an estimate, not a measurement.
 
 The model. Increment B.
 
 - **One model:** one model routes and speaks. The start is Claude Haiku 5.5.
 - **Measurement:** the test with the real service runs on Haiku 5.5, Sonnet 5.5 and Opus 5.5 with the same requests. It compares the orders, the sentences and the times. Each run costs money and needs the consent of the project owner.
 - **Setting:** the model becomes a setting. It is not a constant in the code any more. Each request writes the used tokens in the server log.
-  - **Implemented on 2026-11-15 (ticket #23):** each written request to a model writes one line in the server log, with its tokens. The record behind the line is **verified** with automatic in-game tests, runs 114 and 115: `b_record_of_a_request`. The line as text is a code examination. See D42, "As built" under the choices of the implementation. The model is still a constant in the code (ticket #22).
+  - **Implemented on 2026-11-15 (ticket #23):** each written request to a model writes one line in the server log, with its tokens. The record behind the line is **verified** with automatic in-game tests, runs 114 and 115: `b_record_of_a_request`. The line as text is a code examination. See D42, "As built" under the choices of the implementation. At that time the model was a constant in the code. Ticket #22 made it a setting.
 - **In A:** the model of D21 stays. The action list of D29 is not verified with the real service until B.
 - **Note of ticket #12:** the play session of A uses the key (D28). Its requests are the first requests of the action list to the real service, unless the project owner runs `t18_claude_live` before it. The session is a test in the game, not an automatic test.
 - **By kind of operation:** when Uno writes code (D36), a different model can do that operation. The kind of operation selects the model. No model judges the difficulty of a request.
 - **Discarded for now:** a choice of the model by the difficulty of each request. It needs a judge: one more call, or more rules.
-- **Decided on 2026-11-15, not implemented:** the setting is in the Forge configuration file. The measurement is a ticket of B, with a rule decided before it. The budget of the paid runs of B is 5 dollars. See D42.
+- **Decided on 2026-11-15:** the setting is in the Forge configuration file. The measurement is a ticket of B, with a rule decided before it. The budget of the paid runs of B is 5 dollars. See D42.
 - **Implemented on 2026-11-15 (ticket #22):** the model is the value `model` of `config/mindcraft-common.toml`. It is not a constant in the code any more. The start is `claude-haiku-5-5`, not the most expensive model of D21. Verified with automatic in-game tests and the stand-in of the service, runs 130 and 131. Not verified with the real service: no run with the real service used Haiku 5.5 yet. The measurement is not done (ticket #27). See D42, point 6.
 
 Reference prices, from the model table of the Anthropic API documentation dated 2026-11-03:
@@ -927,7 +940,14 @@ Limits on the calls. Increment A.
 
 ## D34 — Waits, blocks and a load on board
 
-**Status:** decided by the project owner on 2026-11-13. It changes a verified behaviour of D06 and replaces a limit of D09. The part of increment A (the obstacle and the causes of `BLOCKED`) is implemented and **verified** with automatic in-game tests on 2026-11-13. See "Increment A, as built" below. In the part of increment B, the adoption of a load is implemented and **verified** with automatic in-game tests on 2026-11-15 (ticket #17, run 88): see D42, point 9. The replacement of a job and the change of the destination by words are implemented and **verified** with automatic in-game tests on 2026-11-15 (ticket #18, run 95): see D42, point 10. The low fuel notice is implemented and **verified** with automatic in-game tests on 2026-11-15 (ticket #24, runs 124 to 126): see D42, point 12. The rest of the part of increment B is not implemented.
+**Status:** decided by the project owner on 2026-11-13. It changes a verified behaviour of D06 and replaces a limit of D09. Each part is implemented, and **verified** with automatic in-game tests:
+
+- Increment A, the obstacle and the causes of `BLOCKED`: on 2026-11-13. See "Increment A, as built" below.
+- Increment B, the adoption of a load (ticket #17): run 88 and the four restart phases after it. See D42, point 9.
+- Increment B, the replacement of a job and the change of the destination by words (ticket #18): run 95 and the four restart phases after it. See D42, point 10.
+- Increment B, the low fuel notice (ticket #24): runs 124 to 126, and the four restart phases after run 125. See D42, points 11 and 12.
+- The final run of increment B: run 156, and the four restart phases after it (ticket #28).
+- **Not verified:** a change of the destination that the real model builds from the facts. The proposals, the answers and the low fuel notice in a client. The play session of B has a step for each (ticket #29). It is not done.
 
 - **Rule:** a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
 - **Obstacle (increment A):** a robot that cannot move goes to `WAITING` with a cause of its own, and tries again slowly. The attention rule of D30 applies. Before increment A the job went to `BLOCKED` after 10 attempts and stayed there until `resume`, also after the obstacle went away. Ticket #5 made the change: see "Increment A, as built" below. `t05_obstacle` now expects the wait.
@@ -937,7 +957,7 @@ Limits on the calls. Increment A.
 - **A load on board (increment B):** a new job adopts the load that the robot already holds, if it is the item of the job. The proposal says so: "The robot holds 24: I count them as the first load." One confirmation cancels the old job and starts the new one. This replaces the limit of D09.
   - **Implemented and verified, ticket #17:** the adoption, for each source of orders. The limit of D09 ended.
   - **Implemented and verified, ticket #18:** the replacement. A start by words for a robot with an open job is one proposal, and one confirmation cancels the old job and starts the new one in the same tick. The start command for a busy robot stays refused. See D42, point 10.
-- **Until B:** a change of the destination with a load on board is refused, as now.
+- **Until B:** a change of the destination with a load on board is refused, as in increment A.
   - **Ended on 2026-11-15, ticket #18:** a change of the destination is the replacement of the job by a job with the new destination. The new job adopts the load. Verified with an automatic in-game test: `b_replacement_changes_the_destination`, run 95.
 - **Counterexample:** the runtime does not know where a load comes from. If the owner keeps coal in the turtle as fuel, a coal job adopts it and delivers it. The proposal shows the number.
 - **Counterexample:** two robots that face each other in a corridor one block wide both wait, without an end. This is deduced from the code. It was not tried.
@@ -1081,7 +1101,11 @@ Gates before a second player:
 
 ## D40 — The play session of increment A: results and differences
 
-**Status:** the session is a test in the game, manual, on 2026-11-14 (ticket #13). The project owner decided the two deferrals and the six values of D38 on 2026-11-14. The rule about the age of a summary is **proposed**.
+**Status:** the session is a test in the game, manual, on 2026-11-14 (ticket #13). The project owner decided the two deferrals and the six values of D38 on 2026-11-14. The rule about the age of a summary is **proposed**. Increment B implemented both deferrals. Each is **verified** with an automatic in-game test, and not in a client:
+
+- The button "Cancel": `a_cancel_button_asks_a_confirmation`, run 84 (D41, decision 4). Step 9 of [PLAY_SESSION_B.md](PLAY_SESSION_B.md) has it.
+- The height of the screen: `b_conversation_first`, runs 141 and 142 (D42, point 13). Step 8 of [PLAY_SESSION_B.md](PLAY_SESSION_B.md) has it.
+- The play session of B is not done (ticket #29).
 
 - **Result:** each of the 12 steps reached its expected behaviour. After the setup no command was used. See "Increment A — the play session" in [TEST_RESULTS.md](TEST_RESULTS.md).
 - **Verified in the game, manually, for the first time:**
@@ -1092,8 +1116,8 @@ Gates before a second player:
   - the summary of one or two events on the screen of a client, also after a new opening of the world;
   - `/forceload`, and a robot that works while the player is about 380 blocks away (D28);
   - a player on the path: the robot pushed the project owner (`can_push = true`).
-- **Deferred to increment B, decided by the project owner: the button "Cancel" of a job.** It cancels the job with one click, without a confirmation (D19). It is next to "Apply". The project owner read it as the cancel of the screen and cancelled a job by mistake. Reason for the deferral: spec #1 keeps the buttons unchanged in A, and B changes the screen (D34). It opens again in B: a confirmation, or a clearer label. **Closed on 2026-11-14 by D41, decision 4:** the button gives a proposal with "Confirm #N". Verified with an automatic in-game test (run 84). Not verified in a client.
-- **Deferred, decided by the project owner: the height of the screen.** In a window of about 850 × 510 pixels the screen is taller than the window. It scrolls, and its top or bottom lines are out of view. Reason: the screen scrolls, and a larger window shows everything. It opens again when the screen changes in B. **Decided on 2026-11-15:** the conversation part comes first in the view. See D42, point 13. **Implemented (ticket #25)** and **verified** with an automatic in-game test: `b_conversation_first` reads the order of the view that the server builds, runs 141 and 142. **Not verified:** the look in a client, and whether a window of about 850 × 510 pixels shows the conversation part without a scroll. The play session of B has a step for it.
+- **Deferred to increment B, decided by the project owner: the button "Cancel" of a job.** It cancels the job with one click, without a confirmation (D19). It is next to "Apply". The project owner read it as the cancel of the screen and cancelled a job by mistake. Reason for the deferral: spec #1 keeps the buttons unchanged in A, and B changes the screen (D34). It opens again in B: a confirmation, or a clearer label. **Closed on 2026-11-14 by D41, decision 4:** the button gives a proposal with "Confirm #N". Verified with an automatic in-game test (run 84). Not verified in a client: step 9 of the play session of B has it.
+- **Deferred, decided by the project owner: the height of the screen.** In a window of about 850 × 510 pixels the screen is taller than the window. It scrolls, and its top or bottom lines are out of view. Reason: the screen scrolls, and a larger window shows everything. It opens again when the screen changes in B. **Decided on 2026-11-15:** the conversation part comes first in the view. See D42, point 13. **Implemented (ticket #25)** and **verified** with an automatic in-game test: `b_conversation_first` reads the order of the view that the server builds, runs 141 and 142. **Not verified:** the look in a client, and whether a window of about 850 × 510 pixels shows the conversation part without a scroll. Step 8 of the play session of B has it.
 - **Proposed, no change: the age in a summary rounds down to whole minutes.** An event of 117 seconds is "1 min ago". The number agrees with the time.
 - **Differences of the procedure, no change:** the rig was rotated and shorter (3 + 3 moves). The first turtle got 160 fuel and was replaced. The stone was at the corner. The project owner took 64 coal, not 16 or 1. The screen stayed open in step 9. The waits of step 11 were shorter. None of them changes a behaviour that the step checks.
 - **Not verified by the session:** the notice for `RECOVERY` in a client. A summary with more than 10 events in a client. A player who is not an operator. "Confirm #N" with two digits. A request in Italian.
@@ -1101,7 +1125,13 @@ Gates before a second player:
 
 ## D41 — The architecture review after increment A: the account and the behaviour of a job
 
-**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14. Both are implemented and verified with automatic in-game tests: run 82 and the four restart phases. The project owner decided candidates 3 to 6 on 2026-11-14, in two rounds of questions. 3 is implemented and verified with automatic in-game tests: run 83. 4 is implemented and verified with automatic in-game tests: run 84 and the four restart phases. 5 is implemented in increment B with its first kind, the long wait (ticket #16): verified with automatic in-game tests, runs 90 and 91 and the four restart phases. Its second kind, low fuel, is implemented in ticket #24: verified with automatic in-game tests, runs 124 to 126 and the four restart phases after run 125. 6 is implemented in increment B for the context of the model (ticket #19): verified with automatic in-game tests, runs 101 and 102. The private map of the jobs waits for increment C.
+**Status:** the review is a code examination, on 2026-11-14. The project owner decided candidates 1 and 2 on 2026-11-14, and candidates 3 to 6 on the same day, in two rounds of questions. Each decision is implemented, and **verified** with automatic in-game tests:
+
+- Decisions 1 and 2: run 82 and the four restart phases.
+- Decision 3: `a_parse_of_an_answer`, run 83.
+- Decision 4: `a_cancel_button_asks_a_confirmation`, run 84 and the four restart phases. Not verified in a client: step 9 of [PLAY_SESSION_B.md](PLAY_SESSION_B.md) has it.
+- Decision 5, in increment B: the long wait (ticket #16), runs 90 and 91 and the four restart phases. Low fuel (ticket #24): `b_low_fuel`, runs 124 to 126 and the four restart phases after run 125.
+- Decision 6, in increment B, for the context of the model (ticket #19): `b_facts_in_the_context`, runs 101 and 102. The private map of the jobs waits for increment C.
 
 - **Problem:** one concept of a job was spread over many modules. Increments B and C change exactly these places (D32, D34, D35). The review weighted the files that changed most in increment A.
 - **Decision 1, the account of a job:** `JobAccount` reads a job with three explicit inputs: the record, whether the robot runs, and the game time. The report, the screen and the status command read a job through it. The ages have one unit, the second. The doubt about the robot is in one place. Increment B adds here the facts for the model and the check of its numbers (D32).
@@ -1121,13 +1151,32 @@ Gates before a second player:
   - **Proposed, a choice of the implementation:** the "free" flag of a robot (D21) still reads the job of each robot of the actor, as in increment A. Thus a job of an operator on the robot of a player still makes that robot not free. The flag gives no data of that job. Reason: the answers of Uno do not change in ticket #19.
 - **The tests of 3 and 4:** replace, do not layer. The bad answers of a provider are tested on the parse function, without a robot. The reference sentences compare typed actions. A new test covers the button "Cancel".
 - **No manual test, decided by the project owner:** these changes get no test in the game by a person. The confirmation of "Cancel" in the screen of a client stays not verified manually. The automatic tests read the view that the server builds.
+  - **Changed on 2026-11-15 by D42, point 14:** the play session of B has a step for the confirmation of "Cancel". The session is not done.
 - **Rejected by the review:** the save and the load of the record are already in one module. The global seams of the tests stay: the tests share one server (D24). The Lua composition passes the deletion test.
 - **Not done:** the tests did not change. A test can now give the account a robot that does not run. `t21_report_with_old_data` still shuts down a computer for it.
 - **Counterexample:** each of the two modules has one use until its increment comes. Without B and C they are moves of code without leverage.
 
 ## D42 — Increment B: the decisions of the design discussion
 
-**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Ticket #16 implemented a part of point 2, the causes of `RECOVERY`, and a part of point 12, the kinds "change" and "long wait": verified with automatic in-game tests, runs 90 and 91 and the four restart phases. Ticket #17 implemented point 9: verified with automatic in-game tests on 2026-11-15, see "As built" under point 9. Ticket #18 implemented point 10: verified with automatic in-game tests on 2026-11-15, see "As built" under point 10. Ticket #19 implemented point 2 without the fuel, the part of points 3 and 4 that is about the facts, and point 18: verified with automatic in-game tests on 2026-11-15, runs 101 and 102, see "As built" under point 2. Ticket #21 implemented point 17: verified with automatic in-game tests on 2026-11-15, see "As built" under point 17. Ticket #20 implemented points 1, 5, 15 and 16, the fixed sentences of point 3 and the check of point 4: verified with automatic in-game tests on 2026-11-15, runs 111 and 112, see "As built" under point 16. Not verified with the real service. Ticket #24 implemented points 11, 12 and 19, the fuel of point 2, and the kind "low fuel" of point 12: verified with automatic in-game tests on 2026-11-15, runs 124 to 126 and the four restart phases after run 125, see "As built" under point 12. Ticket #23 implemented the log line of a request, a choice of the implementation at the end: its record is verified with automatic in-game tests, runs 114 and 115, and the line is a code examination. Ticket #22 implemented point 6: verified with automatic in-game tests on 2026-11-15, runs 130 and 131, see "As built" under point 6. Ticket #25 implemented point 13: verified with an automatic in-game test on 2026-11-15, runs 141 and 142, see "As built" under point 13. Ticket #26 implemented the harness of point 7, the record of point 20, and the choice of the implementation about the class of tests with the real service: verified with automatic in-game tests against the stand-in of the service on 2026-11-15, runs 151 to 153, see "As built" under point 7. The measurement itself is not done: no paid run occurred. Each other point is not implemented, and no test supports it. The facts below come from code examinations.
+**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. The choices of detail in each "As built" are **proposed**: the project owner did not confirm them one by one.
+
+The state of each ticket. Each "verified" is an automatic in-game test with the fixed rules, a provider written in the test or the stand-in of the service. Each "As built" gives the tests.
+
+- Ticket #16: the causes of `RECOVERY` (point 2), and the kinds "change" and "long wait" (point 12). **Verified:** runs 90 and 91, and the four restart phases.
+- Ticket #17: the adoption (point 9). **Verified:** run 88, and the four restart phases.
+- Ticket #18: the replacement (point 10). **Verified:** run 95, and the four restart phases.
+- Ticket #19: the facts without the fuel (point 2), the part of points 3 and 4 about the facts, and the line of the screen (point 18). **Verified:** runs 101 and 102, and the four restart phases.
+- Ticket #21: the fixed rules after a model without a valid action (point 17). **Verified:** runs 105 and 106.
+- Ticket #20: the voice (points 1, 5, 15 and 16), the fixed sentences of point 3 and the check of point 4. **Verified:** runs 111 and 112.
+- Ticket #23: the record of a request, and its line in the server log (the choices of the implementation). The record is **verified:** runs 114 and 115. The line is a code examination.
+- Ticket #24: low fuel (points 11, 12 and 19, and the fuel of point 2). **Verified:** runs 124 to 126, and the four restart phases after run 125.
+- Ticket #22: the setting of the model (point 6). **Verified:** runs 130 and 131.
+- Ticket #25: the conversation part first (point 13). **Verified:** runs 141 and 142.
+- Ticket #26: the harness of the measurement (point 7), its record (point 20), and the class of tests with the real service. **Verified** against the stand-in of the service: runs 151 to 153.
+- Ticket #28: the checklist of the play session (point 14), and the documents. The final run of the increment is **verified:** run 156 (107 of 107), and the four restart phases after it.
+- **Not done:** the measurement and the choice of the model (ticket #27, points 7, 8 and 20). The play session (ticket #29, point 14). Thus the exit of B is not reached.
+- **Not verified with the real service:** no run with the real service used the code of increment B. The new system text of the Claude provider (tickets #18 and #20) needs one `-Plive` run before the merge into `main` (CLAUDE.md). Ticket #27 has it.
+- **Not verified in a client:** each point that the player sees on the screen or in the chat. The play session of B has a step for each point of its list.
 
 - **Spec and tickets:** the spec of increment B is issue #15. Its tickets are issues #16 to #29, with their blocking edges. Tickets #27 (the measurement) and #29 (the play session) need the project owner.
 - **Problem:** D32, D33 and D34 decide the direction of increment B. They leave open: where the model speaks, which data it gets, which numbers are uncertain, how the check works, where the setting is, when the measurement runs, how a job adopts a load, and when the fuel is low. D40 and D41 defer three points to B.
@@ -1262,7 +1311,7 @@ A load on board (D34)
     - The text gives the load at the moment of the proposal. It says that the new job counts the load at the confirmation. The answer after the confirmation gives the real number.
     - **Alternative that was not chosen:** refuse the confirmation if the load changed. It is more exact. A running job changes its load at each trip.
     - **A request that names no robot:** the only free robot. If no robot is free and the actor has one robot, that robot. In each other case Uno asks for the robot number.
-    - The command `/mindcraft job start` for a busy robot stays refused.
+    - The start commands `/mindcraft job transport` and `/mindcraft job keep` for a busy robot stay refused. The text of the design discussion said `/mindcraft job start`: no command has that name. Ticket #28 corrected the name.
     - A change of the destination needs no new action. With the facts, a model builds a start with the new destination. This closes "until B" in D34.
     - **As built (ticket #18).** Implemented and **verified** with automatic in-game tests on 2026-11-15: run 95, and the four restart phases after it. The choices of detail below are **proposed**: the project owner did not confirm them one by one.
       - `MindRuntime.replace` gets the ID of the open job and the new order. Its check (`checkReplace`) is the check of a cancellation of that job, then the ordinary validation of the order, as for a free robot. Then it cancels the job and starts the new job in one call on the server thread. Thus the diary entry of the cancellation and the first entry of the new job have the same game time.
@@ -1325,6 +1374,10 @@ The screen (D40)
 The exit of B
 
 14. **Three parts.** The automatic in-game tests pass. The measurement is recorded and the model is chosen. The project owner plays one session with a written checklist of about 8 steps: the voice on a report in more than one state, a replacement with an adoption, the low fuel notice, the screen, and the confirmation of "Cancel" (D41).
+    - **As built (ticket #28).** The checklist is [PLAY_SESSION_B.md](PLAY_SESSION_B.md): a setup with commands, then nine steps without a command. The steps are the list of spec #15: the voice on a report in more than one state, a question that is not about a job, a job whose robot is not running, a replacement, a change of the destination with an adoption, the low fuel notice, the summary after an absence, the screen in a small window, and the button "Cancel".
+    - The first part is **verified:** run 156 (107 of 107) and the four restart phases after it, on the final code of increment B. Run 157 passed too. Run 155, on the same code, failed one test one time: `b_replacement_refused`. See TEST_RESULTS.md, "Increment B — final runs and evidence (ticket #28)".
+    - The choices of detail of the checklist are **proposed**: the rig with three stations at 4 moves from the depot, the 80 fuel of the robot, the requests, and the order of the steps. With these values the low fuel notice comes in step 6, and again at the start of the job of step 8.
+    - **Not done:** the second part (ticket #27) and the third part (ticket #29). Thus the exit of B is not reached.
 
 Counterexamples:
 

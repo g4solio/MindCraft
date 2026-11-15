@@ -181,6 +181,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 161 | 107 of 108, expected | Green run 3 and red run 4: the voice at the moment of the answer |
 | 162 | 108 of 108 | None. Each correction. Server line: `All 108 required tests passed :)` |
 | 163 | 108 of 108 | None. The committed code `afa3717`. Server line: `All 108 required tests passed :)` |
+| 164 | 108 of 108 | None. The final code of increment B: the integration branch after the merge of the corrections of the code review. Server line: `All 108 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -208,6 +209,7 @@ Runs 150 to 153 are the runs of ticket #26, on the integration branch at `002c63
 Run 154 is the run of the integration branch after the merge of ticket #26.
 Runs 155 to 157 are the runs of ticket #28, on the integration branch at `8b0d3e2`. Ticket #28 changed only documents.
 Runs 158 to 163 are the runs of the corrections of the code review of increment B, on the branch `b/review-fixes` from `9722178`.
+Run 164 is the run of the final code of increment B, on the integration branch after the merge of the corrections. The four restart phases passed after it.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -255,6 +257,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 127, tickets #20 and #24 after the merge | All four | Passed |
 | Run 156, ticket #28: the final code of increment B | All four | Passed. See "Increment B — final runs and evidence (ticket #28)" |
 | Run 163, the corrections of the code review of increment B | All four | Passed. See "Increment B — corrections of the code review" |
+| Run 164, the final code of increment B | All four | Passed |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".

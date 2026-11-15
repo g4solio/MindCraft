@@ -3770,6 +3770,62 @@ public class MindCraftTests {
     }
 
     /**
+     * The position in the view of the first widget whose JSON holds each part, or -1 for a part that no widget holds.
+     * A test reads the order of a view by the text or the kind of a widget, not by a fixed index.
+     */
+    private static List<Integer> positions(String view, String... parts) {
+        List<String> widgets = new ArrayList<>();
+        for (JsonElement widget : JsonParser.parseString(view).getAsJsonObject().getAsJsonArray("widgets")) widgets.add(widget.toString());
+        return Stream.of(parts).map(part -> widgets.stream().filter(widget -> widget.contains(part)).findFirst().map(widgets::indexOf).orElse(-1)).toList();
+    }
+
+    /**
+     * D42, point 13, and D40: the conversation part comes first in the view, above the list of the jobs. First the sentence of Uno,
+     * the proposal, the text field and the row of buttons. Then the line about the provider. Then the jobs. With no job, the
+     * conversation part comes first too. The client draws the widgets in the order of the view.
+     * With the fixed rules the view has no line about the provider. Thus a provider of the test gives one. The test sets it only to
+     * build a view, as a_screen_model_lines, and is in the batch of that test. No request goes to it.
+     * The buttons of the new order act as before: "Cancel" of the job gives a proposal, and "Confirm #N" cancels the job.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "a_server_provider")
+    public static void b_conversation_first(GameTestHelper helper) {
+        Actor player = player("b_conversation_first");
+        Rig rig = new Rig(helper, "b_conversation_first", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        String line = "The line of the provider of this test.";
+        Uno.Provider described = new Uno.Provider() {
+            @Override
+            public Uno.Answer answer(String request, Uno.Context context) {
+                throw new IllegalStateException("a view asks no provider");
+            }
+
+            @Override
+            public String notice(Uno.Route route) {
+                return line;
+            }
+        };
+        Supplier<String> view = () -> withServerProvider(described, () -> UnoView.build(rig.runtime, player, rig.level.getGameTime()));
+        String voice = "\"style\":\"uno\"", field = "\"type\":\"input\"", send = "\"action\":\"ask\"", job = "\"style\":\"heading\"";
+        rig.begin()
+            .thenExecute(() -> {
+                String none = view.get();
+                check(positions(none, voice, field, send, line, "I have no record of a job of yours.").equals(List.of(0, 1, 2, 3, 4)), none);
+                rig.startJob(24, 0);
+            })
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                UnoView.act(server, player, action(view.get(), "cancel"), "{}");
+                String waiting = view.get();
+                MindCraft.LOGGER.info("b_conversation_first: {}", waiting);
+                check(positions(waiting, voice, "Waiting for your confirmation: cancel job " + rig.job().id, field, send, line, job)
+                    .equals(List.of(0, 1, 2, 3, 4, 5)), waiting);
+                UnoView.act(server, player, action(waiting, "confirm"), "{}");
+                check(rig.job().state == State.CANCELLED, rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
      * T16: the owner lowers the quantity of a transport while the load is on board.
      * The robot delivers the new quantity only. The rest stays on board and the job says so. The owner decides.
      */

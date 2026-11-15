@@ -411,6 +411,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Changed on 2026-11-13, increment A:** the schema and the system text are the ones of the seven actions. The `problem` field is now the reason of the action `none`. The counterexample about `IllegalArgumentException` is corrected: each exception is a failure. The new schema is verified with the real service for `start` and `none` since 2026-11-14. See D29.1.
 - **Decided on 2026-11-13:** the model becomes a setting, and the start is Haiku 5.5 after a measurement (D33). More data will leave the server: the job record and lines of the diary, without coordinates (D32). These two points are not implemented: they are increment B. By default only an operator uses Claude, with a session limit and a counter on the screen (D33). Increment A implements this point: see the next line.
 - **Changed on 2026-11-13, increment A, ticket #11:** only an operator uses Claude, with a limit of 100 requests for each actor in one server session and a counter on the screen. Each other player gets the fixed rules. See D33.1.
+- **Decided on 2026-11-15, not implemented:** the facts that leave the server in increment B, and the new line of the screen. See D42, points 2 and 18.
 
 ## D22 — License: MIT
 
@@ -486,6 +487,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 - **Not verified:** `SOURCE_KEEPS` and `DESTINATION_UNLOADED`. No test reaches them. The destination uses the same code as the source.
 - **Counterexample:** `BLOCKED` and `RECOVERY` still have only a free text. Uno prints it as the recorded reason and does not interpret it.
 - **Changed in increment A:** `BLOCKED` has causes too, and an obstacle is a wait with the cause `PATH_OBSTRUCTED`. See D34. `RECOVERY` still has only a free text.
+- **Decided on 2026-11-15, not implemented:** `RECOVERY` gets two causes with fixed values. See D42, point 2.
 
 ## D26 — One run of a Lua module executes one job
 
@@ -502,6 +504,7 @@ Initial values, **proposed** and not yet confirmed one by one:
 
 **Status:** decided by the project owner on 2026-11-13, in a design discussion. Increment A is implemented. B, C and D are not implemented.
 
+- **Design of B:** decided by the project owner on 2026-11-15, in a design discussion. See D42.
 - **Status of the exit of A:** reached on 2026-11-14, decided by the project owner. The first part: the automatic in-game tests pass on the final code (run 75, 81 of 81, and the four restart phases, ticket #12). The CI passed on the commit `07bbf44` of the session. The second part: the project owner played the session of ticket #13 on 2026-11-14, with the checklist [PLAY_SESSION_A.md](PLAY_SESSION_A.md). Each step reached its expected behaviour. No command was used after the setup. Two differences are deferred to increment B. See D40.
 
 - **Problem:** S3 of the brief is visual composition and Lua customization. After S2, Uno can do one thing with words: create a job. A change, a pause, a question about the state and a report are buttons or commands. Uno never speaks first. An editor does not change this.
@@ -601,6 +604,7 @@ Deferred without a date. Each item names the condition that opens it again.
 - **Evidence:** tests `s2_uno_reference_sentence`, `t18_provider_failures`, `t18_claude_provider` and the new test `a_provider_answers_with_an_action`. The four failed before the implementation and passed after it. See "Increment A — The provider answers with an action" in TEST_RESULTS.md. The tests of the S2 flow pass with the same sentences as before: `s2_uno_request`, `s2_tablet_view`, `t22_confirm_only_the_shown_proposal`, `t22_t23_proposals_and_contact_points`, `t23_state_of_an_earlier_session`.
 - **Not verified:** the new schema and the new system text with the real service. The test `t18_claude_live` compiles with the new contract. It was not run: a run costs money and needs the consent of the project owner. Its four requests are the requests of S2: they test only `start` and `none`. Since 2026-11-14: run 81 and the play session used the new schema with the real service (D40).
 - **Counterexample:** the real service can refuse the schema, for example with "Schema is too complex for compilation". Then each request to Claude fails, and Uno says that the model service answered with error 400. The fixed rules do not take over.
+- **Decided on 2026-11-15, not implemented:** in increment B the fixed rules read a request when the model gives no valid action. See D42, point 17.
 - **Observed on 2026-11-14:** run 76 gave this counterexample. The service answered with error 400. The provider wrote only the code, not the body of the error. Thus the reason is not known: the schema is the most likely cause, because the request of S2 passed with the same model, effort and fallback.
 - **Cause, found on 2026-11-14:** run 78 logged the body of the error: "Enum value 'transport' does not match declared type '['string', 'null']'". The service refuses an `enum` next to a list of types. Only the field `module` had both.
 - **Changed on 2026-11-14, the schema:** `module` is `anyOf` a string from the enum, or null. It still counts as one of the eight fields with a union type. `t18_claude_provider` checks that no field has an `enum` next to a list of types: it failed before the change (run 79) and passed after it (run 80).
@@ -826,6 +830,7 @@ Diary, as built (ticket #8). The choices of detail are **proposed**: the project
 - **Cost:** the voice has no memory of the sentence before it (D31). It must say so and must not invent.
 - **Open:** the language of the voice. D15 says English.
 - **Review condition:** the tests with the real service show sentences that contradict the record.
+- **Decided on 2026-11-15, not implemented:** the model speaks only for `report` and `none`. The facts, the uncertain numbers, the check of the numbers and the character are in D42.
 
 ## D33 — The model and its cost
 
@@ -840,6 +845,7 @@ The model. Increment B.
 - **Note of ticket #12:** the play session of A uses the key (D28). Its requests are the first requests of the action list to the real service, unless the project owner runs `t18_claude_live` before it. The session is a test in the game, not an automatic test.
 - **By kind of operation:** when Uno writes code (D36), a different model can do that operation. The kind of operation selects the model. No model judges the difficulty of a request.
 - **Discarded for now:** a choice of the model by the difficulty of each request. It needs a judge: one more call, or more rules.
+- **Decided on 2026-11-15, not implemented:** the setting is in the Forge configuration file. The measurement is a ticket of B, with a rule decided before it. The budget of the paid runs of B is 5 dollars. See D42.
 
 Reference prices, from the model table of the Anthropic API documentation dated 2026-11-03:
 
@@ -897,6 +903,7 @@ Limits on the calls. Increment A.
 - **Counterexample:** the runtime does not know where a load comes from. If the owner keeps coal in the turtle as fuel, a coal job adopts it and delivers it. The proposal shows the number.
 - **Counterexample:** two robots that face each other in a corridor one block wide both wait, without an end. This is deduced from the code. It was not tried.
 - **Not decided:** how many trips are "few". When an observation is "old" (D32).
+- **Decided on 2026-11-15, not implemented:** "few" is below 5 trips, and an observation is old after 5 minutes. Both are initial values. The rules of the adoption, of the replacement and of the low fuel notice are in D42.
 - **Initial value, decided by the project owner on 2026-11-14 after the play session (D38):** a robot that cannot move tries 10 times at 1 second, as before. Then the job waits, and the robot tries one move every 5 seconds: the wait interval of the module.
 
 Increment A, as built (ticket #5). The choices of detail are **proposed**: the project owner did not confirm them one by one.
@@ -1045,7 +1052,7 @@ Gates before a second player:
   - `/forceload`, and a robot that works while the player is about 380 blocks away (D28);
   - a player on the path: the robot pushed the project owner (`can_push = true`).
 - **Deferred to increment B, decided by the project owner: the button "Cancel" of a job.** It cancels the job with one click, without a confirmation (D19). It is next to "Apply". The project owner read it as the cancel of the screen and cancelled a job by mistake. Reason for the deferral: spec #1 keeps the buttons unchanged in A, and B changes the screen (D34). It opens again in B: a confirmation, or a clearer label. **Closed on 2026-11-14 by D41, decision 4:** the button gives a proposal with "Confirm #N". Verified with an automatic in-game test (run 84). Not verified in a client.
-- **Deferred, decided by the project owner: the height of the screen.** In a window of about 850 × 510 pixels the screen is taller than the window. It scrolls, and its top or bottom lines are out of view. Reason: the screen scrolls, and a larger window shows everything. It opens again when the screen changes in B.
+- **Deferred, decided by the project owner: the height of the screen.** In a window of about 850 × 510 pixels the screen is taller than the window. It scrolls, and its top or bottom lines are out of view. Reason: the screen scrolls, and a larger window shows everything. It opens again when the screen changes in B. **Decided on 2026-11-15, not implemented:** the conversation part comes first in the view. See D42, point 13.
 - **Proposed, no change: the age in a summary rounds down to whole minutes.** An event of 117 seconds is "1 min ago". The number agrees with the time.
 - **Differences of the procedure, no change:** the rig was rotated and shorter (3 + 3 moves). The first turtle got 160 fuel and was replaced. The stone was at the corner. The project owner took 64 coal, not 16 or 1. The screen stayed open in step 9. The waits of step 11 were shorter. None of them changes a behaviour that the step checks.
 - **Not verified by the session:** the notice for `RECOVERY` in a client. A summary with more than 10 events in a client. A player who is not an operator. "Confirm #N" with two digits. A request in Italian.
@@ -1068,3 +1075,144 @@ Gates before a second player:
 - **Rejected by the review:** the save and the load of the record are already in one module. The global seams of the tests stay: the tests share one server (D24). The Lua composition passes the deletion test.
 - **Not done:** the tests did not change. A test can now give the account a robot that does not run. `t21_report_with_old_data` still shuts down a computer for it.
 - **Counterexample:** each of the two modules has one use until its increment comes. Without B and C they are moves of code without leverage.
+
+## D42 — Increment B: the decisions of the design discussion
+
+**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Nothing is implemented. No test supports a point of this entry. The facts below come from code examinations.
+
+- **Spec and tickets:** the spec of increment B is issue #15. Its tickets are issues #16 to #29, with their blocking edges. Tickets #27 (the measurement) and #29 (the play session) need the project owner.
+- **Problem:** D32, D33 and D34 decide the direction of increment B. They leave open: where the model speaks, which data it gets, which numbers are uncertain, how the check works, where the setting is, when the measurement runs, how a job adopts a load, and when the fuel is low. D40 and D41 defer three points to B.
+
+Facts from code examinations, 2026-11-15:
+
+- One call gives the action and the sentence (D32). `Uno.ask` calls the provider first. It validates the action after the answer. Thus the model writes its sentence before it knows the result of the action.
+- `ITurtleAccess` of the public API has `getFuelLevel`, `getFuelLimit` and `isFuelNeeded` (`javap` on the API jar of CC: Tweaked 1.121.0). The runtime already holds this object for each robot.
+- `TurtleRefuelHandler` of the public API has one method, `refuel`. The examination found no public function that gives the fuel value of an item without a refuel.
+- When a move fails for fuel, `transport.lua` burns each item on board that is not the item of the job (D12).
+- `UnoScreen` draws one column. The whole column scrolls together.
+- From the model reference of the Anthropic API dated 2026-11-03: the prices of D33 hold. Haiku 5.5 accepts the effort setting. Haiku 5.5 has no server-side fallback for a refusal.
+- **Not known:** whether the service refuses the `fallbacks` parameter for Haiku 5.5. The provider sends it now with each request (D21). The first request of the measurement shows it.
+
+The voice (D32)
+
+1. **Where the model speaks.** The model writes the sentence of Uno when Uno reads: the actions `report` and `none`. The server writes the sentence when Uno acts: start, change, pause, resume and cancel, as in increment A.
+   - **Alternative that the project owner did not choose:** a sentence of the model for each action, before the text of the server.
+   - **Reason:** a sentence about an action that did not run yet is a sentence without evidence (brief 2.4).
+   - **Cost:** a proposal and the answer to a pause keep the flat text of A.
+   - **Change:** this narrows D32, "the model writes the sentences of Uno when the player writes to Uno".
+2. **The facts.** "Facts" is the name of the part of the account of a job (D41) that goes to the model. Each written request to a model carries:
+   - the station names and the robot numbers of the actor, with the "free" flag, as in D21;
+   - for each job of the actor: the parameters, the state, the cause, the totals, the observed stocks with their age, and the fuel;
+   - the 20 newest diary entries of the actor, as data.
+   - Never: a coordinate, the name of the player, the free text of a reason.
+   - `RECOVERY` gets two causes with fixed values: the load differs from the record, and the world is older than the record. This ends the limit of D25, "`RECOVERY` still has only a free text".
+3. **Uncertain numbers.** The model does not get an uncertain number. The player gets it only in a fixed sentence, with its caution. The fixed sentence comes before the voice (D32).
+
+| Case | The model does not get | The fixed sentence |
+| --- | --- | --- |
+| `RECOVERY` | Delivered, on board, the two stocks | The sentence of A: "I cannot say how it went. …" |
+| After a recovery | Delivered | "After a recovery the totals can be inexact: the record says 48 delivered." |
+| The robot is not running, or is silent for more than 300 ticks | On board, the two stocks, the fuel | "Robot #7 is not running or not loaded. …", with the last recorded data |
+| An old observation | That stock | "I last observed 'depot' 12 min ago: it had 32 then." |
+
+   - An observation is old after 6000 ticks of game time: 5 minutes, the length of a long wait (D30). This closes "not decided" in D34.
+   - 300 ticks is the existing value `JobAccount.SILENT_TICKS`.
+4. **The check of the numbers.** Each run of digits in the sentence of the model must be a run of digits of the facts that the server sent, or of the request of the player.
+   - The server also sends the derived numbers: the quantity still to carry, the stock above the reserve, and each age in words ("12 min"). The model does not calculate.
+   - If the check fails, Uno uses the fixed template of A. The server log records the failure.
+5. **Character and length.** The system text gives Uno the character of the brief (2.4): competent, curious and slightly ironic, in the first person.
+   - Two sentences and 300 characters at most. A longer answer gets the fixed template: a cut can remove a caution.
+   - Uno can say what the owner can do, as the fixed report already does.
+   - Uno says that it does not remember an earlier sentence, if the player asks (D31).
+
+Unchanged, from earlier decisions: the voice is English (D15, and D27 defers the language). Notices and the summary are fixed templates (D30). The fixed rules have no voice. The "Report" button calls no model (D29.2).
+
+The model (D33)
+
+6. **The setting.** A value `model` in the Forge configuration file of the mod, `config/mindcraft-common.toml`. The start is `claude-haiku-5-5`, until the measurement gives a different model. The server reads the value at its start. A model that the service does not know gives the failure sentence of the service. The effort stays low, in the code. The key stays in the environment (D21).
+   - **Alternative that was not chosen:** an environment variable. It needs less code. A server operator does not look for a setting there.
+7. **The measurement.** It is a ticket of B. No paid run occurs in the design discussion.
+   - **Reason:** the measurement needs the facts, the sentence and the check. A prototype before them measures a different prompt.
+   - **Requests:** one fixed set of about 20, the same for Haiku 5.5, Sonnet 5.5 and Opus 5.5. The seven actions. The T21 cases: a wait at the reserve, a block without fuel, `RECOVERY`, a robot that is not running, an old observation. The adversarial case of D32: `BLOCKED` with a load on board. One question about the diary.
+   - **Rule, decided before the measurement.** A model is out if it gives a wrong action where a model with a higher price gives the right one. A model is out if one of its sentences contradicts the record. A model is out if the check of the numbers fails more than 1 time in 5. The model with the lowest price that stays is the choice.
+   - The measurement also records the time and the tokens of each request.
+   - **Added in the spec, proposed:** the set also has one request in Italian, a change of the destination and a question about the fuel. The project owner did not object.
+8. **The budget.** 5 dollars for all paid runs of B: three passes of the measurement at most, and the play session. Each run still needs the consent of the project owner (CLAUDE.md).
+   - **Estimate, not a measurement:** one pass of 20 requests on the three models costs about 0.45 dollars: Opus 0.29, Sonnet 0.15, Haiku 0.01. The assumption is 2400 input tokens and 250 output tokens for each request.
+
+A load on board (D34)
+
+9. **Adoption.** At the start of a job, the record counts as "on board" each item of the job that the robot holds. This is a rule of the runtime: it holds for each source of orders. The refusal "Empty it first" ends (D09).
+   - A load above the quantity follows D16.1: a transport ends `BLOCKED` with the rest on board. The proposal says so before the confirmation.
+   - A load of a different item stays on board. The proposal says so in one sentence. It also says that the robot burns it, if it can burn, when the fuel ends (D12).
+10. **Replacement.** A start for a robot with an open job is one proposal: cancel that job, and start the new one. One confirmation does both in the same tick. This holds in each open state.
+    - The proposal holds the ID of the job that it replaces. The confirmation is refused if the robot has a different job.
+    - The text gives the load at the moment of the proposal. It says that the new job counts the load at the confirmation. The answer after the confirmation gives the real number.
+    - **Alternative that was not chosen:** refuse the confirmation if the load changed. It is more exact. A running job changes its load at each trip.
+    - **A request that names no robot:** the only free robot. If no robot is free and the actor has one robot, that robot. In each other case Uno asks for the robot number.
+    - The command `/mindcraft job start` for a busy robot stays refused.
+    - A change of the destination needs no new action. With the facts, a model builds a start with the new destination. This closes "until B" in D34.
+
+The low fuel notice (D34, and D41 decision 5)
+
+11. **The threshold.** A "trip" is the way from one dock of the job to the other and back: 2 times the distance in blocks along the axes. The fuel is low below 5 trips.
+    - Only the fuel level counts. The fuel items on board do not count: see the facts above.
+    - The runtime reads the level at each contact of the robot. No Lua module changes for this.
+    - A server without a need for fuel gives no notice.
+12. **One time.** One notice for each job, when the level goes below the threshold. It also comes at the start of a job with a low level. A level at or above the threshold arms the notice again.
+    - The notice is a diary entry of the kind "low fuel". A diary entry gets a kind: a change, a long wait or low fuel. The load converts the "long wait" flag of an older record (D41, decision 5).
+    - The attention rule selects the entry: one chat line, and the summary (D30).
+    - The sentence proposes no remedy (D30): "Job 3 on robot #7 (…) has little fuel: 120, about 4 trips between its stations."
+    - The state of the job and the hologram do not change.
+
+The screen (D40)
+
+13. **The height.** The server puts the conversation part first in the view, above the list of the jobs: the sentence of Uno, the proposal, the field and the buttons. The client does not change. An automatic test reads the order.
+    - **Cost:** the field leaves the view when the player scrolls down to a job.
+    - **First form, decided in the first round and replaced in the second:** the conversation part stays fixed at the bottom, and only the list of the jobs scrolls.
+    - **Reason for the change:** a long report makes the fixed part as tall as the window. Then the fixed part needs a height limit and two scroll areas, in client code that no automatic test reaches.
+    - The fixed part opens again if the play session of B shows a need.
+
+The exit of B
+
+14. **Three parts.** The automatic in-game tests pass. The measurement is recorded and the model is chosen. The project owner plays one session with a written checklist of about 8 steps: the voice on a report in more than one state, a replacement with an adoption, the low fuel notice, the screen, and the confirmation of "Cancel" (D41).
+
+Counterexamples:
+
+- A number in words passes the check. A true number about the wrong job passes (D32).
+- The voice can give an observed stock without its age. No check stops it.
+- An operator owns each job (D33.1). Thus the facts of an operator hold the jobs of each player of the server.
+- The runtime does not know where a load comes from (D34). A coal job adopts the coal that the owner gave as fuel.
+- The load in the text of a replacement can differ from the load at the confirmation.
+- A robot with fuel items on board gets the low fuel notice. It burns them only when the level is at zero.
+- The number of trips ignores the way to the first dock, and each obstacle. For a stock job with few trips, 5 trips can be hours.
+- The measurement is about 20 requests and three passes at most. A model can pass it and fail a different request.
+- The proposals and the notices stay flat. Uno has two voices (D30).
+
+The answers of Uno, and the measurement: the second round
+
+15. **The answer to `none`.** The sentence of the model is the whole answer, without "I cannot propose a job:". It can answer a question from the facts, for example which stations the player has. If the check of the numbers fails, Uno says: "I cannot answer that. I did nothing."
+16. **The answer to a report.** First the fixed sentences about the uncertain numbers of the jobs that the target names. Then the voice.
+    - A target that fits no job, or more than one, is not an error when the voice passes the check. The model has the facts of each job of the actor.
+    - If the check fails, the answer is the fixed report of A, with the rules of D29.2. There a target that fits more than one job still asks for the robot number.
+17. **A model that gives no valid action.** The fixed rules read that request. Uno says so first, in one sentence. This holds for a failure of the service, the time limit, a refusal and an answer that Uno cannot read.
+    - **Reason:** D32 says "the same applies if the model does not answer". Without an action Uno has no fixed template to use. The limit of the session already works in this way (D33.1).
+    - The request still counts in the counter of the session.
+    - **Change:** this ends a counterexample of D29.1. There the fixed rules did not take over.
+18. **The line of the screen about the data.** "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." This changes the line of D21 and D33.1.
+19. **Where the fuel shows.** The fixed report, the status command and the facts give the fuel level and the trips. The screen shows one line in the panel of a job, only when the fuel is low.
+20. **Who judges the sentences of the measurement.** The run writes each sentence next to its facts in `TEST_RESULTS.md`. The agent marks each sentence that can contradict the record. The project owner decides whether a sentence contradicts the record. Thus the project owner decides which model stays.
+
+Choices of the implementation. The project owner confirmed the list on 2026-11-15, and added the text of the request to the log line.
+
+- The log line of a request: the model, the input tokens, the output tokens, the time, the action, the result of the check, and the text of the request of the player. With a failed check, also the sentence that Uno did not use.
+- The schema keeps its ten fields. The field `reason` carries the sentence for `report` and for `none`.
+- One test class with the real service serves the measurement and the T21 sample of D32. The model is a parameter of the run.
+- The fuel check runs at a contact of a robot with an active job.
+- The invariant of D37 holds: the facts and the low fuel entry have an owner, go through the check of the actor, and get a test of the T19 kind.
+
+Counterexamples of the second round:
+
+- The server log holds the text of each written request. The operator of the server reads the log. With a second player this is a point for the gates of D37.
+- After a failure of the model, the fixed rules can read a request in a different way than the model. The answer says what they did.
+- With the conversation first, a long report pushes the list of the jobs down.

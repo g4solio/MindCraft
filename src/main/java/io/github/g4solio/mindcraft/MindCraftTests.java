@@ -1712,7 +1712,7 @@ public class MindCraftTests {
 
     private static String claudeMessage(String stopReason, String text, long inputTokens, long outputTokens) {
         JsonObject message = JsonParser.parseString("{\"id\":\"msg_test\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\""
-            + ClaudeProvider.MODEL + "\",\"content\":[],\"stop_sequence\":null}").getAsJsonObject();
+            + MindCraft.MODEL.getDefault() + "\",\"content\":[],\"stop_sequence\":null}").getAsJsonObject();
         message.addProperty("stop_reason", stopReason);
         JsonObject usage = new JsonObject();
         usage.addProperty("input_tokens", inputTokens);
@@ -1761,11 +1761,10 @@ public class MindCraftTests {
         Rig rig = new Rig(helper, "t18claude", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
         AtomicInteger status = new AtomicInteger();
-        AtomicReference<String> body = new AtomicReference<>(), sent = new AtomicReference<>(), beta = new AtomicReference<>();
+        AtomicReference<String> body = new AtomicReference<>(), sent = new AtomicReference<>();
         HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         api.createContext("/", exchange -> {
             sent.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            beta.set(exchange.getRequestHeaders().getFirst("anthropic-beta"));
             byte[] bytes = body.get().getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("content-type", "application/json");
             exchange.sendResponseHeaders(status.get(), bytes.length);
@@ -1865,8 +1864,8 @@ public class MindCraftTests {
                 // The request that went to the API for the complete order.
                 JsonObject message = JsonParser.parseString(sent.get()).getAsJsonObject();
                 JsonObject output = message.getAsJsonObject("output_config");
-                check(message.get("model").getAsString().equals(ClaudeProvider.MODEL) && message.get("fallbacks").getAsString().equals("default")
-                    && beta.get().contains("server-side-fallback-2026-07-01"), sent.get());
+                // The model of the setting. The fallback of each model: b_model_of_the_setting.
+                check(message.get("model").getAsString().equals(MindCraft.MODEL.get()), sent.get());
                 check(output.get("effort").getAsString().equals("low") && output.getAsJsonObject("format").get("type").getAsString().equals("json_schema"), sent.get());
                 check(!message.has("thinking") && !message.has("temperature"), sent.get());
                 // The closed list of the actions. Each field is required: the model writes null in a field that its action does not use.
@@ -1924,6 +1923,97 @@ public class MindCraftTests {
                 String line = job + ",\"kind\":\"CHANGE\",\"state\":\"%s\",\"cause\":\"NONE\",\"quantity\":8,\"reserve\":0,\"delivered\":%d,\"onBoard\":0}";
                 check(lines.equals(List.of(line.formatted("RUNNING", 0), line.formatted("DONE", 8))), lines.toString());
                 check(ages.size() == 4 && ages.stream().allMatch(age -> SECONDS_AGO.matcher(age).matches()), ages.toString());
+            })
+            .thenSucceed();
+    }
+
+    /** Runs the action with this value of the setting "model", then puts the value of before back, also after a failed check. */
+    private static <T> T withModel(String model, Supplier<T> action) {
+        String before = MindCraft.MODEL.get();
+        MindCraft.MODEL.set(model);
+        try {
+            return action.get();
+        } finally {
+            MindCraft.MODEL.set(before);
+        }
+    }
+
+    /**
+     * D42, point 6: the model of the Claude provider is the setting "model" of config/mindcraft-common.toml. The start is Haiku 5.5.
+     * A provider reads the setting when it is built: the server builds it at its start. The request names the model of the setting.
+     * Only a model with a server-side fallback for a refusal gets the fallback parameter: Sonnet 5.5 has one, Haiku 5.5 has none (D33).
+     * A refusal without a fallback, and a model that the service does not know, are failures of the model: the fixed rules read
+     * the request (D42, point 17). A local stand-in is in the place of the API: no request reaches the real service.
+     * It has its own batch, because it changes a value of the whole server. It changes the setting only while it builds a provider,
+     * and puts the value of before back at once, also when a check fails.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT, batch = "b_model_setting")
+    public static void b_model_of_the_setting(GameTestHelper helper) throws IOException {
+        MinecraftServer server = helper.getLevel().getServer();
+        // Only an operator uses a provider with a model (D33). Thus the fixed rules read the request after a failure of the model.
+        Actor operator = operator("b_model");
+        AtomicInteger status = new AtomicInteger();
+        AtomicReference<String> body = new AtomicReference<>();
+        List<String> sent = new CopyOnWriteArrayList<>(), betas = new CopyOnWriteArrayList<>();
+        HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        api.createContext("/", exchange -> {
+            sent.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            betas.add(String.valueOf(exchange.getRequestHeaders().getFirst("anthropic-beta")));
+            byte[] bytes = body.get().getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(status.get(), bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        api.start();
+        String start = MindCraft.MODEL.getDefault(), before = MindCraft.MODEL.get(), unknown = "claude-haiku-9-9";
+        check(start.equals("claude-haiku-5-5"), "the start value of the setting: " + start);
+        Function<String, Uno.Provider> claude = model -> withModel(model, () -> new ClaudeProvider(AnthropicOkHttpClient.builder()
+            .apiKey("not-a-key").baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build()));
+        Uno.Provider sonnet = claude.apply("claude-sonnet-5-5"), haiku = claude.apply("claude-haiku-5-5"), wrong = claude.apply(unknown);
+        check(MindCraft.MODEL.get().equals(before), "the setting is not back: " + MindCraft.MODEL.get());
+        // The server log names the provider with its model: "Uno interprets requests with (name)".
+        check(sonnet.name().equals("Claude (claude-sonnet-5-5)") && haiku.name().equals("Claude (claude-haiku-5-5)"), sonnet.name() + ", " + haiku.name());
+
+        String none = "You did not give the source.", rules = ", thus I read your request with the fixed rules: they understand only simple sentences. ";
+        String notFound = "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: " + unknown + "\"}}";
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = helper.startSequence().thenExecute(() -> {
+            status.set(200);
+            body.set(claudeMessage("end_turn", modelAction("none", none)));
+        });
+        sequence = ask(sequence, server, operator, "x", sonnet, 15_000, answers);
+        sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
+            .thenExecute(() -> body.set(claudeMessage("refusal", null)));
+        sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
+            .thenExecute(() -> {
+                status.set(404);
+                body.set(notFound);
+            });
+        ask(sequence, server, operator, "x", wrong, 15_000, answers)
+            .thenExecute(() -> {
+                api.stop(0);
+                MindCraft.LOGGER.info("b_model_of_the_setting answers: {}", answers);
+                check(answers.size() == 4 && sent.size() == 4 && betas.size() == 4, answers + "\n" + sent);
+                // Each request names the model of the setting of its provider. The effort stays low.
+                List<JsonObject> messages = sent.stream().map(text -> JsonParser.parseString(text).getAsJsonObject()).toList();
+                List<String> models = messages.stream().map(message -> message.get("model").getAsString()).toList();
+                check(models.equals(List.of("claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-5-5", unknown)), models.toString());
+                check(messages.stream().allMatch(message -> message.getAsJsonObject("output_config").get("effort").getAsString().equals("low")), sent.toString());
+                // Only Sonnet 5.5 has the server-side fallback for a refusal, with its beta header.
+                check(messages.get(0).has("fallbacks") && messages.get(0).get("fallbacks").getAsString().equals("default")
+                    && betas.get(0).contains("server-side-fallback-2026-07-01"), messages.get(0) + "\n" + betas.get(0));
+                for (int i = 1; i < 4; i++) {
+                    check(!messages.get(i).has("fallbacks") && !betas.get(i).contains("server-side-fallback"), "a fallback for " + models.get(i)
+                        + ": " + messages.get(i) + "\n" + betas.get(i));
+                }
+                // The sentence of the model with a model of each kind. A refusal without a fallback, and a model that the service
+                // does not know: the fixed rules read the request, and the answer gives the reason first.
+                check(answers.get(0).equals(none) && answers.get(1).equals(none), answers.subList(0, 2).toString());
+                check(answers.get(2).equals("The model gave no valid answer (the model declined the request)" + rules + RULES_X), answers.get(2));
+                check(answers.get(3).equals("The model gave no valid answer (the model service does not know the model '" + unknown + "')"
+                    + rules + RULES_X), answers.get(3));
+                check(MindCraft.MODEL.get().equals(before), "the setting is not back: " + MindCraft.MODEL.get());
             })
             .thenSucceed();
     }

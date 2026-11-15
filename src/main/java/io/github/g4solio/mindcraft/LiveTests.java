@@ -23,6 +23,7 @@ import static io.github.g4solio.mindcraft.MindCraftTests.check;
  * <pre>
  *   gradlew runGameTestServer -Plive       with ANTHROPIC_API_KEY in the environment
  * </pre>
+ * The model is the setting "model" of run-gametest/config/mindcraft-common.toml, as on a server (D42, point 6). The log names it.
  * The answers of a language model can change between two runs. Thus this check is not part of the normal run.
  * Forge selects game tests by the namespace of their template. Thus this class has its own namespace and template.
  */
@@ -55,6 +56,7 @@ public class LiveTests {
         rig.runtime.addStation(player, "fornaci", rig.level, helper.absolutePos(rig.dest), helper.absolutePos(rig.destDock));
         rig.runtime.addStation(player, "miniera", rig.level, helper.absolutePos(rig.source), helper.absolutePos(rig.sourceDock));
         Uno.Provider claude = ClaudeProvider.fromEnv();
+        MindCraft.LOGGER.info("t18_claude_live uses {}", claude.name());
         List<String> answers = new CopyOnWriteArrayList<>();
 
         GameTestSequence sequence = rig.begin()

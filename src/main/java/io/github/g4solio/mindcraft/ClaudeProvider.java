@@ -21,7 +21,8 @@ import java.util.stream.Collectors;
 
 /**
  * A provider of Uno that asks Claude through the official Anthropic SDK.
- * Claude gets the request of the player and the context: the names of the stations and the ids of the robots of that player.
+ * Claude gets the request of the player and the context: the names of the stations and the ids of the robots of that player,
+ * the facts of the jobs of that player and the newest lines of its diary (D42, point 2). The context holds no position.
  * Claude gives back one action of the closed list as JSON, with its parameters. See Uno.Provider.
  * The answer is only an action. Uno validates it, and an order must pass the ordinary validation and the confirmation of the player.
  */
@@ -102,11 +103,15 @@ final class ClaudeProvider implements Uno.Provider {
         return "Claude (" + MODEL + ")";
     }
 
-    /** The text of a written request leaves the server only on the route of the model. The player must know which route is used. */
+    /**
+     * The text of a written request leaves the server only on the route of the model. The player must know which route is used,
+     * and which data go with the request: the facts of the jobs and the newest lines of the diary, without a position (D42, point 18).
+     */
     @Override
     public String notice(Uno.Route route) {
         return switch (route) {
-            case MODEL -> "Written requests go to Claude, a model of Anthropic.";
+            case MODEL -> "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. "
+                + "No position leaves this server.";
             case AT_LIMIT -> "Uno uses the fixed rules for you: you reached the limit of model requests in this session. "
                 + "Your written requests stay on this server.";
             case NOT_OPERATOR, NO_MODEL -> "Uno uses the fixed rules for you: only an operator uses Claude. Your written requests stay on this server.";

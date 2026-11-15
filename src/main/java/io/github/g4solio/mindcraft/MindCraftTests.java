@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import com.mojang.authlib.GameProfile;
 import com.sun.net.httpserver.HttpServer;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
@@ -71,6 +72,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -1221,7 +1223,7 @@ public class MindCraftTests {
 
     /** A context of the fixed rules: these stations, and robots 7 and 8. Only one of the two robots is free. */
     private static Uno.Context context(boolean sevenFree, String... stations) {
-        return new Uno.Context(List.of(stations), List.of(new Uno.Context.Robot(7, sevenFree), new Uno.Context.Robot(8, !sevenFree)));
+        return new Uno.Context(List.of(stations), List.of(new Uno.Context.Robot(7, sevenFree), new Uno.Context.Robot(8, !sevenFree)), List.of(), List.of());
     }
 
     /**
@@ -1473,8 +1475,8 @@ public class MindCraftTests {
             new ClaudeCase(200, () -> claudeMessage("max_tokens", "{\"action\":"), "(the answer of the model is incomplete)"),
             new ClaudeCase(401, () -> error, "(the API key is not valid or has no permission)"),
             new ClaudeCase(500, () -> error, "(the model service answered with error 500)"),
-            // A pause of the robot, which has no job: Uno asks for the robot number of a job and creates no proposal.
-            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "You have no job on robot #"),
+            // A pause of the robot, whose job is done: the runtime refuses it, and Uno creates no proposal.
+            new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "I cannot pause the job: Robot #"),
             new ClaudeCase(200, () -> claudeMessage("end_turn", start.get()), "Proposal: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"),
             new ClaudeCase(-1, () -> "", "(the model service is not reachable)"));
         int proposalCase = 6;
@@ -1482,7 +1484,11 @@ public class MindCraftTests {
         List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
         AtomicReference<Object> direct = new AtomicReference<>();
         CountDownLatch open = new CountDownLatch(1);
+        int[] done = new int[1];
+        // A job that is done: its facts and its lines of the diary go in the body of each request. The robot is free again.
         GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> done[0] = rig.startJob(8, 0).id)
+            .thenWaitUntil(() -> rig.state(State.DONE))
             .thenExecute(() -> {
                 // The provider of the first request waits for the test. A fast provider can answer before the second
                 // request arrives: then the first request is not open any more, and the test does not check the rule.
@@ -1500,7 +1506,7 @@ public class MindCraftTests {
                 // The provider runs off the server thread, as in Uno.ask. The first request also loads the classes of the SDK.
                 status.set(200);
                 body.set(claudeMessage("end_turn", start.get(), 1234, 56));
-                Uno.Context context = Uno.context(rig.runtime, player);
+                Uno.Context context = Uno.context(rig.runtime, player, rig.level.getGameTime());
                 CompletableFuture.supplyAsync(() -> {
                     try {
                         return claude.answer(request, context);
@@ -1553,10 +1559,36 @@ public class MindCraftTests {
                     .noneMatch(field -> field.has("enum") && field.has("type") && field.get("type").isJsonArray()), schema.toString());
                 String system = message.get("system").getAsString();
                 check(Stream.of("start", "change", "pause", "resume", "cancel", "report", "none").allMatch(action -> system.contains("\"" + action + "\"")), system);
-                // The context is the same as before the actions: the station names of the player, the robot numbers and the "free" flag (D21).
+                // The context: the station names of the player, the robot numbers and the "free" flag, as before the actions (D21).
                 String content = message.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString();
-                check(content.equals("Context: {\"stations\":[\"" + rig.to + "\",\"" + rig.from + "\"],\"robots\":[{\"id\":" + rig.id
-                    + ",\"free\":true}]}\nRequest: " + request), content);
+                String prefix = "Context: ", suffix = "\nRequest: " + request;
+                check(content.startsWith(prefix) && content.endsWith(suffix), content);
+                JsonObject context = JsonParser.parseString(content.substring(prefix.length(), content.length() - suffix.length())).getAsJsonObject();
+                check(String.valueOf(context.get("stations")).equals("[\"" + rig.to + "\",\"" + rig.from + "\"]")
+                    && String.valueOf(context.get("robots")).equals("[{\"id\":" + rig.id + ",\"free\":true}]"), content);
+                // Since increment B also the facts of the job that is done, and its two lines of the diary (D42, point 2).
+                // An age is in words. Without the ages, the JSON is fixed.
+                JsonElement jobs = context.get("jobs"), diary = context.get("diary");
+                check(jobs != null && jobs.isJsonArray() && jobs.getAsJsonArray().size() == 1 && jobs.getAsJsonArray().get(0).isJsonObject()
+                    && diary != null && diary.isJsonArray() && diary.getAsJsonArray().size() == 2, "the body has no facts: " + content);
+                JsonObject facts = jobs.getAsJsonArray().get(0).getAsJsonObject().deepCopy();
+                List<String> ages = new ArrayList<>();
+                for (String stock : List.of("sourceStock", "destinationStock")) {
+                    if (facts.get(stock) instanceof JsonObject observed && observed.remove("age") instanceof JsonPrimitive age) ages.add(age.getAsString());
+                }
+                String job = "{\"job\":" + done[0] + ",\"robot\":" + rig.id;
+                check(facts.toString().equals(job + ",\"module\":\"transport\",\"item\":\"minecraft:coal\",\"from\":\"" + rig.from + "\",\"to\":\""
+                    + rig.to + "\",\"quantity\":8,\"reserve\":0,\"state\":\"DONE\",\"cause\":\"NONE\",\"delivered\":8,\"onBoard\":0,"
+                    + "\"sourceStock\":{\"count\":56},\"destinationStock\":{\"count\":8},\"stillToCarry\":0,\"aboveReserve\":56,\"uncertain\":[]}"), content);
+                List<String> lines = new ArrayList<>();
+                for (JsonElement line : diary.getAsJsonArray()) {
+                    JsonObject copy = line.getAsJsonObject().deepCopy();
+                    if (copy.remove("age") instanceof JsonPrimitive age) ages.add(age.getAsString());
+                    lines.add(copy.toString());
+                }
+                String line = job + ",\"kind\":\"CHANGE\",\"state\":\"%s\",\"cause\":\"NONE\",\"quantity\":8,\"reserve\":0,\"delivered\":%d,\"onBoard\":0}";
+                check(lines.equals(List.of(line.formatted("RUNNING", 0), line.formatted("DONE", 8))), lines.toString());
+                check(ages.size() == 4 && ages.stream().allMatch(age -> SECONDS_AGO.matcher(age).matches()), ages.toString());
             })
             .thenSucceed();
     }
@@ -1848,6 +1880,232 @@ public class MindCraftTests {
                 check(!Uno.hasProposal(other), "the other player has a proposal");
             })
             .thenSucceed();
+    }
+
+    /** The age of a recent observation or diary entry, in words. */
+    private static final Pattern SECONDS_AGO = Pattern.compile("\\d+ s ago");
+
+    /** A provider of the test that keeps each context that Uno gives it, and answers "none". */
+    private static Uno.Provider reader(List<Uno.Context> contexts) {
+        return (request, context) -> {
+            contexts.add(context);
+            return answer(modelAction("none", "The test read the context."));
+        };
+    }
+
+    /** The job, the state and the quantities of each line of the diary in a context: "3 DONE 24/0" is delivered/on board. */
+    private static List<String> lines(Uno.Context context) {
+        return context.diary().stream().map(line -> line.job() + " " + line.state() + " " + line.delivered() + "/" + line.onBoard()).toList();
+    }
+
+    /**
+     * Increment B, D42 point 2: the context of a written request holds the facts of each job of the player and the newest lines
+     * of the diary, as data. A provider of the test reads the context that Uno gives it. The answers of Uno do not change.
+     * A transport of 24 with a reserve of 10 ends DONE. Then a transport of 16 is BLOCKED: the destination has no inventory.
+     * Its recorded reason has the position of the destination: no coordinate, no player name and no free text of a reason is in the context.
+     * Then the owner empties the robot and resumes: RECOVERY (D42, point 3). The facts and the lines of that job give no delivered total,
+     * no load on board and no stock. T19: a different player gets no fact and no line of the diary of the owner.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_facts_in_the_context(GameTestHelper helper) {
+        Actor owner = player("b_facts"), other = player("b_facts_other");
+        Rig rig = new Rig(helper, "b_facts", 64, 1000, owner);
+        MinecraftServer server = rig.level.getServer();
+        rig.chest(rig.dest).setItem(0, new ItemStack(Items.COAL, 5));
+        List<Uno.Context> contexts = new CopyOnWriteArrayList<>();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        String none = "I cannot propose a job: The test read the context.";
+        int[] job = new int[2];
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> job[0] = rig.startJob(24, 10).id)
+            .thenWaitUntil(() -> rig.state(State.DONE));
+        sequence = ask(sequence, server, owner, "How did it go?", reader(contexts), 5000, answers);
+        sequence = ask(sequence, server, other, "How did it go?", reader(contexts), 5000, answers)
+            .thenExecute(() -> {
+                check(answers.equals(List.of(none, none)), "the answers of Uno changed: " + answers);
+                Uno.Context mine = contexts.get(0);
+                MindCraft.LOGGER.info("b_facts_in_the_context, a job that is done: {}", mine);
+                check(mine.jobs().size() == 1 && mine.jobs().get(0).source() != null && mine.jobs().get(0).destination() != null, mine.toString());
+                Uno.Context.Facts facts = mine.jobs().get(0);
+                // The derived numbers: nothing still to carry, and 40 - 10 above the reserve.
+                check(facts.equals(new Uno.Context.Facts(job[0], rig.id, MindRuntime.TRANSPORT, "minecraft:coal", rig.from, rig.to, 24, 10,
+                    State.DONE, Cause.NONE, 24, 0, new Uno.Context.Stock(40, facts.source().age()), new Uno.Context.Stock(29, facts.destination().age()),
+                    0, 30, List.of())), facts.toString());
+                check(SECONDS_AGO.matcher(facts.source().age()).matches() && SECONDS_AGO.matcher(facts.destination().age()).matches(), facts.toString());
+                check(lines(mine).equals(List.of(job[0] + " RUNNING 0/0", job[0] + " DONE 24/0")), lines(mine).toString());
+                for (Uno.Context.Line line : mine.diary()) {
+                    check(SECONDS_AGO.matcher(line.age()).matches() && line.robot() == rig.id && line.kind() == Kind.CHANGE && line.cause() == Cause.NONE
+                        && line.quantity() == 24 && line.reserve() == 10, line.toString());
+                }
+                // T19: the context of the other player has nothing of the owner.
+                Uno.Context theirs = contexts.get(1);
+                check(theirs.stations().isEmpty() && theirs.robots().isEmpty() && theirs.jobs().isEmpty() && theirs.diary().isEmpty(),
+                    "the context of a different player: " + theirs);
+                // The destination has no inventory any more. Its position is in the recorded reason of the block.
+                rig.chest(rig.dest).clearContent();
+                helper.setBlock(rig.dest, Blocks.AIR);
+                job[1] = rig.startJob(16, 10).id;
+            })
+            .thenWaitUntil(() -> rig.state(State.BLOCKED));
+        sequence = ask(sequence, server, owner, "What happened?", reader(contexts), 5000, answers)
+            .thenExecute(() -> {
+                String position = helper.absolutePos(rig.dest).toShortString();
+                check(rig.job().cause == Cause.DESTINATION_NO_INVENTORY && rig.job().reason.contains(position), rig.describe());
+                Uno.Context mine = contexts.get(2);
+                MindCraft.LOGGER.info("b_facts_in_the_context, a job that is blocked: {}", mine);
+                check(mine.jobs().size() == 1 && mine.jobs().get(0).source() != null, mine.toString());
+                Uno.Context.Facts facts = mine.jobs().get(0);
+                // The destination of the new job was never observed: its stock is unknown, not zero (T02).
+                check(facts.equals(new Uno.Context.Facts(job[1], rig.id, MindRuntime.TRANSPORT, "minecraft:coal", rig.from, rig.to, 16, 10,
+                    State.BLOCKED, Cause.DESTINATION_NO_INVENTORY, 0, 16, new Uno.Context.Stock(24, facts.source().age()), null, 16, 14,
+                    List.of("No robot observed '" + rig.to + "' yet. Its stock is unknown."))), facts.toString());
+                // The lines of the first job stay after the second job replaced it on the robot.
+                check(lines(mine).equals(List.of(job[0] + " RUNNING 0/0", job[0] + " DONE 24/0", job[1] + " RUNNING 0/0", job[1] + " BLOCKED 0/16")),
+                    lines(mine).toString());
+                for (String text : List.of(mine.toString(), mine.toJson())) {
+                    check(!text.contains(position) && !text.contains(rig.job().reason) && !text.contains("no inventory at")
+                        && !text.contains(owner.id().toString()), "the context has a position, a recorded reason or the owner: " + text);
+                }
+                // The owner empties the robot and resumes: the load differs from the record.
+                check(rig.robot() != null, "the robot is not running");
+                rig.robot().turtle.getInventory().clearContent();
+                rig.runtime.control(owner, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> rig.state(State.RECOVERY));
+        ask(sequence, server, owner, "What happened now?", reader(contexts), 5000, answers)
+            .thenExecute(() -> {
+                Uno.Context mine = contexts.get(3);
+                MindCraft.LOGGER.info("b_facts_in_the_context, a job that needs a check: {}", mine);
+                // The facts give no delivered total, no load on board and no stock. They say that the result is uncertain, and why.
+                check(mine.jobs().equals(List.of(new Uno.Context.Facts(job[1], rig.id, MindRuntime.TRANSPORT, "minecraft:coal", rig.from, rig.to, 16, 10,
+                    State.RECOVERY, Cause.LOAD_DIFFERS, null, null, null, null, null, null,
+                    List.of("The result of the job is uncertain: the load in the robot differs from the record. "
+                        + "Not given: the delivered total, the load on board and the stocks.")))), mine.jobs().toString());
+                // The lines of the job give none of them either. The lines of the first job keep their numbers.
+                check(lines(mine).equals(List.of(job[0] + " RUNNING 0/0", job[0] + " DONE 24/0", job[1] + " RUNNING null/null",
+                    job[1] + " BLOCKED null/null", job[1] + " RUNNING null/null", job[1] + " RECOVERY null/null")), lines(mine).toString());
+                rig.runtime.control(owner, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * A record of a job that the test writes, without a robot: a transport of 24 from 'depot' to 'furnace' with a reserve of 10.
+     * 6 are delivered and 4 are on board. 'depot' had 50 at "now" - 6000: the limit of an old observation. 'furnace' had 6 at "now" - 240.
+     * The robot called at "now" - 300: the limit of a silent robot. Then the change of the test.
+     */
+    private static Job record(int id, long now, Consumer<Job> change) {
+        Job job = new Job();
+        job.id = id;
+        job.owner = Util.NIL_UUID;
+        job.robot = 9;
+        job.from = "depot";
+        job.to = "furnace";
+        job.item = Items.COAL;
+        job.quantity = 24;
+        job.reserve = 10;
+        job.delivered = 6;
+        job.carried = 4;
+        job.fromSeen = 50;
+        job.fromSeenAt = now - 6000;
+        job.toSeen = 6;
+        job.toSeenAt = now - 240;
+        job.lastContact = now - 300;
+        change.accept(job);
+        return job;
+    }
+
+    /** The facts of the record of the test, with these values. */
+    private static Uno.Context.Facts facts(State state, Cause cause, Integer delivered, Integer onBoard, Uno.Context.Stock source,
+                                           Uno.Context.Stock destination, Integer toCarry, Integer aboveReserve, String... uncertain) {
+        return new Uno.Context.Facts(900, 9, MindRuntime.TRANSPORT, "minecraft:coal", "depot", "furnace", 24, 10, state, cause,
+            delivered, onBoard, source, destination, toCarry, aboveReserve, List.of(uncertain));
+    }
+
+    /** A line of a diary that the test writes: a transport of 24 from 'depot' to 'furnace' with a reserve of 10. */
+    private static Entry entry(int job, long time, State state, Cause cause, int delivered, int carried) {
+        return new Entry(time, time, Util.NIL_UUID, job, 9, "depot", "furnace", Items.COAL, state, cause, "", false, 24, 10, delivered, carried, Kind.CHANGE);
+    }
+
+    /**
+     * Increment B, D42 point 3: the model does not get an uncertain number. The account builds the facts from its three explicit inputs:
+     * a record that the test writes, whether the robot runs, and the game time. No robot and no world: the later moment is a parameter.
+     * In place of each number that it does not give, the facts say which value is not given, and why.
+     * A line of the diary gives no number that the facts of its job do not give. A context has the 20 newest lines.
+     */
+    @GameTest(template = EMPTY)
+    public static void b_facts_of_uncertain_numbers(GameTestHelper helper) {
+        long now = 100_000;
+        Uno.Context.Stock depot = new Uno.Context.Stock(50, "5 min ago"), furnace = new Uno.Context.Stock(6, "12 s ago");
+        String robot = " Not given: the load on board and the stocks.";
+        String recovery = ". Not given: the delivered total, the load on board and the stocks.";
+        // The facts that the account gives, and the facts that it must give. 24 - 6 are still to carry. 50 - 10 are above the reserve.
+        Map<String, Uno.Context.Facts[]> cases = new LinkedHashMap<>();
+        cases.put("certain, at the two limits", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> {
+        }), true, now).facts(), facts(State.RUNNING, Cause.NONE, 6, 4, depot, furnace, 18, 40)});
+        cases.put("an old observation", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> job.fromSeenAt--), true, now).facts(),
+            facts(State.RUNNING, Cause.NONE, 6, 4, null, furnace, 18, null, "The last observation of 'depot' is old. Not given: its stock.")});
+        cases.put("a silent robot", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> job.lastContact--), true, now).facts(),
+            facts(State.RUNNING, Cause.NONE, 6, null, null, null, 18, null, "The robot has not contacted the server for a while." + robot)});
+        cases.put("no call since the server start", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> job.lastContact = MindRuntime.UNKNOWN),
+            true, now).facts(), facts(State.RUNNING, Cause.NONE, 6, null, null, null, 18, null, "The robot has not contacted the server for a while." + robot)});
+        cases.put("a robot that is not running", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> {
+        }), false, now).facts(), facts(State.RUNNING, Cause.NONE, 6, null, null, null, 18, null, "The robot is not running or not loaded." + robot)});
+        cases.put("RECOVERY, the load", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> {
+            job.state = State.RECOVERY;
+            job.cause = Cause.LOAD_DIFFERS;
+        }), true, now).facts(), facts(State.RECOVERY, Cause.LOAD_DIFFERS, null, null, null, null, null, null,
+            "The result of the job is uncertain: the load in the robot differs from the record" + recovery)});
+        cases.put("RECOVERY, the world", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> {
+            job.state = State.RECOVERY;
+            job.cause = Cause.WORLD_OLDER;
+        }), true, now).facts(), facts(State.RECOVERY, Cause.WORLD_OLDER, null, null, null, null, null, null,
+            "The result of the job is uncertain: the world is older than the record" + recovery)});
+        // A record of an older version has no cause for its RECOVERY. The facts say only that the result is uncertain.
+        cases.put("RECOVERY of an older version", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> job.state = State.RECOVERY), true, now).facts(),
+            facts(State.RECOVERY, Cause.NONE, null, null, null, null, null, null, "The result of the job is uncertain" + recovery)});
+        cases.put("after a recovery", new Uno.Context.Facts[]{new JobAccount(record(900, now, job -> job.recoveries = 1), true, now).facts(),
+            facts(State.RUNNING, Cause.NONE, null, 4, depot, furnace, null, 40, "After a recovery the delivered total can be inexact. Not given: the delivered total.")});
+        List<String> wrong = new ArrayList<>();
+        cases.forEach((name, pair) -> {
+            if (!pair[0].equals(pair[1])) wrong.add(name + ": " + pair[0]);
+        });
+        check(wrong.isEmpty(), wrong.toString());
+
+        // A stock job: the level of 64 minus the 6 of the destination is still to carry. A source below the reserve has 0 above it.
+        Uno.Context.Facts stock = new JobAccount(record(900, now, job -> {
+            job.behaviour = MindRuntime.Behaviour.KEEP_STOCK;
+            job.quantity = 64;
+            job.fromSeen = 8;
+        }), true, now).facts();
+        check(stock.module().equals(MindRuntime.KEEP_STOCK) && Integer.valueOf(58).equals(stock.stillToCarry())
+            && Integer.valueOf(0).equals(stock.aboveReserve()), stock.toString());
+        // A stock job before its first observation of the destination: the quantity still to carry is unknown too.
+        Uno.Context.Facts unseen = new JobAccount(record(900, now, job -> {
+            job.behaviour = MindRuntime.Behaviour.KEEP_STOCK;
+            job.toSeen = MindRuntime.UNKNOWN;
+        }), true, now).facts();
+        check(unseen.destination() == null && unseen.stillToCarry() == null
+            && unseen.uncertain().equals(List.of("No robot observed 'furnace' yet. Its stock is unknown.")), unseen.toString());
+
+        // The lines of the diary. Job 900 is in RECOVERY. The robot of job 600 is not running. Job 800 had a RECOVERY: it is not in the facts any more.
+        List<Uno.Context.Facts> jobs = List.of(new JobAccount(record(900, now, job -> job.state = State.RECOVERY), true, now).facts(),
+            new JobAccount(record(600, now, job -> {
+            }), false, now).facts());
+        List<Entry> diary = List.of(entry(800, 1, State.RUNNING, Cause.NONE, 0, 0), entry(800, 2, State.RECOVERY, Cause.LOAD_DIFFERS, 0, 24),
+            entry(800, 3, State.DONE, Cause.NONE, 24, 0), entry(700, 4, State.DONE, Cause.NONE, 8, 0), entry(600, 5, State.RUNNING, Cause.NONE, 6, 4),
+            entry(900, 6, State.RUNNING, Cause.NONE, 6, 4), entry(900, 7, State.RECOVERY, Cause.NONE, 6, 4));
+        List<String> lines = lines(new Uno.Context(List.of(), List.of(), jobs, JobAccount.lines(diary, jobs, now)));
+        check(lines.equals(List.of("800 RUNNING null/0", "800 RECOVERY null/null", "800 DONE null/0", "700 DONE 8/0", "600 RUNNING 6/null",
+            "900 RUNNING null/null", "900 RECOVERY null/null")), lines.toString());
+
+        // The 20 newest lines of 25, the oldest first, each with its age in words.
+        List<Entry> many = new ArrayList<>();
+        for (int i = 0; i < 25; i++) many.add(entry(1000 + i, now - 1200 * (25 - i), State.RUNNING, Cause.NONE, 0, 0));
+        List<Uno.Context.Line> newest = JobAccount.lines(many, List.of(), now);
+        check(newest.size() == 20 && newest.get(0).job() == 1005 && newest.get(19).job() == 1024
+            && newest.get(0).age().equals("20 min ago") && newest.get(19).age().equals("1 min ago"), newest.toString());
+        helper.succeed();
     }
 
     /**
@@ -2162,7 +2420,7 @@ public class MindCraftTests {
                 check(answer.get().startsWith("Proposal: carry 24 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"), answer.get());
                 check(Uno.confirm(server, bob).startsWith("I have no pending proposal"), "Bob confirmed the proposal of Alice");
                 check(Uno.report(server, bob).equals("I have no record of a job of yours."), Uno.report(server, bob));
-                String bobContext = Uno.context(rig.runtime, bob).toJson();
+                String bobContext = Uno.context(rig.runtime, bob, rig.level.getGameTime()).toJson();
                 check(!bobContext.contains(rig.from) && !bobContext.contains("\"id\":" + rig.id), "the context of Bob has data of Alice: " + bobContext);
                 // The robot gets a different job before the confirmation.
                 rig.startJob(8, 0);
@@ -2723,7 +2981,9 @@ public class MindCraftTests {
             UnoView.act(server, actor, "ask", "{\"request\":\"" + request + "\"}");
             return null;
         });
-        String claudeLine = "Written requests go to Claude, a model of Anthropic.", rulesLine = "Uno uses the fixed rules for you";
+        // Since increment B the line also says which data go with a request (D42, point 18).
+        String claudeLine = "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. "
+            + "No position leaves this server.", rulesLine = "Uno uses the fixed rules for you";
         List<String> answers = new CopyOnWriteArrayList<>();
         helper.startSequence()
             .thenExecute(() -> {

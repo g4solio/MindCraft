@@ -175,6 +175,7 @@ A report and a pause act immediately, without a proposal:
 ```
 
 - A request about one job gives the report of that job only. A report request that names no job gives the report on all your jobs, as `/uno report` does.
+- With Claude, a report and a request that is no action get the voice of Uno: see "The voice of Uno" below.
 - A pause stops the job at once, with the same request as the "Pause" button. The cargo stays on board. If the runtime refuses the pause, for example because the job is not running, Uno gives the reason.
 - Uno looks for the job only among your jobs. This holds for each action that names a job:
   - from the robot number, if the request gives one;
@@ -327,11 +328,11 @@ The server log says which provider is active: look for the line `Uno interprets 
   - a robot that is not running, or that has not contacted the server for more than 15 seconds of game time: no load on board and no stock;
   - a stock that a robot observed more than 5 minutes of game time ago: not that stock.
 - An operator owns each station, each robot and each job of the server: thus these are the data of all players.
-- Claude still gives only the action, and the reason of a request that is not an action. The server writes each other sentence of Uno, as before.
+- Claude gives the action. For a report and for a request that is no action, Claude also writes the sentence of Uno: see "The voice of Uno". The server writes each other sentence of Uno, as before.
 - The screen says "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." only when your requests go to Claude. Otherwise one line says that Uno uses the fixed rules for you, and why: you are not an operator, or you reached the limit.
 - A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
-- If Claude cannot find a necessary value, Uno says what is missing.
+- If Claude cannot find a necessary value, its sentence says what is missing.
 - If Claude gives no valid action, Uno reads the same request with the fixed rules (see below). This holds when the model service fails, when the request reaches the time limit, when the model declines the request, and when Uno cannot read the answer. The answer starts with one sentence that says so, with the reason. Then comes the answer of the fixed rules: a proposal, an immediate action, or the reason why they cannot propose a job. For example:
 
 ```
@@ -344,6 +345,37 @@ Uno › The model gave no valid answer (the model service is not reachable), thu
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
 Details and limits: D21, D33.1 and D42 in [docs/DECISIONS.md](docs/DECISIONS.md).
+
+### The voice of Uno
+
+With Claude, Uno answers in its own words when it reads: a report, and a request that is no action. Uno speaks in the first person. It is competent, curious and slightly ironic. For example, the words of Claude can be:
+
+```
+/uno ask How is the furnace?
+Uno › Job 3 on robot #7 waits at the reserve: 32 remain in 'depot', and 16 are still to carry. Bring coal, and I continue by myself.
+```
+
+- When Uno acts, the server writes the answer, as before: a proposal, and the answer to a pause. Claude can write a sentence for a start, a change, a pause, a resume or a cancellation: Uno does not use it.
+- The server checks each sentence of Claude before Uno says it:
+  - two sentences and 300 characters at most, and not empty;
+  - each number in digits must be a number that the server sent to Claude, or a number of your request. Claude must not calculate: the server sends the quantity still to carry and the stock above the reserve.
+- If a check fails for a report, the answer is the fixed report, as without Claude. A request about a station of two jobs then asks for the robot number, as before.
+- If a check fails for a request that is no action, Uno says "I cannot answer that. I did nothing."
+- The answer to a request that is no action is the sentence alone. It does not start with "I cannot propose a job". Thus Uno can answer a question such as "Which stations do I have?".
+- A report can be about more than one job. Claude has the data of each of your jobs. Thus a question about a station of two jobs, or about all jobs, gets the voice.
+- Claude does not get a number that Uno does not know for certain (see above). The server gives that number before the voice, in a fixed sentence with its caution. For example:
+
+```
+Uno › Robot #7 of job 3 is not running or not loaded. The last recorded data, not the current state: 0 on board, 32 in 'depot' (seen 2 min ago) and 40 in 'furnace' (seen 2 min ago). The furnace job is idle: its robot is off.
+```
+
+- The fixed sentences are about the job that the request names. If the request names no job, or a station of no open job or of two, they are about each of your jobs.
+- There are four fixed sentences. A job that needs a check: "I cannot say how it went", with the recorded data. A job after a recovery: the delivered total, which can be inexact. A robot that is not running, or that has not called for a while: the last recorded data. An old observation: "I last observed 'depot' 12 min ago: it had 32 then."
+- Uno does not remember an earlier sentence of the conversation. Claude has the rule to say so when you ask.
+- The check stops an invented number. It does not stop a number in words, a true number about the wrong job, or a wrong description with true numbers. The panel of the job next to the sentence shows the state.
+- The "Report" button and `/uno report` give the fixed report, as before. They call no model.
+- No automatic test verifies a sentence of the real model. The tests use providers written in the tests.
+- Without Claude, Uno has no voice: the fixed rules give the fixed sentences, as before.
 
 ### What Uno understands without Claude
 

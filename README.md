@@ -223,12 +223,15 @@ A new job for a robot with an open job of yours is one proposal: cancel that job
 The tablet is an item that you carry. It is in the "Tools & Utilities" tab of the creative inventory, or use `/give @s mindcraft:tablet`.
 Use it with the right mouse button: it opens the screen of Uno at any distance.
 
-The screen shows your jobs, with state, observed stocks and cargo on board. A job whose robot has little fuel has one more line about the fuel.
+The conversation with Uno comes first on the screen: the sentence of Uno, the text field and the buttons "Send" and "Report".
+You write to Uno in the field. Press Enter or "Send". If Uno makes a proposal, the button "Confirm #N" appears. N is the number of the proposal.
+Above the field the screen repeats the proposal in words: the button confirms that proposal and no other.
+With Claude on the server, one or two lines below the buttons say where your written requests go. See "Uno with Claude".
+Then the screen shows your jobs, with state, observed stocks and cargo on board. A job whose robot has little fuel has one more line about the fuel.
 You can change the quantity and the reserve and press "Apply". You can pause, resume or cancel.
 "Apply", "Pause" and "Resume" act at once. "Cancel" is a proposal: the job ends only after "Confirm #N".
-At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the button "Confirm #N" appears. N is the number of the proposal.
-Above the button the screen repeats the proposal in words: the button confirms that proposal and no other.
 The number fields keep the values of the job until you confirm a change.
+The order is for a small window: the conversation is at the top. When you scroll down to a job, the field leaves the view.
 The game does not pause while the screen is open.
 
 ### The projector

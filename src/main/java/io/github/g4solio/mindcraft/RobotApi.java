@@ -256,12 +256,18 @@ public class RobotApi implements ILuaAPI {
         return computer.getLevel().getGameTime();
     }
 
-    /** Checks the authority of this instance. Returns the job of this robot, or null. */
+    /**
+     * Checks the authority of this instance. Returns the job of this robot, or null.
+     * At a contact with an active job the runtime reads the fuel of the turtle (D42, point 11). No Lua module changes for this.
+     */
     private @Nullable Job contact() throws LuaException {
         if (LIVE.get(id()) != this) throw new LuaException("A newer session of robot #" + id() + " replaced this session.");
         if (!runtime().robots.containsKey(id())) return null;
         Job job = runtime().jobs.get(id());
-        if (job != null) job.lastContact = now();
+        if (job != null) {
+            job.lastContact = now();
+            if (job.state.active()) runtime().checkFuel(job, turtle.getFuelLevel(), turtle.isFuelNeeded());
+        }
         return job;
     }
 

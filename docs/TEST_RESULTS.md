@@ -146,6 +146,13 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 110 | 97 of 100, expected | Ticket #20, green run 2 and red run 3: two new tests of the fixed sentences, and `t18_claude_provider` with the old system text |
 | 111 | 100 of 100 | None. Ticket #20: the voice of Uno and its checks. Server line: `All 100 required tests passed :)` |
 | 112 | 100 of 100 | None. Ticket #20, the committed code `cb6161f`. Server line: `All 100 required tests passed :)` |
+| 120 | 95 of 96, expected | Ticket #24, red run 1: the new test `b_low_fuel`, with an empty check of the fuel |
+| 121 | 93 of 96 | Ticket #24, green run 1. Three tests whose turtle starts without fuel did not expect the low fuel entry at the level 0. Their expectations changed, not the code |
+| 122 | 94 of 98, expected | Ticket #24, red run 2: two new tests and three changed tests about the fuel in the report, the status, the facts and the screen |
+| 123 | 96 of 98 | Ticket #24, green run 2. `b_fuel_in_the_report`: a defect of the test. `t22_t23_proposals_and_contact_points`: the record did not save the fuel of a job |
+| 124 | 98 of 98 | None. Ticket #24: the low fuel notice. Server line: `All 98 required tests passed :)` |
+| 125 | 98 of 98 | None. Ticket #24, the committed code `97cd020`. Server line: `All 98 required tests passed :)` |
+| 126 | 98 of 98 | None. Ticket #24, one more step in `a_notices_call_no_provider` (`dfa1d29`). Server line: `All 98 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -160,6 +167,8 @@ Runs 96 and 97 are the runs of the integration branch after the merge of ticket 
 Runs 98 to 102 are the runs of ticket #19 of increment B, on the branch with tickets #16 and #17. See "Increment B — the facts of the jobs go to the model". No run of ticket #19 called the real Claude service.
 Run 103 is the run of the integration branch after the merge of ticket #19.
 Runs 104 to 106 are the runs of ticket #21. Run 107 is the run of the integration branch after its merge.
+Runs 108 to 112 are the runs of ticket #20. Its merge changed no file, thus run 112 is also the run of the integration branch after its merge.
+Runs 120 to 126 are the runs of ticket #24, on the integration branch at `8df1f39`. See "Increment B — the low fuel notice (ticket #24)". The numbers start at 120: other tickets run at the same time. No run of ticket #24 called the real Claude service.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -203,6 +212,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 95, ticket #18 | All four | Passed. See "Increment B — a job replaces a job (ticket #18)" |
 | Run 96, ticket #18 after the merge | All four | Passed. Run 97 changed only the expectation of one test of the normal run |
 | Run 101, ticket #19 of increment B | All four | Passed. See "Increment B — the facts of the jobs go to the model (ticket #19)" |
+| Run 125, ticket #24 of increment B | All four | Passed. See "Increment B — the low fuel notice (ticket #24)" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1465,6 +1475,70 @@ This ticket changed no part of the runtime and no Lua module. Thus the four rest
 - A sentence of the real model. No `-Plive` run used the new system text. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B.
 - The voice on the screen of a client. The play session of increment B.
 - A silent robot through the conversation: the robot calls each 10 s at most, and the test cannot stop the calls without a stop of the computer. `b_fixed_sentences_of_uncertain_numbers` covers the case with a record that the test writes.
+
+## Increment B — the low fuel notice (ticket #24)
+
+Date: 2026-11-15. Uno warns one time when the fuel of a robot is sufficient for fewer than 5 trips between the docks of its job. The report, the status command, the facts and the screen give the fuel. See D42, points 11, 12 and 19, D41 decision 5, D34 and D30.
+The code is the branch of increment B at `8df1f39`, with tickets #16, #17, #18, #19 and #21, and the changes of this ticket. No Lua module changed. The schema and the system text of the Claude provider did not change. The facts in the body of a request have two more fields. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests, unless the row says otherwise. A trip of the rig is 6: 2 times the 3 blocks between its docks. Thus 5 trips are 30.
+The tests set the fuel level of the turtle with `ITurtleAccess.setFuelLevel`, as `t06_no_fuel`. Then the robot makes a contact through `mindcraft.status`: the function that the Lua modules call before each move.
+
+| Test | What it does | Result in run 124 |
+| --- | --- | --- |
+| `b_low_fuel` (new) | A player and a transport of 24 from an empty source: the job waits at the source dock, and the robot does not move. The test sets the level and makes a contact: 30, 29, 29 again, then a save and a load and a check of the copy at 29, then 30, then 12. Then the need of fuel is a parameter of the check: 5 without a need. Then an opening of the screen by the owner and by a different player | Passed. At 30: no entry and no notice. At 29: one entry `LOW_FUEL` with the cause `SOURCE_AT_RESERVE`, the fuel 29, 4 trips, the state `WAITING`, not requested, the owner. One notice: "Job N on robot #R (minecraft:coal from 'b_low_fuel_source' to 'b_low_fuel_destination') has little fuel: 29, about 4 trips between its stations." At the next contact: no second entry, and the state and the cause did not change. The loaded copy has the same diary, and its check writes no entry. 30 arms the warning: no entry. At 12: a second entry and a second notice, "…: 12, about 2 trips between its stations." Without a need of fuel: no entry. The summary of the owner: "From the start of my memory:" and the two sentences. The different player gets no summary, no notice and no entry. The two notices went to the owner only |
+| `b_low_fuel_at_the_start` (new) | A player and a transport of 24. The turtle starts with 20: 3 trips. The robot makes each contact itself. The test registers a place of the owner, and reads its general state when the entry comes | Passed. The diary: `RUNNING`, `LOW_FUEL`, then `DONE`. The notices: "…has little fuel: 20, about 3 trips between its stations." and "…is done: 24 delivered." The later contacts are below the threshold too: no second entry. When the entry comes, the job is `RUNNING` and the general state of the place is `WORKING`. At the end: source 40, destination 24, robot 0 |
+| `b_fuel_in_the_report` (new) | As `b_low_fuel`: a job that waits at the source dock. At 30 and at 29: the fixed report, the status command and the view of the screen. At 29 a written request: a provider of the test keeps the context. Then a check without a need of fuel, and the same reads in the same tick | Passed. The report has "My fuel level is 30: about 5 trips between the stations." and then the same with 29 and 4. The status has the line "fuel: 30, about 5 trips between the stations", then 29 and 4. The view has no line about the fuel at 30. At 29 it has the text widget "Little fuel: 29, about 4 trips between the stations.". The facts of the context have the fuel 29 and the trips 4. The JSON has `"fuel":29,"fuelForTrips":4`. Without a need of fuel: no fuel in the report, "fuel: unknown" in the status, no line in the view, and no fuel in the facts |
+| `b_facts_of_uncertain_numbers` (changed) | As before, without a robot. One more part: a record with the fuel 29 and 4 trips | Passed. The facts give the fuel and the trips for a robot that runs and that called 300 ticks before, also in `RECOVERY`. They do not give them for a robot that is not running, and for a robot that called 301 ticks before. The sentence of these two cases is now "… Not given: the load on board, the stocks and the fuel." |
+| `b_facts_in_the_context` (changed) | As before | Passed. The facts of each of the three jobs also have the fuel level of the turtle at the moment of the check, and that level divided by 6. The robot does not move after the job is done, blocked or in `RECOVERY`. The fuel is in the facts in `RECOVERY` too |
+| `t18_claude_provider` (changed) | As before | Passed. The facts in the body of the request also have `"fuel":L,"fuelForTrips":T` after `"aboveReserve":56`. L is the level of the turtle, and T is L divided by 6 |
+| `t06_no_fuel` (changed) | As before: the turtle starts with 0 | Passed. The diary at the block: `RUNNING`, `LOW_FUEL`, `BLOCKED OUT_OF_FUEL`. The cause, the report and the resume after a refuel are as before |
+| `a_notices_for_blocked_recovery_and_done` (changed) | As before: the turtle starts with 0 | Passed. The first notice is now "…has little fuel: 0, about 0 trips between its stations.", before "…is blocked: the robot has no fuel." Four notices about the jobs, each to the owner |
+| `a_no_notice_for_a_console_job` (changed) | As before: the turtle starts with 0 | Passed. The diary: `RUNNING`, `LOW_FUEL`, `BLOCKED OUT_OF_FUEL`, `RUNNING`, `DONE`. No notice |
+| `a_summary_at_an_opening` (changed) | As before: the turtle starts with 0, two times | Passed. Each of the two summaries has the low fuel sentence of its job before the sentence of the block |
+| `a_notices_call_no_provider` (changed, run 126) | As before, with one more step: a contact at 29, between the long wait and the block | Passed. The notices: the long wait, "…has little fuel: 29, about 4 trips between its stations.", the block and the recovery. The provider of the server got no call |
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 120, red 1 | The new test `b_low_fuel`. The kind `LOW_FUEL` and the fuel of an entry exist. The check of the fuel is empty | 95 of 96, expected. `b_low_fuel` failed at 29: "[]", no notice |
+| 121, green 1 | The check of the fuel, the read at each contact with an active job, and the sentence of the notice | 93 of 96. `b_low_fuel` passed. Three tests whose turtle starts without fuel failed: `a_notices_for_blocked_recovery_and_done`, `a_no_notice_for_a_console_job` and `a_summary_at_an_opening`. Their notices, their diary or their summary had the low fuel entry at the level 0. A level of 0 is below 5 trips: the expectations changed, not the code |
+| 122, red 2 | The new tests `b_low_fuel_at_the_start` and `b_fuel_in_the_report`. The fuel in `b_facts_of_uncertain_numbers`, `b_facts_in_the_context` and `t18_claude_provider`. The changed expectations of the four tests whose turtle starts without fuel. The facts have the two fields, but the account gives none. The report, the status and the screen are as before | 94 of 98, expected. `b_facts_of_uncertain_numbers`, `b_fuel_in_the_report`, `b_facts_in_the_context` and `t18_claude_provider` failed: no fuel. `b_low_fuel_at_the_start` and the four changed tests passed |
+| 123, green 2 | The fuel in the facts, the report, the status and the view | 96 of 98. `b_fuel_in_the_report` failed: a defect of the test. Its station names hold the word "fuel", and its check of a report without fuel looked for that word. Correction: the check looks for "My fuel level". `t22_t23_proposals_and_contact_points` failed: "the report after a save and a load is different". The record did not save the fuel of the job. Correction: the record saves the fuel and the trips of a job |
+| 124, green 3 | The two corrections | **98 of 98**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `98 GAME TESTS COMPLETE`, `All 98 required tests passed :)` |
+| 125 | The commit `97cd020`: the code of run 124. The check of the fuel now marks the record dirty at each contact. One comment changed | **98 of 98**. The same three log lines |
+| 126 | The commit `dfa1d29`: one more step in `a_notices_call_no_provider`. The code of the mod is the code of run 125 | **98 of 98**. The same three log lines. No red run for this step: the code existed |
+
+The four restart phases after run 125, one at a time, on the same world. Type: in the game, automatic. The code of the mod did not change after run 125: only the test of run 126.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24, "fuel: 999, about 166 trips between the stations" |
+| `check` | Passed. `All 1 required tests passed :)`. The record after the restart has "fuel: 999, about 166 trips between the stations": the saved level. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0, "fuel: 996, about 166 trips between the stations" |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`. The record after the restart has the fuel of the delivery: 996. At the end: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`, `RUNNING`, `DONE` |
+
+The restart test does not check the fuel. The fuel lines above are observations in the log of each phase.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| At each contact with an active job, `RobotApi.contact` gives the runtime `ITurtleAccess.getFuelLevel` and `ITurtleAccess.isFuelNeeded` of the public API of CC: Tweaked | `RobotApi.java` | That a turtle on a server without a need of fuel answers `false`. No test changes that setting of CC: Tweaked: its public API has no function for it. `b_low_fuel` and `b_fuel_in_the_report` give the need as a parameter of `MindRuntime.checkFuel` |
+| No Lua module changed | `git diff` of the ticket | |
+| The way of a notice of low fuel: `MindRuntime.checkFuel`, `warn`, `write`, `Notices.warn`, the exit. No step has a reference to a provider | `MindRuntime.java`, `Notices.java` | `a_notices_call_no_provider` counts the calls in one case |
+| A trip is 2 times `BlockPos.distManhattan` of the two docks. Two docks at the same place give no fuel and no entry | `MindRuntime.checkFuel` | No test builds two docks at the same place |
+| The state of the job and the general state of a projector do not read the fuel. `MindRuntime.mood` reads only the states of the jobs | `MindRuntime.java` | |
+
+### Not covered
+
+- A turtle on a server where turtles need no fuel. See the code examination.
+- The notice in the chat of a client, the line of the screen in a client, and the report with the fuel in a client. The play session of increment B has a step for the notice.
+- The fuel in a request to the real service. No `-Plive` run sent it.
+- A robot that burns the fuel items on board at the level 0. `transport.lua` does it (code examination, D12).
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

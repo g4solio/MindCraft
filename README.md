@@ -137,6 +137,7 @@ This procedure uses the commands. The play session of increment A uses commands 
    The command refuses a robot with an open job: a command never ends a job that it does not name. Cancel the job first, or ask Uno to replace it (see "Talk with Uno").
 
 7. Check and control the job. Only the owner of the robot, an operator and the console can read the status.
+   The status also gives the fuel level of the robot at its last contact with an active job, and the trips between the stations that it gives.
 
    ```
    /mindcraft job status <robot>
@@ -222,7 +223,7 @@ A new job for a robot with an open job of yours is one proposal: cancel that job
 The tablet is an item that you carry. It is in the "Tools & Utilities" tab of the creative inventory, or use `/give @s mindcraft:tablet`.
 Use it with the right mouse button: it opens the screen of Uno at any distance.
 
-The screen shows your jobs, with state, observed stocks and cargo on board.
+The screen shows your jobs, with state, observed stocks and cargo on board. A job whose robot has little fuel has one more line about the fuel.
 You can change the quantity and the reserve and press "Apply". You can pause, resume or cancel.
 "Apply", "Pause" and "Resume" act at once. "Cancel" is a proposal: the job ends only after "Confirm #N".
 At the bottom you write to Uno. Press Enter or "Send". If Uno makes a proposal, the button "Confirm #N" appears. N is the number of the proposal.
@@ -267,6 +268,18 @@ Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has waited 
 - The notice names the cause at that moment. A change of the cause during the wait does not start the 5 minutes again.
 - A wait gives one notice only, also after a restart of the server. A job that works again and then waits again can give a new notice, after 5 new minutes.
 - Each other state ends the wait: `RUNNING`, `SATISFIED`, a pause, a block. A restart of the server does not end it. Game time does not pass while the server is stopped.
+- Low fuel gives one notice: the fuel of the robot is sufficient for fewer than 5 trips between the stations of its job. For example:
+
+```
+Uno › Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') has little fuel: 24, about 4 trips between its stations.
+```
+
+- A trip is the way from one dock of the job to the other and back: 2 times the distance in blocks along the axes. The number ignores the way to the first dock and each obstacle.
+- The runtime reads the fuel level of the turtle at each contact of the robot with an active job: before each move and at each transfer. Only the level counts. The fuel items in the turtle do not count: the robot burns them only when the level is at zero.
+- The notice comes one time for each job. It also comes at the start of a job with little fuel, and at a level of 0. A level of 5 trips or more arms it again: after a refuel, a new drop gives a new notice. A restart of the server gives no second notice.
+- The job continues, and the hologram keeps its colour. A robot without fuel still stops: its job goes to `BLOCKED`, with the notice of the block.
+- A server where turtles need no fuel gives no such notice.
+- The report, `/mindcraft job status` and the data for Claude give the fuel level and the trips: the level of the last contact with an active job. The panel of the job on the screen has a line about the fuel only when the fuel is low: "Little fuel: 24, about 4 trips between the stations."
 - Your own requests give no notice: a pause, a resume and a cancellation. This holds also for a resume that completes the job.
 - A request of an operator for your job is not your request. If the resume of an operator completes your job, you get the notice of `DONE`.
 - A notice goes only to the owner of the job, and only while the owner is connected. A job of the console gives no notice.
@@ -283,7 +296,7 @@ Uno › Since you last opened this screen:
 2 min ago: Job 3 on robot #7 (minecraft:coal from 'depot' to 'furnace') is done: 24 delivered.
 ```
 
-- The events are the events of the notices, with the same sentences, also a long wait. The oldest comes first. Each line has its age.
+- The events are the events of the notices, with the same sentences, also a long wait and low fuel. The oldest comes first. Each line has its age.
 - The source is the diary. Thus the summary also has the events of your absence and the events before a server restart.
 - The summary is the sentence of Uno on the screen. The next answer of Uno replaces it.
 - If nothing needed your attention, Uno keeps its sentence. If that sentence is the summary of an earlier opening, Uno says "Tell me what you need." instead: the ages of that summary are old.
@@ -299,8 +312,8 @@ Uno › Since you last opened this screen:
 ### The diary
 
 The runtime writes a diary: each change of the state of a job, and each change of the cause of a wait or of a block.
-A repeated report of the same state and cause writes nothing. A long wait writes one more entry, with the cause at that moment.
-An entry has a number in the order of the diary, the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason and the quantities at that moment.
+A repeated report of the same state and cause writes nothing. A long wait writes one more entry, with the cause at that moment. Low fuel writes one more entry too.
+An entry has a number in the order of the diary, the game time, the job, the robot, the two stations, the item, the state, the cause, the recorded reason, the quantities, and the fuel level and the trips at that moment.
 Minecraft saves the diary with the world. The entries of a job stay after a new job replaced it on the robot.
 The limit is 200 entries for each owner. Above it, the runtime removes the oldest entries of that owner and counts them.
 Only the owner and an operator read the entries of a job. The summary shows the events of the diary that give a notice. No screen and no command shows the whole diary.
@@ -318,14 +331,14 @@ The server log says which provider is active: look for the line `Uno interprets 
 - The screen of an operator shows a counter: the requests to the model in this session, and the input and output tokens of the answers. A request counts when Uno sends it. A request that fails or reaches the time limit counts with zero tokens.
 - With each written request Anthropic gets the text of the request and the data of your jobs:
   - the names of your stations, the numbers of your robots, and whether each robot is free;
-  - for each job: its number, the robot, the module, the item, the two stations, the quantity, the reserve, the state and its cause, the delivered total, the load on board, and the two observed stocks with their age;
-  - two numbers that the server calculates: the quantity still to carry, and the stock of the source above the reserve;
+  - for each job: its number, the robot, the module, the item, the two stations, the quantity, the reserve, the state and its cause, the delivered total, the load on board, the two observed stocks with their age, and the fuel level of the robot;
+  - three numbers that the server calculates: the quantity still to carry, the stock of the source above the reserve, and the trips that the fuel gives;
   - the 20 newest lines of your diary: the age, the job, the robot, the kind, the state, the cause and the quantities.
 - No position leaves the server: no coordinate, no player name and no recorded reason. A recorded reason can hold a position.
 - A number that Uno does not know for certain does not go to Claude. In its place Claude gets a sentence that says which value is missing, and why:
   - a job that needs a check: no delivered total, no load on board and no stock;
   - a job after a recovery: no delivered total;
-  - a robot that is not running, or that has not contacted the server for more than 15 seconds of game time: no load on board and no stock;
+  - a robot that is not running, or that has not contacted the server for more than 15 seconds of game time: no load on board, no stock and no fuel;
   - a stock that a robot observed more than 5 minutes of game time ago: not that stock.
 - An operator owns each station, each robot and each job of the server: thus these are the data of all players.
 - Claude gives the action. For a report and for a request that is no action, Claude also writes the sentence of Uno: see "The voice of Uno". The server writes each other sentence of Uno, as before.
@@ -421,7 +434,7 @@ A request without the words of an action and without two stations gets the reaso
 | `CANCELLED` | The owner cancelled, or a new job replaced the job. The cargo stays on board. A new job for the same item counts it as its first load | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
-A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. A `WAITING` of 5 minutes without an interruption gives one notice too. See "Notices".
+A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. A `WAITING` of 5 minutes without an interruption gives one notice too, and so does low fuel. Low fuel is not a state. See "Notices".
 Uno takes the sentence of its report from the cause. The screen and the `status` command also show the recorded reason with the position.
 
 The state of the link with the robot is separate from the state of the job. The `status` command shows both.

@@ -618,6 +618,7 @@ public class MindCraftTests {
     /**
      * T06: no fuel. The fuel does not come back by itself, thus this is a block (D34) with the cause "out of fuel".
      * The job continues only after the owner gives fuel and a resume.
+     * Since increment B a level of 0 is low fuel too: the low fuel entry comes at the first contact, and the block after it (D42, point 12).
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t06_no_fuel(GameTestHelper helper) {
@@ -629,6 +630,8 @@ public class MindCraftTests {
             .thenWaitUntil(() -> rig.state(State.BLOCKED))
             .thenExecute(() -> {
                 check(rig.job().cause == Cause.OUT_OF_FUEL && rig.job().reason.contains("Out of fuel"), rig.describe());
+                List<String> states = states(rig.runtime, player, rig.job().id);
+                check(states.equals(List.of("RUNNING", "LOW_FUEL", "BLOCKED OUT_OF_FUEL")), states.toString());
                 check(rig.coal(rig.source) == 64 && rig.job().carried == 0, rig.describe());
                 String report = Uno.report(server, player);
                 MindCraft.LOGGER.info("t06_no_fuel report: {}", report);
@@ -1907,9 +1910,11 @@ public class MindCraftTests {
                     if (facts.get(stock) instanceof JsonObject observed && observed.remove("age") instanceof JsonPrimitive age) ages.add(age.getAsString());
                 }
                 String job = "{\"job\":" + done[0] + ",\"robot\":" + rig.id;
+                // Since ticket #24 also the fuel of the robot, which stays at the dock after the job, and its trips (D42, point 19).
                 check(facts.toString().equals(job + ",\"module\":\"transport\",\"item\":\"minecraft:coal\",\"from\":\"" + rig.from + "\",\"to\":\""
                     + rig.to + "\",\"quantity\":8,\"reserve\":0,\"state\":\"DONE\",\"cause\":\"NONE\",\"delivered\":8,\"onBoard\":0,"
-                    + "\"sourceStock\":{\"count\":56},\"destinationStock\":{\"count\":8},\"stillToCarry\":0,\"aboveReserve\":56,\"uncertain\":[]}"), content);
+                    + "\"sourceStock\":{\"count\":56},\"destinationStock\":{\"count\":8},\"stillToCarry\":0,\"aboveReserve\":56,"
+                    + "\"fuel\":" + level(rig) + ",\"fuelForTrips\":" + level(rig) / 6 + ",\"uncertain\":[]}"), content);
                 List<String> lines = new ArrayList<>();
                 for (JsonElement line : diary.getAsJsonArray()) {
                     JsonObject copy = line.getAsJsonObject().deepCopy();
@@ -2283,10 +2288,10 @@ public class MindCraftTests {
                 MindCraft.LOGGER.info("b_facts_in_the_context, a job that is done: {}", mine);
                 check(mine.jobs().size() == 1 && mine.jobs().get(0).source() != null && mine.jobs().get(0).destination() != null, mine.toString());
                 Uno.Context.Facts facts = mine.jobs().get(0);
-                // The derived numbers: nothing still to carry, and 40 - 10 above the reserve.
+                // The derived numbers: nothing still to carry, and 40 - 10 above the reserve. The robot stays at the dock: its fuel did not change.
                 check(facts.equals(new Uno.Context.Facts(job[0], rig.id, MindRuntime.TRANSPORT, "minecraft:coal", rig.from, rig.to, 24, 10,
                     State.DONE, Cause.NONE, 24, 0, new Uno.Context.Stock(40, facts.source().age()), new Uno.Context.Stock(29, facts.destination().age()),
-                    0, 30, List.of())), facts.toString());
+                    0, 30, level(rig), level(rig) / 6, List.of())), facts.toString());
                 check(SECONDS_AGO.matcher(facts.source().age()).matches() && SECONDS_AGO.matcher(facts.destination().age()).matches(), facts.toString());
                 check(lines(mine).equals(List.of(job[0] + " RUNNING 0/0", job[0] + " DONE 24/0")), lines(mine).toString());
                 for (Uno.Context.Line line : mine.diary()) {
@@ -2314,7 +2319,7 @@ public class MindCraftTests {
                 // The destination of the new job was never observed: its stock is unknown, not zero (T02).
                 check(facts.equals(new Uno.Context.Facts(job[1], rig.id, MindRuntime.TRANSPORT, "minecraft:coal", rig.from, rig.to, 16, 10,
                     State.BLOCKED, Cause.DESTINATION_NO_INVENTORY, 0, 16, new Uno.Context.Stock(24, facts.source().age()), null, 16, 14,
-                    List.of("No robot observed '" + rig.to + "' yet. Its stock is unknown."))), facts.toString());
+                    level(rig), level(rig) / 6, List.of("No robot observed '" + rig.to + "' yet. Its stock is unknown."))), facts.toString());
                 // The lines of the first job stay after the second job replaced it on the robot.
                 check(lines(mine).equals(List.of(job[0] + " RUNNING 0/0", job[0] + " DONE 24/0", job[1] + " RUNNING 0/0", job[1] + " BLOCKED 0/16")),
                     lines(mine).toString());
@@ -2333,8 +2338,9 @@ public class MindCraftTests {
                 Uno.Context mine = contexts.get(3);
                 MindCraft.LOGGER.info("b_facts_in_the_context, a job that needs a check: {}", mine);
                 // The facts give no delivered total, no load on board and no stock. They say that the result is uncertain, and why.
+                // The fuel is not uncertain in RECOVERY: the runtime reads it from the turtle (D42, point 3).
                 check(mine.jobs().equals(List.of(new Uno.Context.Facts(job[1], rig.id, MindRuntime.TRANSPORT, "minecraft:coal", rig.from, rig.to, 16, 10,
-                    State.RECOVERY, Cause.LOAD_DIFFERS, null, null, null, null, null, null,
+                    State.RECOVERY, Cause.LOAD_DIFFERS, null, null, null, null, null, null, level(rig), level(rig) / 6,
                     List.of("The result of the job is uncertain: the load in the robot differs from the record. "
                         + "Not given: the delivered total, the load on board and the stocks.")))), mine.jobs().toString());
                 // The lines of the job give none of them either. The lines of the first job keep their numbers.
@@ -2371,16 +2377,17 @@ public class MindCraftTests {
         return job;
     }
 
-    /** The facts of the record of the test, with these values. */
+    /** The facts of the record of the test, with these values. The record has no fuel level. */
     private static Uno.Context.Facts facts(State state, Cause cause, Integer delivered, Integer onBoard, Uno.Context.Stock source,
                                            Uno.Context.Stock destination, Integer toCarry, Integer aboveReserve, String... uncertain) {
         return new Uno.Context.Facts(900, 9, MindRuntime.TRANSPORT, "minecraft:coal", "depot", "furnace", 24, 10, state, cause,
-            delivered, onBoard, source, destination, toCarry, aboveReserve, List.of(uncertain));
+            delivered, onBoard, source, destination, toCarry, aboveReserve, null, null, List.of(uncertain));
     }
 
     /** A line of a diary that the test writes: a transport of 24 from 'depot' to 'furnace' with a reserve of 10. */
     private static Entry entry(int job, long time, State state, Cause cause, int delivered, int carried) {
-        return new Entry(time, time, Util.NIL_UUID, job, 9, "depot", "furnace", Items.COAL, state, cause, "", false, 24, 10, delivered, carried, Kind.CHANGE);
+        return new Entry(time, time, Util.NIL_UUID, job, 9, "depot", "furnace", Items.COAL, state, cause, "", false, 24, 10, delivered, carried,
+            MindRuntime.UNKNOWN, MindRuntime.UNKNOWN, Kind.CHANGE);
     }
 
     /**
@@ -2393,7 +2400,7 @@ public class MindCraftTests {
     public static void b_facts_of_uncertain_numbers(GameTestHelper helper) {
         long now = 100_000;
         Uno.Context.Stock depot = new Uno.Context.Stock(50, "5 min ago"), furnace = new Uno.Context.Stock(6, "12 s ago");
-        String robot = " Not given: the load on board and the stocks.";
+        String robot = " Not given: the load on board, the stocks and the fuel.";
         String recovery = ". Not given: the delivered total, the load on board and the stocks.";
         // The facts that the account gives, and the facts that it must give. 24 - 6 are still to carry. 50 - 10 are above the reserve.
         Map<String, Uno.Context.Facts[]> cases = new LinkedHashMap<>();
@@ -2443,6 +2450,23 @@ public class MindCraftTests {
         }), true, now).facts();
         check(unseen.destination() == null && unseen.stillToCarry() == null
             && unseen.uncertain().equals(List.of("No robot observed 'furnace' yet. Its stock is unknown.")), unseen.toString());
+
+        // The fuel of the last contact: 29, thus 4 trips (D42, point 19). Given for a robot that runs and that called within 300 ticks,
+        // also in RECOVERY: the runtime reads it from the turtle. Not given for a robot that is not running or silent (D42, point 3).
+        Consumer<Job> fuel = j -> {
+            j.fuel = 29;
+            j.trips = 4;
+        };
+        for (Job given : List.of(record(900, now, fuel), record(900, now, fuel.andThen(j -> j.state = State.RECOVERY)))) {
+            Uno.Context.Facts withFuel = new JobAccount(given, true, now).facts();
+            check(Integer.valueOf(29).equals(withFuel.fuel()) && Integer.valueOf(4).equals(withFuel.trips()), withFuel.toString());
+        }
+        for (JobAccount account : List.of(new JobAccount(record(900, now, fuel), false, now),
+            new JobAccount(record(900, now, fuel.andThen(j -> j.lastContact--)), true, now))) {
+            Uno.Context.Facts withoutFuel = account.facts();
+            check(withoutFuel.fuel() == null && withoutFuel.trips() == null && withoutFuel.uncertain().size() == 1
+                && withoutFuel.uncertain().get(0).endsWith(robot), withoutFuel.toString());
+        }
 
         // The lines of the diary. Job 900 is in RECOVERY. The robot of job 600 is not running. Job 800 had a RECOVERY: it is not in the facts any more.
         List<Uno.Context.Facts> jobs = List.of(new JobAccount(record(900, now, job -> job.state = State.RECOVERY), true, now).facts(),
@@ -4293,6 +4317,7 @@ public class MindCraftTests {
      * D30: a change to BLOCKED, RECOVERY or DONE gives one notice to the owner. The sentence comes from a fixed template.
      * It names the job, the robot and the cause in words. A resume by an operator, and a pause, a resume and a cancellation
      * by the owner give no notice. No notice goes to the operator or to a different player.
+     * The turtle starts without fuel. Since increment B that is low fuel too: its notice comes before the block (D42, point 12).
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void a_notices_for_blocked_recovery_and_done(GameTestHelper helper) {
@@ -4309,6 +4334,7 @@ public class MindCraftTests {
             // The robot stays blocked. The notice does not repeat.
             .thenIdle(60)
             .thenExecute(() -> {
+                expected.add(subject(rig, jobs[0]) + " has little fuel: 0, about 0 trips between its stations.");
                 expected.add(subject(rig, jobs[0]) + " is blocked: the robot has no fuel.");
                 check(notices(player).equals(expected), notices(player).toString());
                 rig.robot().turtle.setFuelLevel(1000);
@@ -4337,7 +4363,7 @@ public class MindCraftTests {
                 check(notices(other).isEmpty() && notices(operator).isEmpty(), "the operator got a notice: " + notices(other));
                 List<Notice> about = new ArrayList<>(noticesAbout(jobs[0].id, rig.id));
                 about.addAll(noticesAbout(jobs[1].id, rig.id));
-                check(about.size() == 3 && about.stream().allMatch(notice -> notice.owner().equals(player.id())), about.toString());
+                check(about.size() == 4 && about.stream().allMatch(notice -> notice.owner().equals(player.id())), about.toString());
             })
             .thenSucceed();
     }
@@ -4416,7 +4442,7 @@ public class MindCraftTests {
             .thenWaitUntil(() -> rig.state(State.DONE))
             .thenExecute(() -> {
                 List<String> states = states(rig.runtime, ADMIN, rig.job().id);
-                check(states.equals(List.of("RUNNING", "BLOCKED OUT_OF_FUEL", "RUNNING", "DONE")), states.toString());
+                check(states.equals(List.of("RUNNING", "LOW_FUEL", "BLOCKED OUT_OF_FUEL", "RUNNING", "DONE")), states.toString());
                 check(noticesAbout(rig.job().id, rig.id).isEmpty(), noticesAbout(rig.job().id, rig.id).toString());
                 check(notices(ADMIN).isEmpty(), notices(ADMIN).toString());
             })
@@ -4425,8 +4451,9 @@ public class MindCraftTests {
 
     /**
      * D30, D33: a notice calls no provider. The provider of the server counts its calls while a job of a player waits for 5 minutes,
-     * goes to BLOCKED and goes to RECOVERY. In one step, each change goes through the function that calls it in the game:
-     * the check of the long wait of the server tick, the impediment of a Lua module, and the state change of the runtime.
+     * has little fuel (since ticket #24), goes to BLOCKED and goes to RECOVERY. In one step, each change goes through the function that calls
+     * it in the game: the check of the long wait of the server tick, a contact of the robot, the impediment of a Lua module, and the state
+     * change of the runtime.
      * The test changes the provider of the server only inside that step (withServerProvider), also when a check fails.
      * The source is empty: the job waits. The test moves the start of the wait back by 6000 ticks: thus the check finds a long wait.
      * It is a provider with a model. It gives the answers of the provider of before.
@@ -4446,10 +4473,12 @@ public class MindCraftTests {
                 withServerProvider(model, () -> {
                     job.waitingSince -= MindRuntime.LONG_WAIT;
                     rig.runtime.checkWait(job, rig.level.getGameTime());
+                    fuel(rig, 29);
                     impediment(rig, MindRuntime.NO_FUEL, "the robot cannot move and has no fuel item");
                     rig.runtime.recovery(job, Cause.LOAD_DIFFERS, "the robot holds 0, the record says 0");
                 });
                 check(notices(player).equals(List.of(longWait(rig, job) + "nothing remains in '" + rig.from + "'.",
+                    subject(rig, job) + " has little fuel: 29, about 4 trips between its stations.",
                     subject(rig, job) + " is blocked: the robot has no fuel.",
                     subject(rig, job) + " needs a check: I cannot say how it went. Recorded reason: the robot holds 0, the record says 0.")),
                     notices(player).toString());
@@ -4605,6 +4634,182 @@ public class MindCraftTests {
             .thenSucceed();
     }
 
+    // --- Increment B: the low fuel notice ----------------------------------------------------------------------------
+
+    /**
+     * Sets the fuel level of the turtle of the rig. Then the robot makes a contact through the function that the Lua modules call before
+     * each move: the runtime reads the level of the turtle.
+     */
+    private static void fuel(Rig rig, int level) {
+        RobotApi robot = rig.robot();
+        check(robot != null, "the robot is not running");
+        robot.turtle.setFuelLevel(level);
+        try {
+            robot.status();
+        } catch (dan200.computercraft.api.lua.LuaException e) {
+            throw new GameTestAssertException("the contact failed: " + e.getMessage());
+        }
+    }
+
+    /** The fuel level of the turtle of the rig now. A trip of the rig is 6: 2 times the 3 blocks between its docks. */
+    static int level(Rig rig) {
+        RobotApi robot = rig.robot();
+        check(robot != null, "the robot is not running");
+        return robot.turtle.getFuelLevel();
+    }
+
+    /**
+     * Increment B, D42 points 11 and 12: a robot with fuel for fewer than 5 trips between the docks of its job gets one "low fuel" entry,
+     * and its owner one notice. A trip is 2 times the distance along the axes between the two docks: 6 in the rig. Thus 5 trips are 30.
+     * The source is empty: the job waits at the source dock, and the robot does not move. Its own contacts read the level that the test set.
+     * No entry at 30. One entry at 29: 4 trips. No second entry at the next contact. 30 arms the warning again: a second entry at 12.
+     * The entries do not change the state of the job. A save and a load keep the entries, and the next contact of the copy writes none.
+     * The summary has the two events. T19: a different player gets no notice, no entry and no summary.
+     * A turtle that needs no fuel gets no entry. A test cannot change that setting of CC: Tweaked through its public API.
+     * Thus the need of fuel is a parameter of the check, as the moment of the check of a long wait.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_low_fuel(GameTestHelper helper) {
+        listen();
+        Actor player = player("b_low_fuel"), other = player("b_low_fuel_other");
+        Rig rig = new Rig(helper, "b_low_fuel", 0, 1000, player);
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                List<String> waiting = List.of("RUNNING", "WAITING SOURCE_AT_RESERVE");
+                fuel(rig, 30);
+                check(states(rig.runtime, player, job.id).equals(waiting) && notices(player).isEmpty(),
+                    "at the threshold: " + states(rig.runtime, player, job.id) + " " + notices(player));
+                fuel(rig, 29);
+                List<String> expected = new ArrayList<>(List.of(subject(rig, job) + " has little fuel: 29, about 4 trips between its stations."));
+                check(notices(player).equals(expected), notices(player).toString());
+                List<String> once = new ArrayList<>(waiting);
+                once.add("LOW_FUEL SOURCE_AT_RESERVE");
+                check(states(rig.runtime, player, job.id).equals(once), states(rig.runtime, player, job.id).toString());
+                Entry entry = entries(rig.runtime, player, job.id).get(2);
+                check(entry.fuel() == 29 && entry.trips() == 4 && entry.state() == State.WAITING && !entry.requested()
+                    && entry.owner().equals(player.id()), entry.toString());
+                // The next contact gives no second entry. The state and the cause of the job did not change.
+                fuel(rig, 29);
+                check(states(rig.runtime, player, job.id).equals(once) && notices(player).equals(expected), notices(player).toString());
+                check(job.state == State.WAITING && job.cause == Cause.SOURCE_AT_RESERVE, rig.describe());
+                // A save and a load keep the entry. A contact of the copy gives no second entry: the copy keeps the given warning.
+                MindRuntime copy = MindRuntime.load(rig.runtime.save(new CompoundTag()));
+                check(copy.diary(player).equals(rig.runtime.diary(player)), "the loaded diary is different: " + copy.diary(player));
+                copy.checkFuel(copy.jobs.get(rig.id), 29, true);
+                check(states(copy, player, job.id).equals(once), "after a load: " + states(copy, player, job.id));
+                // At the threshold the warning is armed again. A new drop gives a second entry.
+                fuel(rig, 30);
+                check(states(rig.runtime, player, job.id).equals(once), states(rig.runtime, player, job.id).toString());
+                fuel(rig, 12);
+                expected.add(subject(rig, job) + " has little fuel: 12, about 2 trips between its stations.");
+                check(notices(player).equals(expected), notices(player).toString());
+                List<String> twice = new ArrayList<>(once);
+                twice.add("LOW_FUEL SOURCE_AT_RESERVE");
+                check(states(rig.runtime, player, job.id).equals(twice), states(rig.runtime, player, job.id).toString());
+                // A turtle that needs no fuel: no entry, also below the threshold.
+                fuel(rig, 30);
+                rig.runtime.checkFuel(job, 5, false);
+                check(states(rig.runtime, player, job.id).equals(twice) && notices(player).equals(expected), notices(player).toString());
+                // The summary has the two events. A different player gets nothing of the owner.
+                long now = rig.level.getGameTime();
+                UnoView.open(rig.runtime, player, now);
+                check(ageless(Uno.said(player)).equals(FIRST + "\n<age>: " + expected.get(0) + "\n<age>: " + expected.get(1)), Uno.said(player));
+                UnoView.open(rig.runtime, other, now);
+                check(Uno.said(other).equals("Tell me what you need.") && notices(other).isEmpty() && rig.runtime.diary(other).isEmpty(),
+                    "a different player: " + Uno.said(other) + " " + notices(other));
+                List<Notice> about = noticesAbout(job.id, rig.id);
+                check(about.size() == 2 && about.stream().allMatch(notice -> notice.owner().equals(player.id())), about.toString());
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Increment B, D42 point 12: a job that starts with a low level gets the entry at its first contact. The robot makes the contacts itself.
+     * Its fuel of 20 gives 3 trips of 6. The robot carries 24 in one trip, and the job ends: each later contact is below the threshold too.
+     * The entry changes neither the state of the job nor the general state of a place of the owner: the job stays RUNNING,
+     * and a projector there shows "working" (D20). The test registers the place. It reads the general state, not the block.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_low_fuel_at_the_start(GameTestHelper helper) {
+        listen();
+        Actor player = player("b_low_fuel_start");
+        Rig rig = new Rig(helper, "b_low_fuel_start", 64, 20, player);
+        BlockPos place = helper.absolutePos(new BlockPos(3, 1, 0));
+        rig.runtime.addPlace(player.id(), rig.level, place);
+        Job[] job = new Job[1];
+        String[] low = new String[1];
+        rig.begin()
+            .thenExecute(() -> job[0] = rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(states(rig.runtime, player, job[0].id).size() > 1, "one entry only: " + rig.describe()))
+            .thenExecute(() -> {
+                check(states(rig.runtime, player, job[0].id).equals(List.of("RUNNING", "LOW_FUEL")), states(rig.runtime, player, job[0].id).toString());
+                low[0] = subject(rig, job[0]) + " has little fuel: 20, about 3 trips between its stations.";
+                check(notices(player).equals(List.of(low[0])), notices(player).toString());
+                rig.state(State.RUNNING);
+                check(rig.runtime.mood(rig.level, place) == MindRuntime.Mood.WORKING, "the general state: " + rig.runtime.mood(rig.level, place));
+            })
+            .thenWaitUntil(() -> rig.state(State.DONE))
+            .thenExecute(() -> {
+                rig.assertTransferred(40, 24);
+                check(states(rig.runtime, player, job[0].id).equals(List.of("RUNNING", "LOW_FUEL", "DONE")), states(rig.runtime, player, job[0].id).toString());
+                check(notices(player).equals(List.of(low[0], subject(rig, job[0]) + " is done: 24 delivered.")), notices(player).toString());
+                rig.runtime.removePlace(rig.level, place);
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Increment B, D42 point 19: the fixed report, the status command and the facts of a job give the fuel level and the trips.
+     * The panel of the job on the screen has one line about the fuel only when the fuel is low.
+     * The source is empty: the job waits at the source dock, and the robot does not move. The test sets the fuel level, and makes a contact.
+     * The facts are the facts that a provider of the test gets in the conversation with Uno.
+     * A turtle that needs no fuel has no fuel level: the report, the facts and the screen say nothing about the fuel.
+     * For a robot that is not running or silent the facts do not give the fuel: see b_facts_of_uncertain_numbers.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_fuel_in_the_report(GameTestHelper helper) {
+        Actor player = player("b_fuel_report");
+        Rig rig = new Rig(helper, "b_fuel_report", 0, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        Supplier<String> view = () -> UnoView.build(rig.runtime, player, rig.level.getGameTime());
+        Supplier<String> status = () -> rig.runtime.status(player, rig.id, rig.level.getGameTime());
+        List<Uno.Context> contexts = new CopyOnWriteArrayList<>();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING))
+            .thenExecute(() -> {
+                // At the threshold: the fuel is not low.
+                fuel(rig, 30);
+                check(Uno.report(server, player).contains(" My fuel level is 30: about 5 trips between the stations. "), Uno.report(server, player));
+                check(status.get().contains("\n  fuel: 30, about 5 trips between the stations"), status.get());
+                check(!view.get().contains("Little fuel"), view.get());
+                fuel(rig, 29);
+                check(Uno.report(server, player).contains(" My fuel level is 29: about 4 trips between the stations. "), Uno.report(server, player));
+                check(status.get().contains("\n  fuel: 29, about 4 trips between the stations"), status.get());
+                check(view.get().contains("{\"type\":\"text\",\"text\":\"Little fuel: 29, about 4 trips between the stations.\""), view.get());
+            });
+        ask(sequence, server, player, "How much fuel does my robot have?", reader(contexts), 5000, answers)
+            .thenExecute(() -> {
+                Uno.Context.Facts facts = contexts.get(0).jobs().get(0);
+                check(Integer.valueOf(29).equals(facts.fuel()) && Integer.valueOf(4).equals(facts.trips()), facts.toString());
+                check(contexts.get(0).toJson().contains(",\"fuel\":29,\"fuelForTrips\":4,"), contexts.get(0).toJson());
+                // A turtle that needs no fuel. The next contact of the robot reads the level again: the checks are in the same tick.
+                rig.runtime.checkFuel(rig.job(), 29, false);
+                check(!Uno.report(server, player).contains("My fuel level"), Uno.report(server, player));
+                check(status.get().contains("\n  fuel: unknown"), status.get());
+                check(!view.get().contains("Little fuel"), view.get());
+                Uno.Context.Facts none = Uno.context(rig.runtime, player, rig.level.getGameTime()).jobs().get(0);
+                check(none.fuel() == null && none.trips() == null, none.toString());
+                rig.runtime.control(player, rig.id, "cancel");
+            })
+            .thenSucceed();
+    }
+
     // --- Increment A: the summary at an opening ----------------------------------------------------------------------
 
     /** The first line of a summary at the first opening of a player in this world. */
@@ -4678,7 +4883,9 @@ public class MindCraftTests {
                 check(Uno.said(player).equals("Tell me what you need."), Uno.said(player));
                 tablet.run();
                 // The start and the resume are requests of the owner: the attention rule does not select them.
-                String first = FIRST + "\n<age>: " + subject(rig, jobs[0]) + " is blocked: the robot has no fuel."
+                // The turtle starts without fuel: since increment B the low fuel entry comes before the block (D42, point 12).
+                String first = FIRST + "\n<age>: " + subject(rig, jobs[0]) + " has little fuel: 0, about 0 trips between its stations."
+                    + "\n<age>: " + subject(rig, jobs[0]) + " is blocked: the robot has no fuel."
                     + "\n<age>: " + subject(rig, jobs[0]) + " is done: 24 delivered.";
                 check(ageless(Uno.said(player)).equals(first), "the first opening: " + Uno.said(player));
                 MindCraft.LOGGER.info("a_summary_at_an_opening, the first opening: {}", Uno.said(player));
@@ -4699,7 +4906,8 @@ public class MindCraftTests {
                 withServerProvider(model, () -> UnoView.build(rig.runtime, player, rig.level.getGameTime()));
                 check(Uno.said(player).equals(report[0]), "a new view after an action gave a summary: " + Uno.said(player));
                 click.run();
-                String since = SINCE + "\n<age>: " + subject(rig, jobs[1]) + " is blocked: the robot has no fuel.";
+                String since = SINCE + "\n<age>: " + subject(rig, jobs[1]) + " has little fuel: 0, about 0 trips between its stations."
+                    + "\n<age>: " + subject(rig, jobs[1]) + " is blocked: the robot has no fuel.";
                 check(ageless(Uno.said(player)).equals(since), "the opening with the projector: " + Uno.said(player));
                 // A second click at once: nothing is new. The summary of the click before does not stay with its old ages.
                 click.run();

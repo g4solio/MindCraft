@@ -139,7 +139,7 @@ public class RobotApi implements ILuaAPI {
         if (job == null) return null;
         int held = held(job.item);
         if (job.state.active() && held != job.carried) {
-            runtime().set(job, State.RECOVERY, "the robot holds " + held + ", the record says " + job.carried);
+            runtime().recovery(job, Cause.LOAD_DIFFERS, "the robot holds " + held + ", the record says " + job.carried);
         }
         Map<String, Object> out = new HashMap<>();
         out.put("id", job.id);

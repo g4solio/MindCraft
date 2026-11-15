@@ -10,6 +10,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Cause;
 import io.github.g4solio.mindcraft.MindRuntime.Entry;
+import io.github.g4solio.mindcraft.MindRuntime.Entry.Kind;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
 import io.github.g4solio.mindcraft.MindRuntime.Refusal;
@@ -737,6 +738,53 @@ public class MindCraftTests {
                 rig.state(State.RECOVERY);
                 check(rig.job().reason.contains("holds 0, the record says 24"), rig.describe());
                 check(rig.job().ops == opsAtLoss[0] && rig.job().delivered == 0 && rig.coal(rig.dest) == 0, rig.describe());
+            })
+            .thenSucceed();
+    }
+
+    /**
+     * Ticket #16, D42 point 2: RECOVERY has a cause with a fixed value. The runtime writes it together with the state. The diary entry carries it.
+     * A different actor empties the robot of a player: the load differs from the record. The recorded reason stays.
+     * The report, the notice and the screen show it as before. A save and a load give the same cause and the same diary.
+     * A record of increment A has no cause for its RECOVERY: it loads without one, and its sentences are the same.
+     * The other cause, a world older than the record, comes from the load of the record at the start of the server: see RestartTests.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_causes_of_recovery(GameTestHelper helper) {
+        listen();
+        Actor player = player("b_recovery");
+        Rig rig = new Rig(helper, "b_recovery", 64, 1000, player);
+        MinecraftServer server = rig.level.getServer();
+        rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.carried(24))
+            .thenExecute(() -> rig.robot().turtle.getInventory().clearContent())
+            .thenWaitUntil(() -> rig.state(State.RECOVERY))
+            .thenExecute(() -> {
+                Job job = rig.job();
+                long now = rig.level.getGameTime();
+                String reason = "the robot holds 0, the record says 24";
+                check(job.cause == Cause.LOAD_DIFFERS && job.reason.equals(reason), rig.describe());
+                List<String> states = states(rig.runtime, player, job.id);
+                check(states.equals(List.of("RUNNING", "RECOVERY LOAD_DIFFERS")), states.toString());
+                check(entries(rig.runtime, player, job.id).get(1).reason().equals(reason), entries(rig.runtime, player, job.id).toString());
+                // The recorded reason, as before.
+                String sentence = "I cannot say how it went. Recorded reason: " + reason + ".";
+                String notice = subject(rig, job) + " needs a check: " + sentence;
+                check(Uno.report(server, player).contains(sentence), Uno.report(server, player));
+                check(notices(player).equals(List.of(notice)), notices(player).toString());
+                check(UnoView.build(rig.runtime, player, now).contains("Recorded reason: " + reason), UnoView.build(rig.runtime, player, now));
+
+                CompoundTag saved = rig.runtime.save(new CompoundTag());
+                MindRuntime copy = MindRuntime.load(saved);
+                check(copy.jobs.get(rig.id).cause == Cause.LOAD_DIFFERS && copy.diary(player).equals(rig.runtime.diary(player)),
+                    "after a load: " + copy.jobs.get(rig.id).cause + ", " + states(copy, player, job.id));
+                MindRuntime older = MindRuntime.load(incrementA(saved));
+                check(older.jobs.get(rig.id).cause == Cause.NONE && states(older, player, job.id).equals(List.of("RUNNING", "RECOVERY")),
+                    "a record of increment A: " + older.jobs.get(rig.id).cause + ", " + states(older, player, job.id));
+                check(Uno.report(older, player, now).contains(sentence), Uno.report(older, player, now));
+                check(Notices.sentence(entries(older, player, job.id).get(1)).equals(notice), Notices.sentence(entries(older, player, job.id).get(1)));
+                rig.runtime.control(player, rig.id, "cancel");
             })
             .thenSucceed();
     }
@@ -2651,7 +2699,7 @@ public class MindCraftTests {
                 job.delivered = 24;
                 job.carried = 0;
                 job.lastOpAt = rig.level.getGameTime() + 10_000;
-                rig.runtime.set(job, State.RECOVERY, "the world is older than the record of this job");
+                rig.runtime.recovery(job, Cause.WORLD_OLDER, "the world is older than the record of this job");
             })
             .thenIdle(60)
             .thenExecute(() -> {
@@ -3044,11 +3092,33 @@ public class MindCraftTests {
         return runtime.diary(actor).stream().filter(entry -> entry.job() == jobId).toList();
     }
 
-    /** The state and the cause of each entry of one job, the oldest first. A long wait is "LONG_WAIT" and its cause. */
+    /** The state and the cause of each entry of one job, the oldest first. A one-time warning is its kind and its cause: "LONG_WAIT ROBOT_FULL". */
     static List<String> states(MindRuntime runtime, Actor actor, int jobId) {
         return entries(runtime, actor, jobId).stream()
-            .map(entry -> (entry.longWait() ? "LONG_WAIT" : entry.state().name()) + (entry.cause() == Cause.NONE ? "" : " " + entry.cause()))
+            .map(entry -> (entry.kind() == Kind.CHANGE ? entry.state().name() : entry.kind().name()) + (entry.cause() == Cause.NONE ? "" : " " + entry.cause()))
             .toList();
+    }
+
+    /**
+     * A saved record in the format of increment A (D41, decision 5). A diary entry has the flag "longWait" in place of its kind.
+     * A job has the flag "longWait" in place of the list of its given warnings. RECOVERY has no cause.
+     */
+    static CompoundTag incrementA(CompoundTag saved) {
+        CompoundTag older = saved.copy();
+        for (Tag tag : older.getList("diary", Tag.TAG_COMPOUND)) {
+            CompoundTag entry = (CompoundTag) tag;
+            entry.putBoolean("longWait", entry.getString("kind").equals(Kind.LONG_WAIT.name()));
+            entry.remove("kind");
+            if (entry.getString("state").equals(State.RECOVERY.name())) entry.putString("cause", Cause.NONE.name());
+        }
+        CompoundTag jobs = older.getCompound("jobs");
+        for (String robot : jobs.getAllKeys()) {
+            CompoundTag job = jobs.getCompound(robot);
+            job.putBoolean("longWait", job.getList("warnings", Tag.TAG_STRING).stream().anyMatch(kind -> kind.getAsString().equals(Kind.LONG_WAIT.name())));
+            job.remove("warnings");
+            if (job.getString("state").equals(State.RECOVERY.name())) job.putString("cause", Cause.NONE.name());
+        }
+        return older;
     }
 
     /**
@@ -3276,7 +3346,7 @@ public class MindCraftTests {
                 rig.state(State.DONE);
                 check(notices(player).equals(before), notices(player).toString());
                 List<String> states = states(rig.runtime, player, rig.job().id);
-                check(states.equals(List.of("RUNNING", "WAITING DESTINATION_FULL", "RECOVERY", "DONE")), states.toString());
+                check(states.equals(List.of("RUNNING", "WAITING DESTINATION_FULL", "RECOVERY LOAD_DIFFERS", "DONE")), states.toString());
             })
             .thenSucceed();
     }
@@ -3356,7 +3426,7 @@ public class MindCraftTests {
                     job.waitingSince -= MindRuntime.LONG_WAIT;
                     rig.runtime.checkWait(job, rig.level.getGameTime());
                     impediment(rig, MindRuntime.NO_FUEL, "the robot cannot move and has no fuel item");
-                    rig.runtime.set(job, State.RECOVERY, "the robot holds 0, the record says 0");
+                    rig.runtime.recovery(job, Cause.LOAD_DIFFERS, "the robot holds 0, the record says 0");
                 });
                 check(notices(player).equals(List.of(longWait(rig, job) + "nothing remains in '" + rig.from + "'.",
                     subject(rig, job) + " is blocked: the robot has no fuel.",
@@ -3427,6 +3497,11 @@ public class MindCraftTests {
                 MindRuntime copy = MindRuntime.load(rig.runtime.save(new CompoundTag()));
                 copy.checkWait(copy.jobs.get(rig.id), since[0] + 12000);
                 check(states(copy, player, job.id).equals(withLongWait), "after a load: " + states(copy, player, job.id));
+                // A record of increment A: the flag of an entry gives the kind "long wait", and the flag of the job keeps the given warning.
+                MindRuntime fromA = MindRuntime.load(incrementA(rig.runtime.save(new CompoundTag())));
+                check(fromA.diary(player).equals(rig.runtime.diary(player)), "a record of increment A: " + states(fromA, player, job.id));
+                fromA.checkWait(fromA.jobs.get(rig.id), since[0] + 12000);
+                check(states(fromA, player, job.id).equals(withLongWait), "a record of increment A, after a check: " + states(fromA, player, job.id));
                 // The record before the check: after a load the wait keeps its start, and the check writes the long wait.
                 MindRuntime earlier = MindRuntime.load(beforeNotice);
                 earlier.checkWait(earlier.jobs.get(rig.id), since[0] + 5999);
@@ -3742,6 +3817,7 @@ public class MindCraftTests {
     /**
      * Tickets #9 and #10: the attention rule selects a long wait. Thus it is in the summary, with the sentence of its notice.
      * The source is empty: the job waits. The check of the long wait and the opening are later moments: parameters.
+     * Ticket #16: the rule reads the kind of the entry. A record of increment A gives the same summary: the load converts its flag.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void a_summary_has_the_long_wait(GameTestHelper helper) {
@@ -3753,8 +3829,11 @@ public class MindCraftTests {
             .thenExecute(() -> {
                 long check = rig.job().waitingSince + MindRuntime.LONG_WAIT;
                 rig.runtime.checkWait(rig.job(), check);
+                UnoView.open(MindRuntime.load(incrementA(rig.runtime.save(new CompoundTag()))), player, check + 2 * 60 * 20);
+                String fromA = Uno.said(player);
                 UnoView.open(rig.runtime, player, check + 2 * 60 * 20);
                 check(Uno.said(player).equals(FIRST + "\n2 min ago: " + longWait(rig, rig.job()) + "nothing remains in '" + rig.from + "'."), Uno.said(player));
+                check(fromA.equals(Uno.said(player)), "a record of increment A: " + fromA);
                 rig.runtime.control(player, rig.id, "cancel");
             })
             .thenSucceed();
@@ -3789,7 +3868,7 @@ public class MindCraftTests {
                 UnoView.open(rig.runtime, player, now + 10_000);
                 String wait = FIRST + "\n<age>: " + longWait(rig, job) + "nothing remains in '" + rig.from + "'.";
                 if (!ageless(Uno.said(player)).equals(wait)) wrong.add("the opening before the crash: " + Uno.said(player));
-                rig.runtime.set(job, State.RECOVERY, "the world is older than the record of this job");
+                rig.runtime.recovery(job, Cause.WORLD_OLDER, "the world is older than the record of this job");
                 UnoView.open(rig.runtime, player, now);
                 String recovery = SINCE + "\n0 s ago: " + subject(rig, job)
                     + " needs a check: I cannot say how it went. Recorded reason: the world is older than the record of this job.";

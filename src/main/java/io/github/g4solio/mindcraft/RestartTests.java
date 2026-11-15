@@ -2,6 +2,7 @@ package io.github.g4solio.mindcraft;
 
 import io.github.g4solio.mindcraft.MindCraftTests.Rig;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
+import io.github.g4solio.mindcraft.MindRuntime.Cause;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
@@ -89,7 +90,7 @@ public class RestartTests {
     /**
      * Also D31: Minecraft saves the diary with the world. After the restart the diary has the entries of the first run.
      * After the normal stop: the start of the job. After the crash: the start and the delivery that the record wrote at the halt,
-     * then the recovery that the load of the record found.
+     * then the recovery that the load of the record found. Its cause is WORLD_OLDER (D42, point 2).
      */
     private static void examine(GameTestHelper helper, Rig rig, boolean afterCrash) {
         check(rig.runtime.robots.size() == 1, "expected one enrolled robot in the saved world, found " + rig.runtime.robots.size());
@@ -98,7 +99,7 @@ public class RestartTests {
         int jobId = rig.job().id;
         List<String> saved = MindCraftTests.states(rig.runtime, rig.actor, jobId);
         MindCraft.LOGGER.info("t11_server_restart diary after the restart: {}", saved);
-        check(saved.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY") : List.of("RUNNING")), "the saved diary is " + saved);
+        check(saved.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY WORLD_OLDER") : List.of("RUNNING")), "the saved diary is " + saved);
         if (afterCrash) rig.state(State.RECOVERY);
         helper.startSequence()
             .thenWaitUntil(() -> check(rig.robot() != null && (rig.job().state == State.DONE || rig.job().state == State.RECOVERY), rig.describe()))
@@ -108,7 +109,7 @@ public class RestartTests {
                 if (afterCrash) {
                     // The runtime must not report a delivery that the world does not contain. The owner decides.
                     rig.state(State.RECOVERY);
-                    check(rig.job().reason.contains("older than the record"), rig.describe());
+                    check(rig.job().cause == Cause.WORLD_OLDER && rig.job().reason.contains("older than the record"), rig.describe());
                     rig.runtime.control(rig.actor, rig.id, "resume");
                 }
             })
@@ -118,7 +119,7 @@ public class RestartTests {
                 check(rig.job().recoveries == (afterCrash ? 1 : 0), rig.describe());
                 List<String> diary = MindCraftTests.states(rig.runtime, rig.actor, jobId);
                 MindCraft.LOGGER.info("t11_server_restart final diary: {}", diary);
-                check(diary.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY", "RUNNING", "DONE") : List.of("RUNNING", "DONE")),
+                check(diary.equals(afterCrash ? List.of("RUNNING", "DONE", "RECOVERY WORLD_OLDER", "RUNNING", "DONE") : List.of("RUNNING", "DONE")),
                     "the diary is " + diary);
                 MindCraft.LOGGER.info("t11_server_restart final status:\n{}", rig.describe());
 

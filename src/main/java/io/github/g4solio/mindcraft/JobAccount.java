@@ -13,7 +13,8 @@ import java.util.Set;
  * The account of a job: what its record says, with the age of each observation and the doubt about the robot (D17).
  * The report, the screen and the status command read a job through it. Each number comes from the record.
  * The inputs are explicit: the record, whether the robot runs now, and the game time. A test can give them without a robot.
- * The facts for the model are here too (D42, point 2). Increment B adds here the check of the numbers of the model (D32).
+ * The facts for the model are here too (D42, point 2), and the fixed sentences about the numbers that the facts do not give (D42, point 3).
+ * The check of the numbers of the model is in Uno: it reads the whole context and the request, not one job (D42, point 4).
  */
 record JobAccount(Job job, boolean running, long now) {
     /** Game ticks without a call from a running robot. After them Uno does not know whether the robot works. */
@@ -151,6 +152,54 @@ record JobAccount(Job job, boolean running, long now) {
         return new Uno.Context.Facts(job.id, job.robot, job.behaviour.id, MindRuntime.itemName(job.item), job.from, job.to, job.quantity,
             job.reserve, job.state, job.cause, delivered ? job.delivered : null, current ? job.carried : null, source, destination,
             toCarry, aboveReserve, List.copyOf(uncertain));
+    }
+
+    /**
+     * The fixed sentences about the uncertain numbers of the job (D42, point 3): the numbers that facts() does not give, with their caution.
+     * They come before the voice (D32). The cases are the cases of facts():
+     * <ul>
+     * <li>RECOVERY: the sentence of A, with the delivered total, the load on board and the stocks of the record. One sentence gives them all.</li>
+     * <li>After a recovery: the delivered total of the record, which can be inexact.</li>
+     * <li>A robot that is not running, or that is silent for more than SILENT_TICKS: the load on board and the stocks of the record.</li>
+     * <li>An observation older than OLD_TICKS, from a robot that runs and calls: that stock, with its age.</li>
+     * </ul>
+     * A stock that no robot observed has no number: it gets no sentence. Empty when the facts give each number.
+     */
+    List<String> cautions() {
+        String name = Notices.job(job.id, job.robot);
+        if (job.state == State.RECOVERY) {
+            return List.of(Notices.capital(name) + ": I cannot say how it went. Recorded reason: " + job.reason
+                + ". The recorded data can be wrong: " + recorded(job.delivered + " delivered") + ". You decide whether to resume or cancel.");
+        }
+        List<String> said = new ArrayList<>();
+        if (job.recoveries > 0) said.add("After a recovery of " + name + " the totals can be inexact: the record says " + job.delivered + " delivered.");
+        if (!running || silent()) {
+            said.add("Robot #" + job.robot + " of job " + job.id
+                + (running ? " has not contacted me for a while: I do not know if it is working." : " is not running or not loaded.")
+                + " The last recorded data, not the current state: " + recorded(null) + ".");
+            return said;
+        }
+        old(job.from, job.fromSeen, job.fromSeenAt, said);
+        old(job.to, job.toSeen, job.toSeenAt, said);
+        return said;
+    }
+
+    /** The fixed sentence of an old observation of a station, with its stock and its age. Nothing for a recent or a missing observation. */
+    private void old(String station, int count, long at, List<String> said) {
+        if (count != MindRuntime.UNKNOWN && now - at > OLD_TICKS) {
+            said.add("I last observed '" + station + "' " + Notices.age(now - at) + ": it had " + count + " then.");
+        }
+    }
+
+    /** The last recorded data in words, after the first part if it is not null: the load on board and each observed stock with its age. */
+    private String recorded(String first) {
+        List<String> parts = new ArrayList<>();
+        if (first != null) parts.add(first);
+        parts.add(job.carried + " on board");
+        if (job.fromSeen != MindRuntime.UNKNOWN) parts.add(job.fromSeen + " in '" + job.from + "' (seen " + Notices.age(now - job.fromSeenAt) + ")");
+        if (job.toSeen != MindRuntime.UNKNOWN) parts.add(job.toSeen + " in '" + job.to + "' (seen " + Notices.age(now - job.toSeenAt) + ")");
+        int last = parts.size() - 1;
+        return last == 0 ? parts.get(0) : String.join(", ", parts.subList(0, last)) + " and " + parts.get(last);
     }
 
     /**

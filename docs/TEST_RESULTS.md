@@ -141,6 +141,11 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 105 | 93 of 93 | None. Ticket #21: the fixed rules read a request when the model gives no valid action. Server line: `All 93 required tests passed :)` |
 | 106 | 93 of 93 | None. Ticket #21, the committed code: one comment changed after run 105. Server line: `All 93 required tests passed :)` |
 | 107 | 95 of 95 | None. The integration branch after the merge of ticket #21. Server line: `All 95 required tests passed :)` |
+| 108 | 95 of 96, expected | Ticket #20, red run 1: the new test `b_voice_of_a_report`, with the old code of Uno |
+| 109 | 97 of 98, expected | Ticket #20, green run 1 and red run 2: `b_voice_of_none`, with the old answer to "none" |
+| 110 | 97 of 100, expected | Ticket #20, green run 2 and red run 3: two new tests of the fixed sentences, and `t18_claude_provider` with the old system text |
+| 111 | 100 of 100 | None. Ticket #20: the voice of Uno and its checks. Server line: `All 100 required tests passed :)` |
+| 112 | 100 of 100 | None. Ticket #20, the committed code `cb6161f`. Server line: `All 100 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -1351,6 +1356,116 @@ This ticket changed no part of the runtime and no Lua module. Thus the four rest
 - The Claude provider with its model flag against the false server of the API, with a failure. See the code examination above.
 - The sentence on the screen of a client. The play session of increment B.
 
+## Increment B — the voice of Uno and its checks (ticket #20)
+
+Date: 2026-11-15. A provider gives one sentence with a report and with "none": the voice of Uno. The server checks the sentence. A fixed sentence gives the uncertain numbers before the voice. See D42, points 1, 3, 4, 5, 15 and 16, and D32.
+The code is the branch of increment B at `8df1f39`, with tickets #16 to #19 and #21, and the changes of this ticket. No part of the runtime and no Lua module changed. The system text of the Claude provider is new. Its output schema did not change: ten fields.
+No run called the real Claude service. **No test verifies a sentence of the real model.** Each sentence of these tests is written in the test.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. Each one uses a provider written in the test, the fixed rules, or the local stand-in of the service. The tests with robots use real turtles and real chests.
+
+| Test | What it does | Result in run 111 |
+| --- | --- | --- |
+| `b_voice_of_a_report` (new) | Two jobs of one player wait for materials, as in `a_report_and_pause_by_words`. Both use the destination of the first rig. 13 requests to a provider of the test that gives a report with a sentence. Nothing is uncertain: the robots run and call, and the observations are recent | Passed. See below |
+| `b_voice_of_none` (new) | A player without a station, a robot or a job: the context has no digit. Six requests to a provider of the test that gives "none" with a sentence | Passed. See below |
+| `b_no_voice_for_an_action` (new) | A job waits for materials. A provider of the test gives a pause, a resume, a change of the reserve, a cancellation and a start, each with the sentence "Done, as you asked." | Passed. Each answer is the text of the server, compared with a fixed text: the answer of the pause, then four proposals. The start is the proposal of a replacement. No answer has the sentence of the provider |
+| `b_fixed_sentences_of_uncertain_numbers` (new) | The account of a record that the test writes, with the flag of the robot and a game time. No robot and no world. The record and the limits of `b_facts_of_uncertain_numbers` | Passed. See below |
+| `b_voice_after_uncertain_numbers` (new) | Two jobs of one player. Job A waits for materials. Job B is done. Built artificially: the test calls the function of the runtime that sets `RECOVERY` for job A, and it moves the observation of the destination of job B back by 6001 ticks in the record. Five reports. Then the owner resumes job A, and the computer of robot B shuts down. One more report | Passed. See below |
+| `t18_claude_provider` (changed) | One more answer of the stand-in: a report with the sentence "The job is done: I delivered 8 items." The test reads the system text | Passed. "none" gives "You did not give the source." alone. The report gives its sentence alone. The system text has each rule of the voice: the character, the first person, "two sentences and 300 characters at most", "Use only the numbers of the context and of the request", "Do not calculate", "You do not remember an earlier", the field "reason" for "report" and "none" only, and "For each other action, "reason" is empty text." It keeps the two rules of ticket #18. The schema has its ten fields, as before |
+| `a_parse_of_an_answer` (changed) | The reader of the JSON of an action | Passed. "reason" is the sentence of a report and of "none". A sentence of 300 characters is not cut. A "none" with an empty sentence is a "none": the check of the length refuses it later. A "none" with a null reason is an answer that Uno cannot read. A pause with a reason has no sentence |
+| `a_provider_answers_with_an_action`, `b_facts_in_the_context`, `a_model_only_for_operators` (changed) | The answer to "none" of a provider of the test | Passed. The answer is the sentence alone, for example "The test read the context." Before: "I cannot propose a job: The test read the context." |
+
+Tests that did not change and that cover parts of this ticket, in run 111:
+
+- `a_report_and_pause_by_words` and `a_t19_words_of_another_player`: their reports have an empty sentence. They get the fixed report and the sentences of D29.2, as before.
+- `a_fixed_rules_report_and_pause`, `s2_uno_reference_sentence` and `b_fixed_rules_choose_the_robot`: the fixed rules give actions without a sentence. The tests compare them with such actions.
+- `a_summary_at_an_opening`: the "Report" button gives the fixed report, and the provider of the server gets 0 calls.
+- `t18_provider_failures` and `a_model_requests_count`: after a model without a valid action, the fixed rules read the request. Their answers have no voice.
+
+The cases of `b_voice_of_a_report`, in their order. Job A is job 81 on robot #62 in run 111. Job B carries 16 to the destination of job A. "Fixed report" is the line of the job in the fixed report of increment A. The test compares its start: "Job 81, robot #62: carry 24 items from 'b_voice_source' to 'b_voice_destination', reserve 0. I delivered 0 items."
+
+| Target | Sentence of the provider | Answer of Uno |
+| --- | --- | --- |
+| The source of job A | "Job 81 on robot #62 waits for coal: 0 of 24 delivered." | That sentence |
+| The source of job A | "I delivered 987654 items." | The fixed report of job A |
+| The source of job A, with the request "Did you deliver 987654 items?" | "No: 0 of 24, not 987654." | That sentence |
+| The source of job A | "" and " " | The fixed report of job A |
+| The source of job A | 300 characters | That sentence |
+| The source of job A | 301 characters | The fixed report of job A |
+| None | "Both jobs wait for coal. Their sources are empty." | That sentence |
+| None | The same, with a third sentence: "Bring coal." | The fixed report on all jobs: two lines |
+| The destination of both jobs | "Both robots wait for coal." | That sentence |
+| The destination of both jobs | "I delivered 987654 items." | "2 of your open jobs use the station 'b_voice_destination'. Tell me the robot number of the job. I did nothing." |
+| A station of no job | "No job of yours uses that station." | That sentence |
+| A station of no job | "I delivered 987654 items." | "None of your open jobs uses the station 'b_voice_nothing'. Tell me the robot number of the job. I did nothing." |
+
+After each case, the two jobs are `WAITING` with their revision 0, and the player has no proposal.
+
+The cases of `b_voice_of_none`. Each answer is compared with a fixed text.
+
+| Request | Sentence of the provider | Answer of Uno |
+| --- | --- | --- |
+| "Which stations do I have?" | "You have no station yet: register one with the station command." | That sentence |
+| "x" | "You have 3 stations." | "I cannot answer that. I did nothing." |
+| "Do I have 3 stations?" | "You do not have 3 stations: you have none." | That sentence |
+| "x" | "", "One. Two. Three.", 301 characters | "I cannot answer that. I did nothing." |
+
+The cases of `b_fixed_sentences_of_uncertain_numbers`. The record: a transport of 24 from 'depot' to 'furnace' with a reserve of 10, job 900 on robot #9, 6 delivered, 4 on board. 'depot' had 50 at 6000 ticks before "now", 'furnace' had 6 at 240 ticks before. The robot called at 300 ticks before. The test compares the whole list of sentences.
+
+| Case | The fixed sentences |
+| --- | --- |
+| The record as it is: at the limit of an old observation and of a silent robot | None |
+| 'depot' observed 6001 ticks before | "I last observed 'depot' 5 min ago: it had 50 then." |
+| Also 'furnace' observed 7200 ticks before | The same, then "I last observed 'furnace' 6 min ago: it had 6 then." |
+| The robot called 301 ticks before, and no call since the server start | "Robot #9 of job 900 has not contacted me for a while: I do not know if it is working. The last recorded data, not the current state: 4 on board, 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago)." |
+| The robot is not running | "Robot #9 of job 900 is not running or not loaded." and the same data |
+| `RECOVERY` with `LOAD_DIFFERS`, and the robot is not running | One sentence: "Job 900 on robot #9: I cannot say how it went. Recorded reason: the robot holds 0, the record says 4. The recorded data can be wrong: 6 delivered, 4 on board, 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago). You decide whether to resume or cancel." |
+| After a recovery | "After a recovery of job 900 on robot #9 the totals can be inexact: the record says 6 delivered." |
+| After a recovery, the robot is not running, and 'furnace' never observed | The sentence of the recovery, then the sentence of the robot with "4 on board and 50 in 'depot' (seen 5 min ago)" |
+| 'furnace' never observed, the robot runs and calls | None: unknown is not old, and it has no number |
+
+The answers of `b_voice_after_uncertain_numbers`, from the log of run 111. Job A is job 78 on robot #24. Job B is job 79 on robot #25. The voice is "Something here needs your eyes." The test reads an age in seconds as "N s ago": it changes at each tick.
+
+1. A report about robot #24: "Job 78 on robot #24: I cannot say how it went. Recorded reason: the test changed the record. The recorded data can be wrong: 0 delivered, 0 on board and 0 in 'b_uncertain_source' (seen 3 s ago). You decide whether to resume or cancel. Something here needs your eyes."
+2. A report about robot #25: "I last observed 'b_uncertain2_destination' 5 min ago: it had 8 then. Something here needs your eyes."
+3. A report without a target, and a report about the destination of job B: no open job uses it. The sentence of job A, the sentence of job B, then the voice.
+4. A report about robot #24 with "I delivered 987654 items.": the fixed report of job A. It has "I cannot say how it went.", and no fixed sentence before it.
+5. After the resume and the shutdown, a report without a target: "After a recovery of job 78 on robot #24 the totals can be inexact: the record says 0 delivered. Robot #25 of job 79 is not running or not loaded. The last recorded data, not the current state: 0 on board, 56 in 'b_uncertain2_source' (seen 6 s ago) and 8 in 'b_uncertain2_destination' (seen 5 min ago). Something here needs your eyes."
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 108, red 1 | The new test `b_voice_of_a_report`, with the old code of Uno | 95 of 96, expected. `b_voice_of_a_report` failed at its first case: the fixed report of job A in place of the sentence |
+| 109, green 1, red 2 | The sentence of a report and its checks. The new tests `b_voice_of_none` and `b_no_voice_for_an_action` | 97 of 98, expected. `b_voice_of_a_report` passed. `b_voice_of_none` failed at its first case: "I cannot propose a job: You have no station yet: …". `b_no_voice_for_an_action` passed: the code of increment A already ignored the sentence of these actions. Thus it had no red run. It guards the rule |
+| 110, green 2, red 3 | The sentence of "none". `JobAccount.cautions` gives no sentence yet. The new tests `b_fixed_sentences_of_uncertain_numbers` and `b_voice_after_uncertain_numbers`, and the changed tests | 97 of 100, expected. `b_fixed_sentences_of_uncertain_numbers`: each case gave no sentence. `b_voice_after_uncertain_numbers`: the voice without the fixed sentence of `RECOVERY`. `t18_claude_provider`: the sentences of "none" and of the report passed, then "the system text has not" the seven new rules |
+| 111, green 3 | The fixed sentences and the new system text | **100 of 100**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `100 GAME TESTS COMPLETE`, `All 100 required tests passed :)` |
+| 112 | The commit `cb6161f`: the code of run 111, with one line of the comment of the helpers of the tests | **100 of 100**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `100 GAME TESTS COMPLETE`, `All 100 required tests passed :)` |
+
+Before run 110, one start of the build stopped at the compiler: a parenthesis too many in a new test. No test ran. It has no number.
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The check of the numbers reads the JSON of the context (`Context.toJson`) and the text of the request. The Claude provider sends the same JSON. A number that the facts do not give is not in the JSON | `Uno.passes`, `ClaudeProvider.answer` | That the model reads the JSON as the server means it |
+| The facts come from the moment of the request. The fixed sentences come from the moment of the answer, as the fixed report. Between the two moments a case can begin or end | `Uno.ask`, `Uno.voiced` | No test builds a case that changes in that time |
+| `parse` reads "reason" only for a report and for "none". `act` reads the sentence only of a report and of "none". A provider written in Java can give a sentence with a pause: it is not used | `Uno.parse`, `Uno.act` | |
+| The fixed rules build each action without a sentence | `Uno.RuleProvider` | |
+| `Uno.voice` gives the result of the checks: passed, failed, or no sentence needed. `Uno.noValidAction` gives the fourth result: no valid action. Nothing records the result yet: ticket #23 | `Uno.java` | |
+| The end of a sentence is a full stop, a question mark or an exclamation mark before a space, with a closing quote or bracket between them. Thus "e.g. this" counts as two sentences, and "Done.Next" as one | `Uno.SENTENCE_END` | |
+| A digit is a digit of each script (`\p{Nd}`). A number in words is not a run of digits: it passes (D32) | `Uno.DIGITS` | |
+
+### Not covered
+
+- A sentence of the real model. No `-Plive` run used the new system text. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B.
+- The voice on the screen of a client. The play session of increment B.
+- A silent robot through the conversation: the robot calls each 10 s at most, and the test cannot stop the calls without a stop of the computer. `b_fixed_sentences_of_uncertain_numbers` covers the case with a record that the test writes.
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1420,6 +1535,7 @@ Third manual test, on the projector and its hologram:
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
 | Increment B: the system text of the Claude provider after ticket #18, with the real service | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B |
+| Increment B: the new system text of the Claude provider after ticket #20 (the voice), with the real service. Thus no sentence of the real model passed or failed a check | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B. The tests use providers written in the tests. See "Increment B — the voice of Uno and its checks (ticket #20)" |
 | Increment B: a failure of the real Claude service after ticket #21: an error, a refusal, the time limit, or an answer that Uno cannot read | No run with the real service tested it. Such a run costs money and needs the consent of the project owner. The tests use providers written in the tests. See "Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)" |
 | Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |

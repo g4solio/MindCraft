@@ -74,6 +74,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -88,6 +89,7 @@ import java.util.stream.Stream;
  * - withServerProvider(provider, action): sets the provider of the server and puts it back, also after a failed check.
  * - CountingModel: a provider that counts as a model provider and counts its calls.
  * - modelAction(action, reason, fields...): an answer in the shape of the output schema of the Claude provider.
+ * - said(sequence, server, player, cases, after): requests with the answers of a provider of the test, and a check of each answer of Uno.
  * - listen(), NOTICES, notices(owner), noticesAbout(job, robot), subject(rig, job): the notices that a test reads.
  * - states(runtime, actor, jobId): the diary of a job, as a list of states.
  */
@@ -1503,8 +1505,10 @@ public class MindCraftTests {
 
     /**
      * Increment A, D41: the one reader of the JSON of an action. It needs no robot and no world.
-     * Text that is not an action of the list, a value of a wrong type and a "none" without a reason are Unreadable.
-     * The case of the action does not matter. The reason of "none" has a limit of 200 characters.
+     * Text that is not an action of the list, a value of a wrong type and a "none" without the field "reason" are Unreadable.
+     * The case of the action does not matter.
+     * Increment B, D42 point 1: "reason" is the sentence of a report and of "none". It is not cut: the check of the length is in Uno.
+     * An empty sentence is a sentence: it fails that check. The sentence of an action of the server is not read.
      */
     @GameTest(template = EMPTY)
     public static void a_parse_of_an_answer(GameTestHelper helper) {
@@ -1514,15 +1518,20 @@ public class MindCraftTests {
         cases.put("{\"action\":\"dig\",\"robot\":null,\"station\":null}", unreadable);
         cases.put("{\"action\":\"pause\",\"robot\":\"seven\",\"station\":null}", unreadable);
         cases.put("{\"action\":\"change\",\"robot\":3,\"station\":null,\"quantity\":\"many\",\"reserve\":null}", unreadable);
-        cases.put("{\"action\":\"none\",\"reason\":\" \"}", unreadable);
+        cases.put("{\"action\":\"none\",\"reason\":null}", unreadable);
+        cases.put("{\"action\":\"none\",\"reason\":\" \"}", new Uno.Action.None(null, " "));
+        cases.put("{\"action\":\"report\",\"reason\":\"I am fine.\",\"robot\":3,\"station\":null}",
+            new Uno.Action.OnJob(Uno.Kind.REPORT, new Uno.Target(3, null), null, null, "I am fine."));
+        cases.put("{\"action\":\"pause\",\"reason\":\"I paused it.\",\"robot\":3,\"station\":null}",
+            new Uno.Action.OnJob(Uno.Kind.PAUSE, new Uno.Target(3, null), null, null));
         cases.put("{\"action\":\"start\",\"module\":\"transport\",\"robot\":3,\"from\":\"a\",\"item\":\"minecraft:coal\",\"quantity\":8}", unreadable);
         cases.put("{\"action\":\"PAUSE\",\"robot\":7,\"station\":null}", new Uno.Action.OnJob(Uno.Kind.PAUSE, new Uno.Target(7, null), null, null));
         // An empty station is no station. A pause has no new values, also when the answer gives them.
         cases.put("{\"action\":\"pause\",\"robot\":null,\"station\":\" \",\"quantity\":5}", new Uno.Action.OnJob(Uno.Kind.PAUSE, new Uno.Target(null, null), null, null));
         cases.put("{\"action\":\"change\",\"robot\":null,\"station\":\"depot\",\"quantity\":null,\"reserve\":2}",
             new Uno.Action.OnJob(Uno.Kind.CHANGE, new Uno.Target(null, "depot"), null, 2));
-        cases.put("{\"action\":\"None\",\"reason\":\"The request names no station.\"}", new Uno.Action.None("The request names no station."));
-        cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}", new Uno.Action.None("a".repeat(150) + "b".repeat(50)));
+        cases.put("{\"action\":\"None\",\"reason\":\"The request names no station.\"}", new Uno.Action.None(null, "The request names no station."));
+        cases.put("{\"action\":\"none\",\"reason\":\"" + "a".repeat(150) + "b".repeat(150) + "\"}", new Uno.Action.None(null, "a".repeat(150) + "b".repeat(150)));
         // A reserve that is null is 0. The module is not checked here: the runtime refuses an unknown module.
         cases.put("{\"action\":\"start\",\"module\":\"dig_a_mine\",\"robot\":3,\"from\":\"a\",\"to\":\"b\",\"item\":\"minecraft:coal\",\"quantity\":8,\"reserve\":null}",
             new Uno.Action.Start(new Order("dig_a_mine", 3, "a", "b", Items.COAL, 8, 0)));
@@ -1739,6 +1748,7 @@ public class MindCraftTests {
      * T18 for the Claude provider. A local HTTP server is in the place of the API of Anthropic.
      * This checks the code of the provider and the SDK inside the game: the request that goes out, and each kind of answer.
      * The provider reads one action from an answer, and the input and output tokens of the answer.
+     * Since increment B the answer also has the sentence of the model for "none" and for a report: the voice (D42, point 1).
      * It does not check the language model. LiveTests does that with the real service.
      * Also: Uno accepts one request at a time from each player.
      */
@@ -1768,14 +1778,17 @@ public class MindCraftTests {
         Uno.Provider claudeCode = claude::answer;
 
         String request = "Carry eight pieces of coal to the destination";
-        String none = modelAction("none", "You did not give the source.");
+        String none = modelAction("none", "You did not give the source."), reported = "The job is done: I delivered 8 items.";
+        Supplier<String> report = () -> modelAction("report", reported, "robot", rig.id);
         Supplier<String> pause = () -> modelAction("pause", "", "robot", rig.id);
         Supplier<String> start = () -> modelAction("start", "", "robot", rig.id, "module", MindRuntime.TRANSPORT, "from", rig.from, "to", rig.to,
             "item", "minecraft:coal", "quantity", 8, "reserve", 0);
         String error = "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"test\"}}";
         List<ClaudeCase> cases = List.of(
             // A missing value is not a failure of the service: the answer has a different sentence.
-            new ClaudeCase(200, () -> claudeMessage("end_turn", none), "I cannot propose a job: You did not give the source."),
+            new ClaudeCase(200, () -> claudeMessage("end_turn", none), "You did not give the source."),
+            // The report of the job that is done, with the sentence of the model.
+            new ClaudeCase(200, () -> claudeMessage("end_turn", report.get()), reported),
             new ClaudeCase(200, () -> claudeMessage("refusal", null), "(the model declined the request)"),
             new ClaudeCase(200, () -> claudeMessage("max_tokens", "{\"action\":"), "(the answer of the model is incomplete)"),
             new ClaudeCase(401, () -> error, "(the API key is not valid or has no permission)"),
@@ -1784,7 +1797,7 @@ public class MindCraftTests {
             new ClaudeCase(200, () -> claudeMessage("end_turn", pause.get()), "I cannot pause the job: Robot #"),
             new ClaudeCase(200, () -> claudeMessage("end_turn", start.get()), "Proposal: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'"),
             new ClaudeCase(-1, () -> "", "(the model service is not reachable)"));
-        int proposalCase = 6;
+        int proposalCase = 7;
 
         List<String> answers = new CopyOnWriteArrayList<>(), busy = new CopyOnWriteArrayList<>();
         AtomicReference<Object> direct = new AtomicReference<>();
@@ -1844,6 +1857,8 @@ public class MindCraftTests {
         }
         sequence
             .thenExecute(() -> {
+                // D42, points 15 and 16: the sentence of the model in "reason" is the whole answer to "none" and to a report.
+                check(answers.get(0).equals("You did not give the source.") && answers.get(1).equals(reported), answers.subList(0, 2).toString());
                 // The request that went to the API for the complete order.
                 JsonObject message = JsonParser.parseString(sent.get()).getAsJsonObject();
                 JsonObject output = message.getAsJsonObject("output_config");
@@ -1868,6 +1883,12 @@ public class MindCraftTests {
                 check(system.contains("If the player names no robot, use the only free robot. If no robot is free and the context has exactly one robot, "
                     + "use that robot. In each other case the action is \"none\": ask for the robot number.")
                     && system.contains("A \"start\" for a robot that is not free replaces the open job of that robot"), system);
+                // D42, points 1, 4 and 5: the voice of Uno, its limits, and its numbers. "reason" carries the sentence of a report and of "none".
+                List<String> voice = List.of("competent, curious and slightly ironic", "in the first person", "two sentences and 300 characters at most",
+                    "Use only the numbers of the context and of the request", "Do not calculate", "You do not remember an earlier",
+                    "\"reason\" is your sentence for the player: only for \"report\" and \"none\"", "For each other action, \"reason\" is empty text.");
+                check(voice.stream().allMatch(system::contains), "the system text has not: "
+                    + voice.stream().filter(rule -> !system.contains(rule)).toList() + "\n" + system);
                 // The context: the station names of the player, the robot numbers and the "free" flag, as before the actions (D21).
                 String content = message.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString();
                 String prefix = "Context: ", suffix = "\nRequest: " + request;
@@ -1905,7 +1926,7 @@ public class MindCraftTests {
     /**
      * Increment A: a provider answers with one action from the closed list of D29. Uno does not trust the answer.
      * A change without a new value or with a negative quantity gives no proposal.
-     * A "none" action gives its reason. In each case the job does not change.
+     * A "none" action gives its sentence alone (since increment B, D42 point 15). In each case the job does not change.
      * During the test the job waits for materials: its state does not change by itself.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
@@ -1919,8 +1940,8 @@ public class MindCraftTests {
             "I cannot propose a change: the request gives no new quantity and no new reserve. I created no proposal.");
         cases.put("{\"action\":\"change\",\"robot\":%d,\"station\":null,\"quantity\":-5,\"reserve\":null}",
             "I cannot propose this change: The quantity must be positive. The reserve must not be negative.");
-        // The sentence of "none" ends with a full stop. The answers that Uno cannot read are in a_parse_of_an_answer.
-        cases.put("{\"action\":\"none\",\"reason\":\"the station is missing\"}", "I cannot propose a job: the station is missing.");
+        // The sentence of "none" is the answer, as the provider wrote it. The answers that Uno cannot read are in a_parse_of_an_answer.
+        cases.put("{\"action\":\"none\",\"reason\":\"The station is missing.\"}", "The station is missing.");
 
         List<String> answers = new CopyOnWriteArrayList<>();
         int[] job = new int[2];
@@ -2249,7 +2270,7 @@ public class MindCraftTests {
         rig.chest(rig.dest).setItem(0, new ItemStack(Items.COAL, 5));
         List<Uno.Context> contexts = new CopyOnWriteArrayList<>();
         List<String> answers = new CopyOnWriteArrayList<>();
-        String none = "I cannot propose a job: The test read the context.";
+        String none = "The test read the context.";
         int[] job = new int[2];
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> job[0] = rig.startJob(24, 10).id)
@@ -2441,6 +2462,263 @@ public class MindCraftTests {
         check(newest.size() == 20 && newest.get(0).job() == 1005 && newest.get(19).job() == 1024
             && newest.get(0).age().equals("20 min ago") && newest.get(19).age().equals("1 min ago"), newest.toString());
         helper.succeed();
+    }
+
+    /**
+     * Increment B, D42 point 3: the fixed sentences about the uncertain numbers. They give the numbers that the facts do not give,
+     * with their caution. The cases and the limits are the cases of b_facts_of_uncertain_numbers: the same record that the test writes,
+     * the flag of the robot and a game time, without a robot. A stock that no robot observed has no number: it gets no sentence.
+     */
+    @GameTest(template = EMPTY)
+    public static void b_fixed_sentences_of_uncertain_numbers(GameTestHelper helper) {
+        long now = 100_000;
+        String data = " The last recorded data, not the current state: 4 on board, 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago).";
+        String silent = "Robot #9 of job 900 has not contacted me for a while: I do not know if it is working." + data;
+        String stopped = "Robot #9 of job 900 is not running or not loaded.";
+        String recovered = "After a recovery of job 900 on robot #9 the totals can be inexact: the record says 6 delivered.";
+        record Case(Job job, boolean running, List<String> sentences) {
+        }
+        Map<String, Case> cases = new LinkedHashMap<>();
+        cases.put("certain, at the two limits", new Case(record(900, now, job -> {
+        }), true, List.of()));
+        cases.put("an old observation", new Case(record(900, now, job -> job.fromSeenAt--), true,
+            List.of("I last observed 'depot' 5 min ago: it had 50 then.")));
+        cases.put("two old observations", new Case(record(900, now, job -> {
+            job.fromSeenAt--;
+            job.toSeenAt = now - 7200;
+        }), true, List.of("I last observed 'depot' 5 min ago: it had 50 then.", "I last observed 'furnace' 6 min ago: it had 6 then.")));
+        cases.put("a silent robot", new Case(record(900, now, job -> job.lastContact--), true, List.of(silent)));
+        cases.put("no call since the server start", new Case(record(900, now, job -> job.lastContact = MindRuntime.UNKNOWN), true, List.of(silent)));
+        cases.put("a robot that is not running", new Case(record(900, now, job -> {
+        }), false, List.of(stopped + data)));
+        // RECOVERY gives each number in one sentence, also when the robot is not running.
+        cases.put("RECOVERY", new Case(record(900, now, job -> {
+            job.state = State.RECOVERY;
+            job.cause = Cause.LOAD_DIFFERS;
+            job.reason = "the robot holds 0, the record says 4";
+        }), false, List.of("Job 900 on robot #9: I cannot say how it went. Recorded reason: the robot holds 0, the record says 4."
+            + " The recorded data can be wrong: 6 delivered, 4 on board, 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago)."
+            + " You decide whether to resume or cancel.")));
+        cases.put("after a recovery", new Case(record(900, now, job -> job.recoveries = 1), true, List.of(recovered)));
+        cases.put("after a recovery, a robot that is not running and a stock never observed", new Case(record(900, now, job -> {
+            job.recoveries = 1;
+            job.toSeen = MindRuntime.UNKNOWN;
+        }), false, List.of(recovered, stopped + " The last recorded data, not the current state: 4 on board and 50 in 'depot' (seen 5 min ago).")));
+        cases.put("a stock never observed", new Case(record(900, now, job -> job.toSeen = MindRuntime.UNKNOWN), true, List.of()));
+        List<String> wrong = new ArrayList<>();
+        cases.forEach((name, test) -> {
+            List<String> said = new JobAccount(test.job(), test.running(), now).cautions();
+            if (!said.equals(test.sentences())) wrong.add(name + ": " + said);
+        });
+        check(wrong.isEmpty(), wrong.toString());
+        helper.succeed();
+    }
+
+    /** A written request, the answer of the provider of a test, and a check of the answer of Uno. */
+    private record Said(String request, Supplier<String> json, Predicate<String> answer) {
+    }
+
+    /** Sends each request with the answer of its case, and checks the answer of Uno. Then the check of the test, after each case. */
+    private static GameTestSequence said(GameTestSequence sequence, MinecraftServer server, Actor player, List<Said> cases, Runnable after) {
+        List<String> answers = new CopyOnWriteArrayList<>();
+        for (Said test : cases) {
+            sequence = ask(sequence, server, player, test.request(), gives(test.json()), 5000, answers)
+                .thenExecute(() -> {
+                    String answer = answers.get(answers.size() - 1);
+                    MindCraft.LOGGER.info("the voice: {} -> {}", test.json().get(), answer);
+                    check(test.answer().test(answer), "the answer to " + test.json().get() + ": " + answer);
+                    after.run();
+                });
+        }
+        return sequence;
+    }
+
+    /**
+     * Increment B, D42 points 4, 5 and 16: the voice of a report. A provider of the test gives a report with a sentence for the player.
+     * Two jobs of one player wait for materials, as in a_report_and_pause_by_words. Both use the destination of the first rig.
+     * Nothing is uncertain: the robots run and call, and the observations are recent. Thus no fixed sentence comes before the voice.
+     * A sentence that passes the checks is the answer. A number that the server did not send, an empty sentence, a sentence of 301
+     * characters and three sentences get the fixed report of A, with the rules of D29.2. A number of the request passes.
+     * A target that fits no job, or two jobs, gets the voice when the sentence passes the checks.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_voice_of_a_report(GameTestHelper helper) {
+        Actor player = player("b_voice");
+        Rig[] rigs = twoRigs(helper, "b_voice", player);
+        Rig a = rigs[0], b = rigs[1];
+        MinecraftServer server = a.level.getServer();
+        String ask = " Tell me the robot number of the job. I did nothing.", nowhere = "b_voice_nothing";
+        // The start of the line of each job in the fixed report of A: it has no age.
+        Supplier<String> reportA = () -> "Job " + a.job().id + ", robot #" + a.id + ": carry 24 items from '" + a.from + "' to '" + a.to
+            + "', reserve 0. I delivered 0 items.";
+        Supplier<String> reportB = () -> "Job " + b.job().id + ", robot #" + b.id + ": carry 16 items from '" + b.from + "' to '" + a.to
+            + "', reserve 0. I delivered 0 items.";
+        Predicate<String> fixedA = answer -> answer.startsWith(reportA.get()) && !answer.contains("\n");
+        Supplier<String> waits = () -> "Job " + a.job().id + " on robot #" + a.id + " waits for coal: 0 of 24 delivered.";
+        String sentence300 = "W" + "a".repeat(298) + ".", invented = "I delivered 987654 items.";
+        List<Said> cases = List.of(
+            new Said("How is it going?", () -> modelAction("report", waits.get(), "station", a.from), answer -> answer.equals(waits.get())),
+            new Said("x", () -> modelAction("report", invented, "station", a.from), fixedA),
+            new Said("Did you deliver 987654 items?", () -> modelAction("report", "No: 0 of 24, not 987654.", "station", a.from),
+                answer -> answer.equals("No: 0 of 24, not 987654.")),
+            new Said("x", () -> modelAction("report", "", "station", a.from), fixedA),
+            new Said("x", () -> modelAction("report", " ", "station", a.from), fixedA),
+            new Said("x", () -> modelAction("report", sentence300, "station", a.from), answer -> answer.equals(sentence300)),
+            new Said("x", () -> modelAction("report", sentence300 + "a", "station", a.from), fixedA),
+            new Said("x", () -> modelAction("report", "Both jobs wait for coal. Their sources are empty."),
+                answer -> answer.equals("Both jobs wait for coal. Their sources are empty.")),
+            // Three sentences, without a target: the report on all jobs.
+            new Said("x", () -> modelAction("report", "Both jobs wait for coal. Their sources are empty. Bring coal."),
+                answer -> answer.split("\n").length == 2 && Stream.of(answer.split("\n")).anyMatch(line -> line.startsWith(reportA.get()))
+                    && Stream.of(answer.split("\n")).anyMatch(line -> line.startsWith(reportB.get()))),
+            // A station of two jobs, and a station of no job: the voice, or the sentence of D29.2.
+            new Said("x", () -> modelAction("report", "Both robots wait for coal.", "station", a.to), answer -> answer.equals("Both robots wait for coal.")),
+            new Said("x", () -> modelAction("report", invented, "station", a.to),
+                answer -> answer.equals("2 of your open jobs use the station '" + a.to + "'." + ask)),
+            new Said("x", () -> modelAction("report", "No job of yours uses that station.", "station", nowhere),
+                answer -> answer.equals("No job of yours uses that station.")),
+            new Said("x", () -> modelAction("report", invented, "station", nowhere),
+                answer -> answer.equals("None of your open jobs uses the station '" + nowhere + "'." + ask)));
+        GameTestSequence sequence = helper.startSequence()
+            .thenWaitUntil(a::enroll).thenWaitUntil(a::restarted)
+            .thenWaitUntil(b::enroll).thenWaitUntil(b::restarted)
+            .thenExecute(() -> {
+                a.startJob(24, 0);
+                a.runtime.start(player, new Order(MindRuntime.TRANSPORT, b.id, b.from, a.to, Items.COAL, 16, 0));
+            })
+            .thenWaitUntil(() -> {
+                a.state(State.WAITING);
+                b.state(State.WAITING);
+            });
+        // A report reads: it changes no job and creates no proposal.
+        said(sequence, server, player, cases, () -> {
+            check(!Uno.hasProposal(player), "Uno created a proposal");
+            check(a.job().state == State.WAITING && a.job().revision == 0 && b.job().state == State.WAITING && b.job().revision == 0,
+                "a report changed a job: " + a.describe() + "\n" + b.describe());
+        }).thenSucceed();
+    }
+
+    /** The answer is these fixed sentences in some order, then the voice. An age in seconds is "N s ago": it changes at each tick. */
+    private static Predicate<String> fixedThenVoice(String voice, List<Supplier<String>> fixed) {
+        return answer -> {
+            String said = answer.replaceAll("\\d+ s ago", "N s ago"), rest = said.substring(0, Math.max(0, said.length() - voice.length()));
+            List<String> sentences = fixed.stream().map(Supplier::get).toList();
+            return said.endsWith(voice) && rest.length() == sentences.stream().mapToInt(sentence -> sentence.length() + 1).sum()
+                && sentences.stream().allMatch(rest::contains);
+        };
+    }
+
+    /**
+     * Increment B, D42 points 3 and 16: the fixed sentences about the uncertain numbers come before the voice.
+     * Two jobs of one player. Job A waits for materials, then the runtime puts it in RECOVERY. Job B is done. The test moves its
+     * last observation of the destination back by 6001 ticks: the observation is old. The robots run and call.
+     * A report about one job gets the fixed sentences of that job. A report without a target, or with a target that fits no job, gets
+     * the fixed sentences of each job. A sentence that fails a check gets the fixed report of A, without the fixed sentences.
+     * Then the owner resumes job A, and the computer of robot B shuts down: after a recovery, and a robot that is not running.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_voice_after_uncertain_numbers(GameTestHelper helper) {
+        Actor player = player("b_uncertain");
+        Rig[] rigs = twoRigs(helper, "b_uncertain", player);
+        Rig a = rigs[0], b = rigs[1];
+        MinecraftServer server = a.level.getServer();
+        b.chest(b.source).setItem(0, new ItemStack(Items.COAL, 64));
+        String voice = "Something here needs your eyes.";
+        Supplier<String> recoveryA = () -> "Job " + a.job().id + " on robot #" + a.id + ": I cannot say how it went. Recorded reason: the test changed the record."
+            + " The recorded data can be wrong: 0 delivered, 0 on board and 0 in '" + a.from + "' (seen N s ago). You decide whether to resume or cancel.";
+        Supplier<String> oldB = () -> "I last observed '" + b.to + "' 5 min ago: it had 8 then.";
+        List<Said> first = List.of(
+            new Said("x", () -> modelAction("report", voice, "robot", a.id), fixedThenVoice(voice, List.of(recoveryA))),
+            new Said("x", () -> modelAction("report", voice, "robot", b.id), fixedThenVoice(voice, List.of(oldB))),
+            new Said("x", () -> modelAction("report", voice), fixedThenVoice(voice, List.of(recoveryA, oldB))),
+            // A station of a job that is done: no open job uses it.
+            new Said("x", () -> modelAction("report", voice, "station", b.to), fixedThenVoice(voice, List.of(recoveryA, oldB))),
+            new Said("x", () -> modelAction("report", "I delivered 987654 items.", "robot", a.id),
+                answer -> answer.startsWith("Job " + a.job().id + ", robot #" + a.id + ": carry 24 items") && answer.contains("I cannot say how it went.")
+                    && !answer.contains("987654") && !answer.contains("The recorded data can be wrong")));
+        List<Said> second = List.of(new Said("x", () -> modelAction("report", voice), fixedThenVoice(voice, List.of(
+            () -> "After a recovery of job " + a.job().id + " on robot #" + a.id + " the totals can be inexact: the record says 0 delivered.",
+            () -> "Robot #" + b.id + " of job " + b.job().id + " is not running or not loaded. The last recorded data, not the current state: 0 on board, 56 in '"
+                + b.from + "' (seen N s ago) and 8 in '" + b.to + "' (seen 5 min ago)."))));
+        Runnable noProposal = () -> check(!Uno.hasProposal(player), "Uno created a proposal");
+        GameTestSequence sequence = helper.startSequence()
+            .thenWaitUntil(a::enroll).thenWaitUntil(a::restarted)
+            .thenWaitUntil(b::enroll).thenWaitUntil(b::restarted)
+            .thenExecute(() -> {
+                a.startJob(24, 0);
+                b.startJob(8, 0);
+            })
+            .thenWaitUntil(() -> {
+                a.state(State.WAITING);
+                b.state(State.DONE);
+            })
+            .thenExecute(() -> {
+                a.runtime.recovery(a.job(), Cause.LOAD_DIFFERS, "the test changed the record");
+                b.job().toSeenAt = b.level.getGameTime() - JobAccount.OLD_TICKS - 1;
+            });
+        sequence = said(sequence, server, player, first, noProposal)
+            .thenExecute(() -> {
+                a.runtime.control(player, a.id, "resume");
+                MindCraft.command(server, "computercraft shutdown #" + b.id);
+            })
+            .thenWaitUntil(() -> check(a.job().state == State.WAITING && a.job().recoveries == 1 && RobotApi.live(b.id) == null,
+                "the resume or the shutdown is not complete: " + a.describe() + "\n" + b.describe()));
+        said(sequence, server, player, second, noProposal)
+            .thenExecute(() -> a.runtime.control(player, a.id, "cancel"))
+            .thenSucceed();
+    }
+
+    /**
+     * Increment B, D42 point 15: the answer to "none" is the sentence of the provider alone, without "I cannot propose a job".
+     * The player has no station, no robot and no job: the context that the server sends has no digit.
+     * A number that the server did not send, an empty sentence, three sentences and 301 characters get one fixed sentence.
+     * A number of the request passes.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_voice_of_none(GameTestHelper helper) {
+        Actor player = player("b_none");
+        String cannot = "I cannot answer that. I did nothing.", none = "You have no station yet: register one with the station command.";
+        List<Said> cases = List.of(
+            new Said("Which stations do I have?", () -> modelAction("none", none), answer -> answer.equals(none)),
+            new Said("x", () -> modelAction("none", "You have 3 stations."), answer -> answer.equals(cannot)),
+            new Said("Do I have 3 stations?", () -> modelAction("none", "You do not have 3 stations: you have none."),
+                answer -> answer.equals("You do not have 3 stations: you have none.")),
+            new Said("x", () -> modelAction("none", ""), answer -> answer.equals(cannot)),
+            new Said("x", () -> modelAction("none", "One. Two. Three."), answer -> answer.equals(cannot)),
+            new Said("x", () -> modelAction("none", "W" + "a".repeat(299) + "."), answer -> answer.equals(cannot)));
+        said(helper.startSequence(), helper.getLevel().getServer(), player, cases,
+            () -> check(!Uno.hasProposal(player), "Uno created a proposal")).thenSucceed();
+    }
+
+    /**
+     * Increment B, D42 point 1: when Uno acts, the server writes the answer. A provider gives each action with a sentence that
+     * would pass the checks. Uno does not use it: a pause gets the text of the runtime, the other actions get the text of a proposal.
+     * The job waits for materials. The pause runs. Then the resume, the change, the cancellation and the start are proposals.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_no_voice_for_an_action(GameTestHelper helper) {
+        Actor player = player("b_no_voice");
+        Rig rig = new Rig(helper, "b_no_voice", 0, 1000, player);
+        String sentence = "Done, as you asked.", confirm = ". I have done nothing yet. Confirm with /uno confirm.";
+        Supplier<String> job = () -> "job " + rig.job().id + " on robot #" + rig.id + " (carry minecraft:coal from '" + rig.from + "' to '" + rig.to + "')";
+        List<Said> cases = List.of(
+            new Said("x", () -> modelAction("pause", sentence, "robot", rig.id),
+                answer -> answer.equals("Job " + rig.job().id + " on robot #" + rig.id + " is paused. The cargo stays on board.")),
+            new Said("x", () -> modelAction("resume", sentence, "robot", rig.id), answer -> answer.equals("Proposal: resume " + job.get() + confirm)),
+            new Said("x", () -> modelAction("change", sentence, "robot", rig.id, "reserve", 2), answer -> answer.equals("Proposal: change " + job.get()
+                + ". Quantity to carry: 24, unchanged. Reserve to leave in '" + rig.from + "': from 0 to 2" + confirm)),
+            new Said("x", () -> modelAction("cancel", sentence, "robot", rig.id),
+                answer -> answer.equals("Proposal: cancel " + job.get() + ". The cargo stays on board the robot" + confirm)),
+            new Said("x", () -> modelAction("start", sentence, "robot", rig.id, "module", MindRuntime.TRANSPORT, "from", rig.from, "to", rig.to,
+                "item", "minecraft:coal", "quantity", 8, "reserve", 0), answer -> answer.equals("Proposal: cancel " + job.get()
+                + ", and start in its place: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'. Reserve to leave in '" + rig.from
+                + "': 0. Robot #" + rig.id + ". The load can change until the confirmation: the new job counts the load that the robot holds then" + confirm)));
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> rig.state(State.WAITING));
+        said(sequence, rig.level.getServer(), player, cases, () -> check(rig.job().revision == 0 && rig.job().state.open(), rig.describe()))
+            .thenExecute(() -> rig.runtime.control(player, rig.id, "cancel"))
+            .thenSucceed();
     }
 
     /**
@@ -3253,7 +3531,7 @@ public class MindCraftTests {
                 usage(guest, 0, 0, 0);
             });
         sequence = ask(sequence, server, guest, "x", (request, context) -> answer("{\"action\":\"none\",\"reason\":\"the test read it\"}"), 5000, answers)
-            .thenExecute(() -> check(answers.get(1).equals("I cannot propose a job: the test read it."), answers.get(1)));
+            .thenExecute(() -> check(answers.get(1).equals("the test read it"), answers.get(1)));
         sequence.thenSucceed();
     }
 

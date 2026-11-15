@@ -80,6 +80,12 @@ The test of the Claude provider with the real service is separate. It needs `ANT
 ./gradlew runGameTestServer -Plive
 ```
 
+The measurement of the models with the real service is separate too (D42, point 7). It needs the same key, and it sends 19 requests to one model. `-Pmodel` names the model of the run, also with `-Plive`. Without it, the run uses the setting. It writes its record to `run-gametest/measurement-<model>.md` and to the server log. Each paid run needs the consent of the project owner:
+
+```bash
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-haiku-5-5
+```
+
 `check` compiles the code and checks the rules of `CLAUDE.md` that a program can check. Its task `checkRules` refuses a generated file, an API key, a local path or an email address in a file that a commit can hold. It also refuses a class of CC: Tweaked outside `dan200.computercraft.api`, and a test that sets the provider of the server outside `withServerProvider`:
 
 ```bash

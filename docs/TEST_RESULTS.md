@@ -13,9 +13,9 @@ Dates: 2026-11-12 (S0 to S2 and the review) and 2026-11-13 (increment A). Enviro
 | **Static check** | A program reads the files of the repository without a start of the game. Command: `gradlew checkRules`, a part of `gradlew check` |
 
 No test uses a simulation of the game. Where a condition is built artificially, the table says so.
-Three tests use a false server in place of the Anthropic API: `t18_claude_provider`, since increment A `a_screen_model_lines`, and since increment B `b_model_of_the_setting`. They verify the code of the provider and of the screen, not the language model.
-One test calls the real Claude service: `t18_claude_live`. It is not part of the normal run. Command: `gradlew runGameTestServer -Plive`.
-Reasons: each run costs four requests on the account of the key owner, and a language model can answer differently at each run.
+Four tests use a false server in place of the Anthropic API: `t18_claude_provider`, since increment A `a_screen_model_lines`, and since increment B `b_model_of_the_setting` and `b_measurement_with_the_stand_in`. They verify the code of the provider, of the screen and of the harness of the measurement, not the language model.
+Two tests call the real Claude service: `t18_claude_live`, with `gradlew runGameTestServer -Plive`, and since ticket #26 the measurement `b_measurement`, with `gradlew runGameTestServer -Pmeasure -Pmodel=<model>`. They are not part of the normal run.
+Reasons: each run costs requests on the account of the key owner, four or 19, and a language model can answer differently at each run.
 
 The test server normally runs ticks without pauses. The computers of CC: Tweaked run in real time.
 Thus the test class keeps the server at 20 ticks per second, as in a normal game.
@@ -166,6 +166,10 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 141 | 105 of 105 | None. Ticket #25: the conversation part comes first on the screen. Server line: `All 105 required tests passed :)` |
 | 142 | 105 of 105 | None. Ticket #25, the committed code `a2b66fd`. Server line: `All 105 required tests passed :)` |
 | 143 | 106 of 106 | None. The integration branch after the merge of ticket #25. Server line: `All 106 required tests passed :)` |
+| 150 | 105 of 106, expected | Ticket #26, red run: the new test `b_measurement_with_the_stand_in`, with a harness that sends no request |
+| 151 | 106 of 106 | None. Ticket #26: the harness of the measurement. Server line: `All 106 required tests passed :)` |
+| 152 | 106 of 106 | None. Ticket #26: the build script reads `-Pmodel` from the command line, and one more note in the record. Server line: `All 106 required tests passed :)` |
+| 153 | 106 of 106 | None. Ticket #26, the code of the commit: one comment of the test changed after run 152. Server line: `All 106 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -189,6 +193,7 @@ Runs 129 to 131 are the runs of ticket #22, on the integration branch at `c63d75
 Run 132 is the run of the integration branch after the merge of ticket #22.
 Runs 140 to 142 are the runs of ticket #25, on the integration branch at `c075de7`.
 Run 143 is the run of the integration branch after the merge of ticket #25.
+Runs 150 to 153 are the runs of ticket #26, on the integration branch at `002c636`.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -1719,6 +1724,173 @@ Each test of this section is in the game and automatic. No test opens a client s
 - The look of the screen in a client. No automatic test opens a client screen. The play session of increment B has the step "Open the screen in a small window".
 - The height in a window of about 850 × 510 pixels (D40). A long sentence of Uno can make the conversation part as tall as the window (D42, point 13).
 
+## Increment B — the harness of the measurement (ticket #26)
+
+Date: 2026-11-15. The harness of the measurement of the models: one fixed set of requests, the world that they need, and a record for this file. See D42, points 7, 8 and 20, D33 and D32.
+The code is the integration branch of increment B at `002c636`, with tickets #16 to #24, and the changes of this ticket. No part of the runtime and no Lua module changed. The schema and the system text of the Claude provider did not change.
+**No paid run occurred.** No run of this ticket called the real Claude service. The measurement itself is ticket #27.
+
+### How to run the measurement
+
+- Each run calls the real Claude service with the key of the project owner. It costs money. **Each run needs the consent of the project owner** (CLAUDE.md).
+- The budget: 5 dollars for all paid runs of increment B: three passes of the measurement at most, and the play session (D42, point 8).
+- **Estimate, not a measurement:** one pass of about 20 requests on the three models costs about 0.45 dollars: Opus 0.29, Sonnet 0.15, Haiku 0.01 (D42, point 8).
+- The key is `ANTHROPIC_API_KEY` in the environment. It is not in a file or in the command.
+- One run for each model. The command:
+
+```bash
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-haiku-5-5
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-sonnet-5-5
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-opus-5-5
+```
+
+- `-Pmeasure` selects the namespace `mindcraft_measure`: the run holds only the test `b_measurement`. The log must say `Enabled Gametest Namespaces: [mindcraft_measure]`.
+- `-Pmodel` names the model of the run. Without it, the run uses the setting `model` of `run-gametest/config/mindcraft-common.toml`. The log line `b_measurement uses Claude (…)` names the model. `-Pmodel` also works with `-Plive`.
+- The output: the file `run-gametest/measurement-<model>.md`, for example `run-gametest/measurement-claude-haiku-5-5.md`. The server log has the same text after the line "The measurement, the record for TEST_RESULTS.md:". Git ignores the folder.
+- The server log also has one line for each request at its answer: "The measurement, request N of 19: …", the row of the table.
+- The file is a section with a heading of level 4. It goes under "The record of the measurement (ticket #27)" below, without a change by hand. Then the agent marks each sentence that can contradict the record, and the project owner decides (D42, point 20).
+- The test `b_measurement` does not judge the model. It fails only when the harness cannot build the world or write the record. A run must still show `All 1 required tests passed :)`.
+- A run sends 19 requests, one after the other. The time limit of the test is 12000 ticks: 10 minutes.
+
+### The set
+
+The 19 requests of `Measurement.SET`, in their order. Type: the code of the set, read by the agent. The automatic test below runs each one.
+The world has seven robots with real turtles and chests, and a third station. The robot numbers come at the run. No request names a robot number.
+
+| No. | Case | Request | Expected action | The state that it needs |
+| --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | A report about each job: no job named | Each job of the world |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | A report about the job of the depot | depot to furnace: keep at least 64, reserve 32. The depot has 32: `WAITING`, `SOURCE_AT_RESERVE` |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | A report about the job of the mine | mine to smithy: a transport of 24 with a robot without fuel: `BLOCKED`, `OUT_OF_FUEL` |
+| 4 | T21: a job in `RECOVERY` | How did the job of the warehouse go? | A report about the job of the warehouse | warehouse to kitchen: a transport of 24. The harness empties the robot after its pickup: `RECOVERY`, `LOAD_DIFFERS` |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | A report about the job of the cellar | cellar to bakery: a transport of 32 from an empty cellar, `WAITING`. Then the computer of the robot shuts down |
+| 6 | T21: an old observation | How much coal is in the tower now? | A report about the job of the harbor | harbor to tower: a transport of 40. The robot delivers 16 and waits. The owner pauses the job. The last observation of the tower is 6001 ticks old: the harness writes that time in the record |
+| 7 | D32: `BLOCKED` with a load on board | Is the job of the workshop done? | A report about the job of the storage | storage to workshop: a transport of 64. The storage has 24 and the workshop has no chest: `BLOCKED`, `DESTINATION_NO_INVENTORY`, 24 on board |
+| 8 | A question about the diary | What happened while I was away? | A report about each job: no job named | The diary of the seven jobs |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | A report about the job of the depot | Row 2. The robot starts with a fuel level of 1000 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | A start: carry 16 x `minecraft:coal` from 'quarry' to 'kiln', reserve 0, with the robot of the quarry | quarry to kiln: a transport of 16, `DONE`. Its robot is the only free robot |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | A change of the job of the depot: reserve 16 | Row 2 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | A resume of the job of the harbor | Row 6: `PAUSED` |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | A cancellation of the job of the mine | Row 3 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | A start: keep at least 64 x `minecraft:coal` in 'smelter', taken from 'depot', reserve 32, with the robot of the depot. It is a replacement (D42, point 10) | Row 2, and the station 'smelter' |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | "none" | None |
+| 16 | None: a value is missing | Carry some coal to the smithy. | "none": the request gives no quantity and no source | None |
+| 17 | None: a question from the context | Which of my robots are free? | "none": the voice answers from the context (D42, point 15) | The robots of the world |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | A report about the job of the quarry | Row 10 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | A pause of the job of the depot | Row 2. The last request: a pause acts at once, and it is the only request that changes the world |
+
+Rows 16 and 17 are added in the implementation: the spec does not name them. See D42, point 7.
+
+When the action of the model is the expected action ("right" in the record):
+
+- A start: the same order. A "none": a "none".
+- A change, a pause, a resume and a cancellation: the search of Uno (D29.2) finds the expected job for the target. A change also gives the same new values.
+- A report: no job named, or the robot or a station of the expected job. Its target selects only the fixed sentences before the voice (D42, point 16). A report about each job is right only with no job named.
+
+### Automatic in-game tests
+
+The test is in the game and automatic. It uses the Claude provider against the local stand-in of the service: no request reaches the real service.
+
+| Test | What it does | Result in run 151 |
+| --- | --- | --- |
+| `b_measurement_with_the_stand_in` (new), in the batch `b_measurement` | The harness of the measurement builds its world and sends the 19 requests. The stand-in reads the request in the body of each call. It gives the expected action, with the sentence "I read the facts of this request." for a report and a "none". Five answers differ. Row 7: a report with "All done: I delivered 64.". Row 9: a report with "I have 987654 fuel left.". Row 14: a change of the reserve to 0, not a start. Row 15: text that is not JSON. Row 17: the answer 500 of the service. Each answer with the status 200 has 2000 input tokens and 100 output tokens | Passed. See below |
+
+What `b_measurement_with_the_stand_in` checked in runs 151 to 153:
+
+- The set: 19 results, 19 calls of the stand-in, and the seven actions among the expected actions. Each call names the model of the setting.
+- The actions: 16 right. Rows 14, 15 and 17 are not right.
+- The checks: 10 `PASSED`, 1 `FAILED` (row 9, with its unused sentence), 2 `NO_VALID_ACTION` (rows 15 and 17), and 6 `NOT_NEEDED` (the start, the change, the resume, the cancellation, the wrong change of row 14 and the pause). Row 17 has no action and zero tokens.
+- The answers of Uno. Row 7: "All done: I delivered 64.": **the check passes, because 64 is the quantity of the job.** This is the limit of D32: the record shows the sentence next to the facts, with `BLOCKED` and 24 on board. Row 9: the fixed report of the job, without 987654. Row 14: the proposal of a change. Row 15: "I did not get a valid configuration. I created no proposal.". Row 17: "I cannot interpret the request now (the model service answered with error 500). The jobs in progress continue.". Row 10: the proposal of the start.
+- The world, in the facts that the provider got. Each context has 15 stations, 7 robots and 7 jobs: only the world of the measurement. Row 2: `WAITING`, `SOURCE_AT_RESERVE`, 0 above the reserve, 54 still to carry. Row 3: `BLOCKED`, `OUT_OF_FUEL`, fuel 0. Row 4: `RECOVERY`, `LOAD_DIFFERS`, no delivered total and no load on board. Row 5: no load on board, and one uncertain sentence: "The robot is not running or not loaded. …". Row 6: `PAUSED`, 16 delivered, no stock of the tower, and "The last observation of 'tower' is old. Not given: its stock.". Row 7: `BLOCKED`, `DESTINATION_NO_INVENTORY`, 24 on board of 64, 0 delivered. Row 9: a fuel level and its trips. Row 18: `DONE`, 16 delivered. Row 10: the robot of the quarry is the only free robot. Row 8: lines of the diary of the seven jobs.
+- After the set: the job of the depot is `PAUSED`, and the player has no proposal.
+- The record: the heading, the table with 19 rows, the totals, and the blocks of rows 7, 8 and 15. The file `run-gametest/measurement-stand-in.md` holds the same text as the record.
+
+The record of run 152, a part of it. Type: an output of the automatic test above. The robot numbers and the times are those of that run.
+
+````text
+#### The harness with the stand-in of the service
+
+Type: in the game, automatic, with the Claude provider against the local stand-in of the service. No request reached the real service. Date: 2026-11-15T14:47:36Z. Model: `claude-haiku-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #93 | report, robot #93 | yes | PASSED | 2 | 2000 | 100 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #89 | report, robot #89 | yes | FAILED | 2 | 2000 | 100 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #89 | change, robot #89, reserve 0 | no | NOT_NEEDED | 1 | 2000 | 100 |
+| 17 | None: a question from the context | Which of my robots are free? | none | no answer | no | NO_VALID_ACTION | 2 | 0 | 0 |
+
+Totals: right actions: 16 of 19. Failed checks: 1. Passed checks: 10. Requests without a valid action: 2. Time: 36 ms. Tokens: 36000 in, 1800 out.
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: All done: I delivered 64.
+The answer of Uno: All done: I delivered 64.
+The facts of job 112 on robot #93: {"job":112,"robot":93,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+````
+
+The whole record of run 152 is about 28 KB. A request about each job gives the facts of the seven jobs and the lines of the diary.
+
+### The tests with the real service
+
+These tests call the real Claude service. **None of them ran for this ticket.** Each run costs money and needs the consent of the project owner.
+
+| Test | What it does | Result |
+| --- | --- | --- |
+| `b_measurement` (new, `LiveTests`, namespace `mindcraft_measure`) | The same harness, with the real Claude provider and the model of the run. It writes `run-gametest/measurement-<model>.md` | Not run. It compiles |
+| `t18_claude_live` (changed, `LiveTests`, namespace `mindcraft_live`) | As before. Its provider now has the model of the run: `-Pmodel`, or the setting | Not run. It compiles |
+
+### The check of the build script
+
+Type: a static check. Gradle evaluated `build.gradle` with an init script of the agent. The init script was in a scratch folder, not in the repository. It printed two properties of the run configuration `gameTestServer`. No game started.
+
+| Flags | `forge.enabledGameTestNamespaces` | `mindcraft.model` |
+| --- | --- | --- |
+| None | `mindcraft` | None |
+| `-Plive` | `mindcraft_live` | None |
+| `-Pmeasure` | `mindcraft_measure` | None |
+| `-Pmeasure -Pmodel=claude-sonnet-5-5` | `mindcraft_measure` | `claude-sonnet-5-5` |
+| `-Plive -Pmodel=claude-opus-5-5` | `mindcraft_live` | `claude-opus-5-5` |
+| `-Pmodel=claude-opus-5-5` | `mindcraft` | None |
+
+The first version of the script read the value with `findProperty('model')`. The evaluation failed for each flag: "Could not find method property() for arguments [mindcraft.model, root project …]". The Gradle project has a property `model` of its own. The script now reads `-Pmodel` from the command line (`gradle.startParameter.projectProperties`).
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 150, red | The new test. The harness has its interface only: it builds no world and sends no request | 105 of 106, expected. `b_measurement_with_the_stand_in` failed: "0 results, 0 calls of the stand-in" |
+| 151, green | The harness of the measurement, the two tests and the flags of the build script | **106 of 106**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `106 GAME TESTS COMPLETE`, `All 106 required tests passed :)` |
+| 152 | The code of run 151, with the build script that reads `-Pmodel` from the command line, and one more note in the record: "Uno cannot read the answer of the provider" | **106 of 106**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `106 GAME TESTS COMPLETE`, `All 106 required tests passed :)` |
+| 153 | The code of the commit: the code of run 152, with one comment of the test changed | **106 of 106**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `106 GAME TESTS COMPLETE`, `All 106 required tests passed :)` |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| Forge selects a test by the namespace of `@GameTest(templateNamespace)` before the namespace of the class. Thus one class has the two namespaces `mindcraft_live` and `mindcraft_measure` | `ForgeGameTestHooks.getTemplateNamespace` in the sources of Forge 47.4.28, and `GameTestRegistry.register` with `javap` | No run with `-Pmeasure` started a game |
+| The player of the measurement is not an operator. The provider of each request says that it calls no model: Uno sends the request to it on the route without a model | `Measurement.PLAYER`, `Measurement.Measured`, `Uno.route` | |
+| The record of a request has the values that Uno records on the route of the model: the result of the checks is `Uno.voice`, and a failure or an answer that Uno cannot read is `NO_VALID_ACTION` | `Measurement.Measured`, `Uno.ask` | The time limit: see "Not covered" |
+| A robot without an active job calls the server at least every 10 seconds. Thus no robot of the world is silent (D42, point 3) | `mindcraft.lua`, `RobotApi.contact` | |
+| `b_measurement` checks the key in the environment, builds the provider with the model of the run, and gives it to the harness. It never prints the key | `LiveTests.b_measurement` | It did not run |
+
+### Not covered
+
+- The measurement itself: no paid run occurred. Ticket #27 has the paid runs.
+- The sentences of a real model in the record.
+- A run with `-Pmeasure` in a started game. Only the evaluation of the build script above. The first paid run shows the line `Enabled Gametest Namespaces: [mindcraft_measure]`.
+- A request that reaches the time limit of Uno in the harness. Then the record has zero tokens and the note "the request reached the time limit". No test reaches it.
+- The ages grow during a run. After 5 minutes an observation is old and its stock is not given, and a wait writes a "long wait" line in the diary (D30). A slow model can thus get other facts than a fast one. The record gives the facts of each request. The stand-in run is shorter than one second.
+- A model that gives a pause for a different request pauses that job. The next requests see the paused job. The record shows it.
+- The route of an operator in the measurement: the counter, the limit of the session, the fixed rules after a failure and the log line of Uno. See D42, "As built" under point 7.
+
+### The record of the measurement (ticket #27)
+
+Not done. **No paid run occurred.** Ticket #27 puts here the section of each run, as the harness wrote it. Then come the marks of the agent and the decision of the project owner (D42, point 20).
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1790,6 +1962,7 @@ Third manual test, on the projector and its hologram:
 | Increment B: the system text of the Claude provider after ticket #18, with the real service | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B |
 | Increment B: the new system text of the Claude provider after ticket #20 (the voice), with the real service. Thus no sentence of the real model passed or failed a check | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B. The tests use providers written in the tests. See "Increment B — the voice of Uno and its checks (ticket #20)" |
 | Increment B: a failure of the real Claude service after ticket #21: an error, a refusal, the time limit, or an answer that Uno cannot read | No run with the real service tested it. Such a run costs money and needs the consent of the project owner. The tests use providers written in the tests. See "Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)" |
+| Increment B: the measurement of the models with the real service (ticket #26 built its harness) | Each run costs money and needs the consent of the project owner. Ticket #27 has the paid runs. See "Increment B — the harness of the measurement (ticket #26)" |
 | Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
 | Increment B: the screen with the conversation part first, in a client: the look, and the height in a small window | It needs a person at the game. The play session of increment B has a step for it. See "Increment B — the conversation part comes first on the screen (ticket #25)" |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |

@@ -148,15 +148,16 @@ final class Measurement {
                     check(storage.job().carried == 24 && harbor.job().delivered == 16, storage.rig().describe() + "\n" + harbor.rig().describe());
                 })
                 .thenExecute(() -> {
-                    MindCraft.command(server, "computercraft shutdown #" + cellar.robot());
                     try {
                         runtime.control(PLAYER, harbor.robot(), "pause");
                     } catch (Refusal refusal) {
                         throw new GameTestAssertException("the runtime refused the pause of the harbor: " + refusal.getMessage());
                     }
                 })
-                .thenWaitUntil(() -> check(RobotApi.live(cellar.robot()) == null && harbor.job().state == State.PAUSED,
-                    "the shutdown or the pause is not complete: " + cellar.rig().describe() + "\n" + harbor.rig().describe()))
+                .thenWaitUntil(() -> {
+                    MindCraftTests.shutDown(server, cellar.robot());
+                    check(harbor.job().state == State.PAUSED, "the pause is not complete: " + harbor.rig().describe());
+                })
                 .thenExecute(() -> {
                     long now = helper.getLevel().getGameTime();
                     harbor.job().toSeenAt = now - JobAccount.OLD_TICKS - 1;

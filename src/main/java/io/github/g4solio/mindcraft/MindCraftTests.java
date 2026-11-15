@@ -283,6 +283,16 @@ public class MindCraftTests {
         }
     }
 
+    /**
+     * A wait step that ends when the computer is off. While the computer runs, each try sends "computercraft shutdown" again.
+     * CC: Tweaked ignores "shutdown" while a computer starts: MindCraft.reboot repeats the command for the same reason.
+     */
+    static void shutDown(MinecraftServer server, int computerId) {
+        if (RobotApi.live(computerId) == null) return;
+        MindCraft.command(server, "computercraft shutdown #" + computerId);
+        check(RobotApi.live(computerId) == null, "the computer is not off yet");
+    }
+
     /** Places a turtle that is on. A computer ID of -1 lets CC: Tweaked assign the ID. */
     static void placeTurtle(GameTestHelper helper, BlockPos relative, int computerId, int fuel, UUID owner) {
         helper.setBlock(relative, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("computercraft:turtle_normal")));
@@ -1333,11 +1343,8 @@ public class MindCraftTests {
                 check(rig.job() == job[1] && job[1].state.open() && job[1].quantity == 16, "the proposal ended a different job: " + rig.describe());
             });
         sequence = ask(sequence, server, player, "x", gives(() -> startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 8)), 5000, answers)
-            .thenExecute(() -> {
-                check(last.get().startsWith("Proposal: cancel job " + job[1].id + " on robot #" + rig.id + " "), last.get());
-                MindCraft.command(server, "computercraft shutdown #" + rig.id);
-            })
-            .thenWaitUntil(() -> check(RobotApi.live(rig.id) == null, "the computer is not off yet"))
+            .thenExecute(() -> check(last.get().startsWith("Proposal: cancel job " + job[1].id + " on robot #" + rig.id + " "), last.get()))
+            .thenWaitUntil(() -> shutDown(server, rig.id))
             .thenExecute(() -> {
                 String confirmed = Uno.confirm(server, player);
                 check(confirmed.equals("I cannot replace the job: Robot #" + rig.id + " is not running. Load its area and turn it on."), confirmed);
@@ -2827,12 +2834,11 @@ public class MindCraftTests {
                 b.job().toSeenAt = b.level.getGameTime() - JobAccount.OLD_TICKS - 1;
             });
         sequence = said(sequence, server, player, first, noProposal)
-            .thenExecute(() -> {
-                a.runtime.control(player, a.id, "resume");
-                MindCraft.command(server, "computercraft shutdown #" + b.id);
-            })
-            .thenWaitUntil(() -> check(a.job().state == State.WAITING && a.job().recoveries == 1 && RobotApi.live(b.id) == null,
-                "the resume or the shutdown is not complete: " + a.describe() + "\n" + b.describe()));
+            .thenExecute(() -> a.runtime.control(player, a.id, "resume"))
+            .thenWaitUntil(() -> {
+                shutDown(server, b.id);
+                check(a.job().state == State.WAITING && a.job().recoveries == 1, "the resume is not complete: " + a.describe());
+            });
         said(sequence, server, player, second, noProposal)
             .thenExecute(() -> a.runtime.control(player, a.id, "cancel"))
             .thenSucceed();
@@ -3318,11 +3324,8 @@ public class MindCraftTests {
         rig.begin()
             .thenExecute(() -> rig.runtime.start(player, rig.order(MindRuntime.KEEP_STOCK, 24, 0)))
             .thenWaitUntil(() -> rig.state(State.SATISFIED))
-            .thenExecute(() -> {
-                check(!Uno.report(server, player).contains("is not running"), Uno.report(server, player));
-                MindCraft.command(server, "computercraft shutdown #" + rig.id);
-            })
-            .thenWaitUntil(() -> check(RobotApi.live(rig.id) == null, "the computer is not off yet"))
+            .thenExecute(() -> check(!Uno.report(server, player).contains("is not running"), Uno.report(server, player)))
+            .thenWaitUntil(() -> shutDown(server, rig.id))
             .thenExecute(() -> rig.chest(rig.dest).removeItem(0, 10))
             .thenIdle(100)
             .thenExecute(() -> {
@@ -5848,8 +5851,7 @@ public class MindCraftTests {
                 robot[0] = RobotApi.live(9003);
                 check(robot[0] != null && robot[0].turtle.getDirection() != Direction.NORTH, "the turtle does not turn yet");
             })
-            .thenExecute(() -> MindCraft.command(helper.getLevel().getServer(), "computercraft shutdown #9003"))
-            .thenWaitUntil(() -> check(RobotApi.live(9003) == null, "the computer is not off yet"))
+            .thenWaitUntil(() -> shutDown(helper.getLevel().getServer(), 9003))
             .thenIdle(20)
             .thenExecute(() -> stopped[0] = robot[0].turtle.getDirection())
             .thenIdle(60)

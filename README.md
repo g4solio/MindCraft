@@ -7,7 +7,7 @@ The player works together with **Uno**, an intelligence that acts in the world t
 
 Status: increments S0, S1 and S2 of the [brief](docs/MINDCRAFT_CLAUDE_BRIEF.md), and increments A and B of the plan after S2. S3 did not start. This is an early version, not a release.
 The plan after S2 is D27 in [docs/DECISIONS.md](docs/DECISIONS.md). The exit of increment A is reached: see D27 and D40.
-The automatic tests of increment B pass. Its measurement of the models (ticket #27) and its play session with [docs/PLAY_SESSION_B.md](docs/PLAY_SESSION_B.md) (ticket #29) are not done. Thus the exit of increment B is not reached: see D42, point 14.
+The automatic tests of increment B pass. Its measurement of the models (ticket #27) is done: the three models are measured, and the project owner chose Claude Haiku 5.5, for the moment. Its play session with [docs/PLAY_SESSION_B.md](docs/PLAY_SESSION_B.md) (ticket #29) is not done. Thus the exit of increment B is not reached: see D42, point 14.
 The mod is for one player now. Do not open the world to other players: see D37 in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 What this version contains:
@@ -356,6 +356,7 @@ The server log says which provider is active: look for the line `Uno interprets 
 - A request that does not give a necessary value is no action. Then the sentence of Claude says what is missing.
 - Uno asks Claude to follow the rule of a request that names no robot (see "Talk with Uno"). A new job from Claude for a robot with an open job becomes the proposal of a replacement, as with the fixed rules.
 - You can write the request in any language. Uno answers in English.
+  Known limit: with Claude Haiku 5.5, an answer in the words of Claude can come in your language. Two runs with the real service gave one answer of four in Italian.
 
 #### The data that leave the server
 
@@ -377,7 +378,7 @@ The server log says which provider is active: look for the line `Uno interprets 
 #### The setting of the model
 
 - The model is a setting: the value `model` in `config/mindcraft-common.toml`. The file is common to the installation: the `config` folder of the game, or of the dedicated server. The development client uses `run/config`. Forge writes the file at the first start, with the start value.
-- The start value is `claude-haiku-5-5`, until the measurement of increment B gives a different model. The other values are `claude-sonnet-5-5` and `claude-opus-5-5`.
+- The start value is `claude-haiku-5-5`: the choice of the project owner after the measurement of increment B (D33). The other values are `claude-sonnet-5-5` and `claude-opus-5-5`.
 - The server reads the value at its start. Change it while the server or the game is stopped. The log line `Uno interprets requests with` names the model, for example `Claude (claude-haiku-5-5)`.
 - Opus 5.5 and Sonnet 5.5 have a server-side fallback for a refusal: the service tries a declined request again on a model that Anthropic chooses. Haiku 5.5 has none, and a different value gets none: there a refusal is a failure of the model.
 - A model that the service does not know, or does not offer to the key, is a failure of the service. Each written request then gets an answer such as "The model gave no valid answer (the model service does not know the model 'claude-haiku-9-9'), thus I read your request with the fixed rules: …". Each one still counts in the counter of the session. Correct the setting and start the server again. The server log has the answer of the service.
@@ -437,7 +438,7 @@ Uno › Robot #7 of job 3 is not running or not loaded. The last recorded data, 
 - Uno does not remember an earlier sentence of the conversation. Claude has the rule to say so when you ask.
 - The check stops an invented number. It does not stop a number in words, a true number about the wrong job, or a wrong description with true numbers. The panel of the job next to the sentence shows the state.
 - The "Report" button and `/uno report` give the fixed report, as before. They call no model.
-- No test verifies a sentence of the real model yet. The automatic tests use providers written in the tests. The measurement of the models (ticket #27) and the play session (ticket #29) are not done.
+- The automatic tests use providers written in the tests: they verify no sentence of the real model. Runs with the real service record the sentences of the three models: see [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md), "The record of the measurement (ticket #27)". The play session (ticket #29) is not done.
 - Without Claude, Uno has no voice: the fixed rules give the fixed sentences, as before.
 
 ### What Uno understands without Claude

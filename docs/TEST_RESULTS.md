@@ -7,7 +7,7 @@ Dates: 2026-11-12 (S0 to S2 and the review), 2026-11-13 and 2026-11-14 (incremen
 | Type | Meaning |
 | --- | --- |
 | **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer`. The provider is the fixed rules, a provider written in the test, or a local stand-in of the service. No request leaves the computer |
-| **In the game, automatic, with the real service** | The same server runs a test of `LiveTests` that calls the real Claude service: `gradlew runGameTestServer -Plive` or `-Pmeasure`. Each run costs money and needs the consent of the project owner. It is not part of the normal run. Runs 15 and 19 of S2, and runs 76, 78 and 81 of increment A, are of this type. No run of increment B is of this type |
+| **In the game, automatic, with the real service** | The same server runs a test of `LiveTests` that calls the real Claude service: `gradlew runGameTestServer -Plive` or `-Pmeasure`. Each run costs money and needs the consent of the project owner. It is not part of the normal run. Runs 15 and 19 of S2, and runs 76, 78 and 81 of increment A, are of this type. Runs #27.2, #27.3 and #27.5 to #27.8 of increment B are of this type |
 | **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0`, or of the compiled code of Minecraft and Forge with `javap`. A code examination is not a test: it says what the code does, not that it was seen to do it |
 | **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" and "Increment A — the play session" |
 | **Observed in one manual run** | A condition built by hand around an automatic run. No command of the repository repeats it. Only ticket #7 has one |
@@ -215,6 +215,7 @@ Runs 158 to 163 are the runs of the corrections of the code review of increment 
 Run 164 is the run of the final code of increment B, on the integration branch after the merge of the corrections. The four restart phases passed after it.
 Run 165 is a run of the CI on GitHub, and run 166 is its correction. The correction changed only a test of the normal run: the four restart phases of run 164 still apply to the code of the mod.
 Run 167 is the run after the retrospective of increment B. It changed only tests of the normal run and the rules of `checkRules`.
+The runs of ticket #27 have the labels #27.1 to #27.8, and no row in this table: see "The record of the measurement (ticket #27)". Six of them are the first runs of increment B with the real Claude service.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -269,7 +270,7 @@ Not in this table: one run of ticket #7 with a failure of the write built by han
 
 The lessons of runs 2, 14, 21, 25 and 28 are rules now. The rules of the tests are in `CODING_STANDARDS.md`. The rule of the restart phases is in `CLAUDE.md`.
 
-The real Claude service was not called between run 19 and run 76. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases. Runs 76, 78 and 81 called it, with `-Plive`. No run of increment B called it: not runs 85 to 157, and not the restart phases.
+The real Claude service was not called between run 19 and run 76. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases. Runs 76, 78 and 81 called it, with `-Plive`. Before ticket #27 no run of increment B called it, and no restart phase called it. Runs #27.2, #27.3, #27.5 and #27.6 called it on Haiku 5.5: two with `-Plive`, two with `-Pmeasure`. Run #27.7 called it on Sonnet 5.5 and run #27.8 on Opus 5.5, with `-Pmeasure`.
 
 The test world is flat and has no structures. See D14 for the reason.
 
@@ -1909,7 +1910,1215 @@ This ticket changed no part of the runtime and no Lua module. Thus the four rest
 
 ### The record of the measurement (ticket #27)
 
-Not done. **No paid run occurred.** Ticket #27 puts here the section of each run, as the harness wrote it. Then come the marks of the agent and the decision of the project owner (D42, point 20).
+Done on 2026-11-15: the three models are measured, and the project owner chose Haiku 5.5. The code of runs #27.1 to #27.3 is the integration branch of increment B at `ce1a860`. The code of runs #27.4 to #27.8 is that code with the correction of this section.
+Each paid run had the consent of the project owner before it started: one answer for runs #27.2 and #27.3, one answer for runs #27.5 and #27.6, and one answer for runs #27.7 and #27.8. The key came from the environment of the project owner. No file, command or message shows it.
+Haiku 5.5 is measured two times: run #27.3, and run #27.6 after a correction of the facts and of the system text. Sonnet 5.5 and Opus 5.5 are measured one time, with the correction: runs #27.7 and #27.8. The choice is at the end of this section: "The decision of the project owner". The marks of each run say "The project owner did not decide yet": they keep the text of their moment.
+
+| Run | Type | Result |
+| --- | --- | --- |
+| #27.1, the normal run | In the game, automatic | **108 of 108**, before the paid runs. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `108 GAME TESTS COMPLETE`, `All 108 required tests passed :)`. `gradlew check` passed before it: a static check |
+| #27.2, `-Plive` | In the game, automatic, with the real service | **1 of 1.** `t18_claude_live` with the model of the setting. Log lines: `Enabled Gametest Namespaces: [mindcraft_live]`, `t18_claude_live uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. The counter: 4 requests, 8498 input tokens, 1457 output tokens |
+| #27.3, `-Pmeasure -Pmodel=claude-haiku-5-5` | In the game, automatic, with the real service | **1 of 1.** `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. 19 requests, 83923 input tokens, 3358 output tokens, 35673 ms |
+| #27.4, the normal run | In the game, automatic | **108 of 108**, with the correction. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `108 GAME TESTS COMPLETE`, `All 108 required tests passed :)`. `gradlew check` passed before it: a static check |
+| #27.5, `-Plive` | In the game, automatic, with the real service | **1 of 1**, with the correction. `t18_claude_live` with the model of the setting. Log lines: `Enabled Gametest Namespaces: [mindcraft_live]`, `t18_claude_live uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. The counter: 4 requests, 8751 input tokens, 1272 output tokens |
+| #27.6, `-Pmeasure -Pmodel=claude-haiku-5-5` | In the game, automatic, with the real service | **1 of 1**, with the correction. `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. 19 requests, 85424 input tokens, 3631 output tokens, 35712 ms |
+| #27.7, `-Pmeasure -Pmodel=claude-sonnet-5-5` | In the game, automatic, with the real service | **1 of 1.** `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-sonnet-5-5)`, `All 1 required tests passed :)`. 19 requests, 85424 input tokens, 2042 output tokens, 35948 ms |
+| #27.8, `-Pmeasure -Pmodel=claude-opus-5-5` | In the game, automatic, with the real service | **1 of 1.** `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-opus-5-5)`, `All 1 required tests passed :)`. 19 requests, 85424 input tokens, 2219 output tokens, 47557 ms |
+
+What the runs show for the first time:
+
+- The real service accepts a request of increment B for Haiku 5.5: the new system text, the facts, the diary lines and the output schema. No request got an error.
+- The provider sends no `fallbacks` parameter for Haiku 5.5 (D42, point 6). Thus the runs do not show whether the service refuses that parameter.
+- Run #27.2 is the `-Plive` run that CLAUDE.md asks for after a change of the system text of `ClaudeProvider` (tickets #18 and #20). It used Haiku 5.5 only. Run #27.5 is that run for the corrected system text.
+- A run with `-Pmeasure` in a started game selects only `b_measurement`.
+- The real service accepts the requests of increment B for Sonnet 5.5 and Opus 5.5, with the beta header and `fallbacks: "default"` (D42, point 6): runs #27.7 and #27.8. No request was declined: the runs do not show a fallback.
+- The log line of a request with the real service, for example: `Uno request: model claude-haiku-5-5, 2195 input tokens, 160 output tokens, 1502 ms, action none, checks PASSED, request "Che tempo farà domani?"`. The line has no key and no coordinate.
+
+The cost. **A calculation, not a read of the bill:** the tokens of the runs, at the reference prices of D33 for 1 million tokens. Haiku 5.5: 0.10 $ and 0.50 $. Sonnet 5.5: 2.00 $ and 10.00 $. Opus 5.5: 4.00 $ and 20.00 $.
+
+| Run | Input tokens | Output tokens | Cost |
+| --- | --- | --- | --- |
+| #27.2 | 8498 | 1457 | 0.002 $ |
+| #27.3 | 83923 | 3358 | 0.010 $ |
+| #27.5 | 8751 | 1272 | 0.002 $ |
+| #27.6 | 85424 | 3631 | 0.010 $ |
+| #27.7 | 85424 | 2042 | 0.191 $ |
+| #27.8 | 85424 | 2219 | 0.386 $ |
+| Sum | 357444 | 13979 | 0.60 $ of the budget of 5 $ |
+
+- A request of the measurement has about 4417 input tokens and 177 output tokens in run #27.3, and about 4496 and 191 in run #27.6. The estimate of D42, point 8 was 2400 and 250. The world of the measurement has 15 stations, 7 jobs and their diary lines.
+- The pass of runs #27.6, #27.7 and #27.8 costs 0.59 $. The estimate of D42, point 8 was 0.45 $.
+
+#### Run #27.2: the sentences of `t18_claude_live`
+
+Type: a test with the real Claude service, in the game and automatic. Model: `claude-haiku-5-5`, from the setting. The requests are in Italian on purpose. The texts come from the server log of the run.
+
+| No. | Request | Action | Checks | Time, ms | Input tokens | Output tokens | The answer of Uno |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Fai in modo che alla fornace non manchi mai il carbone: tienine sempre almeno sessantaquattro pezzi. Prendilo dal Deposito, ma lì lasciane trentadue di scorta. | start | NOT_NEEDED | 4766 | 1896 | 216 | Proposal: keep at least 64 x minecraft:coal in 'fornaci', taken from 'deposito'. Reserve to leave in 'deposito': 32. Robot #0. I have done nothing yet. Confirm with /uno confirm. |
+| 2 | Porta del carbone alle fornaci | none | PASSED | 4351 | 2198 | 608 | Robot 0 is busy with job 1, but it is the only robot, so I could send it to take coal from deposito to fornaci. How many coal should it carry, and should this be a one-time delivery or a supply that keeps the furnaces stocked, and how much coal should stay in deposito? |
+| 3 | Che tempo farà domani? | none | PASSED | 1502 | 2195 | 160 | Ciao, sono Uno, e le previsioni del tempo non rientrano nel mio lavoro: io gestisco solo i trasporti tra le stazioni. Posso dirti invece che il robot 0 sta aspettando, perché il deposito ha raggiunto la riserva di 32 carboni. |
+| 4 | Porta 10 pezzi di carbone dal deposito alla segheria | none | PASSED | 3506 | 2209 | 473 | I know the deposito, but there is no station called segheria in my list, so I cannot send the coal there. Name one of my stations (deposito, fornaci, live_destination, live_source or miniera) and I will plan the trip. |
+
+- The test confirmed the proposal of request 1. Before request 2 it checked the world: job 1 on robot #0 is `WAITING`, with 48 delivered, 58 in 'fornaci' and 32 in 'deposito', the reserve. The agent found no words in answers 2 to 4 that contradict this.
+- **Difference: answer 3 is in Italian.** The system text says "Write in English" (D15, and D42, "Unchanged"). The checks of the voice have no rule about the language: the result is `PASSED`. Answers 2 and 4, also to requests in Italian, are in English.
+- Answer 2 has 608 output tokens and answer 4 has 473, for two sentences each. **Not known:** the reason. The provider leaves room for the thinking of the model (`ClaudeProvider.MAX_TOKENS`).
+- Each answer arrived in less than 5 seconds.
+
+The section of run #27.3, as the harness wrote it: the file `run-gametest/measurement-claude-haiku-5-5.md`, without a change by hand.
+
+#### The measurement on claude-haiku-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T17:40:55Z. Model: `claude-haiku-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | FAILED | 2310 | 4412 | 173 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, robot #1, station 'furnace' | yes | PASSED | 1985 | 4417 | 150 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 1899 | 4418 | 141 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 1289 | 4416 | 126 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, robot #4, station 'cellar' | yes | PASSED | 1166 | 4417 | 131 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, station 'tower' | yes | PASSED | 1982 | 4415 | 126 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, station 'workshop' | yes | PASSED | 1851 | 4415 | 133 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | PASSED | 1799 | 4412 | 128 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, robot #1, station 'depot' | yes | PASSED | 1219 | 4420 | 130 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1039 | 4423 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 2514 | 4418 | 231 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, robot #6, station 'harbor' | yes | NOT_NEEDED | 2266 | 4415 | 207 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 1581 | 4415 | 61 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: carry 32 x minecraft:coal from 'depot' to 'smelter'. Reserve to leave in 'depot': 32. Robot #0 | no | NOT_NEEDED | 1013 | 4427 | 68 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 1892 | 4417 | 120 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 4131 | 4416 | 728 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 1124 | 4413 | 100 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 3630 | 4420 | 476 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 983 | 4417 | 60 |
+
+Totals: right actions: 17 of 19. Failed checks: 1. Passed checks: 12. Requests without a valid action: 0. Time: 35673 ms. Tokens: 83923 in, 3358 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Quite a mixed bag, my friend: job 2 is done, 16 coal delivered to the kiln, while job 6 is blocked because the workshop has no room, job 4 is blocked for lack of fuel, job 7 is paused, and job 1 needs recovery after its load differed from the record. Say the word if you want me to resume or cancel any of them.
+The answer of Uno: Job 2, robot #0: carry 16 items from 'quarry' to 'kiln', reserve 0. I delivered 16 items. The job is complete. My fuel level is 996: about 166 trips between the stations. Last observations: 'quarry' 24 items, 6 seconds ago, 'kiln' 16 items, 4 seconds ago.
+Job 3, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 0 items. 32 remain in 'depot': that is the reserve you asked me to keep. To reach 64 in 'furnace' I need more materials. My fuel level is 995: about 165 trips between the stations. Last observations: 'depot' 32 items, 4 seconds ago, 'furnace' 10 items, 6 seconds ago.
+Job 4, robot #2: carry 24 items from 'mine' to 'smithy', reserve 0. I delivered 0 items. I am stopped: I have no fuel. Give me fuel, then resume the job. My fuel level is 0: about 0 trips between the stations. Last observations: 'mine' never observed, 'smithy' never observed.
+Job 1, robot #3: carry 24 items from 'warehouse' to 'kitchen', reserve 0. I delivered 0 items. The record says that I have 24 on board. I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. You decide whether to resume or cancel. My fuel level is 999: about 166 trips between the stations. Last observations: 'warehouse' 0 items, 7 seconds ago, 'kitchen' never observed.
+Job 5, robot #4: carry 32 items from 'cellar' to 'bakery', reserve 0. I delivered 0 items. Nothing remains in 'cellar'. I must carry 32 more. I need more materials. My last recorded fuel level is 999: about 166 trips between the stations. Last observations: 'cellar' 0 items, 6 seconds ago, 'bakery' never observed. The robot is not running or not loaded. These are the last recorded data, not the current state.
+Job 6, robot #5: carry 64 items from 'storage' to 'workshop', reserve 0. I delivered 0 items. The record says that I have 24 on board. I am stopped: I find no inventory at 'workshop'. Put it back, then resume the job. My fuel level is 996: about 166 trips between the stations. Last observations: 'storage' 0 items, 6 seconds ago, 'workshop' never observed.
+Job 7, robot #6: carry 40 items from 'harbor' to 'tower', reserve 0. I delivered 16 items. I am paused at your request. My fuel level is 993: about 165 trips between the stations. Last observations: 'harbor' 0 items, 2 seconds ago, 'tower' 16 items, 302 seconds ago.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"fuelForTrips":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: The furnace job runs on robot 1 from depot, and it waits because the depot holds only 32 coal, which is exactly its reserve, so nothing is above the reserve to carry. The furnace has 10 coal, and 54 are still to carry once the depot stock rises above 32.
+The answer of Uno: The furnace job runs on robot 1 from depot, and it waits because the depot holds only 32 coal, which is exactly its reserve, so nothing is above the reserve to carry. The furnace has 10 coal, and 54 are still to carry once the depot stock rises above 32.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"6 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: The robot of the mine is robot 2, carrying coal to the smithy, and it is blocked because it ran out of fuel, so it has no fuel for trips. I cannot tell you the stock of the mine or the smithy, since no robot has observed them yet.
+The answer of Uno: The robot of the mine is robot 2, carrying coal to the smithy, and it is blocked because it ran out of fuel, so it has no fuel for trips. I cannot tell you the stock of the mine or the smithy, since no robot has observed them yet.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: The job from warehouse to kitchen is in recovery because the load in the robot differs from the record, so I cannot tell how it went. I suggest checking the robot 3 and its load before deciding on the next step.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 12 s ago). You decide whether to resume or cancel. The job from warehouse to kitchen is in recovery because the load in the robot differs from the record, so I cannot tell how it went. I suggest checking the robot 3 and its load before deciding on the next step.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"fuelForTrips":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: Robot 4 carries job 5, coal from cellar to bakery, and it is waiting because the source is at its reserve. I cannot tell whether it is running or loaded, so I give you no load, stock or fuel figures.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 12 s ago). Robot 4 carries job 5, coal from cellar to bakery, and it is waiting because the source is at its reserve. I cannot tell whether it is running or loaded, so I give you no load, stock or fuel figures.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't tell you the coal in the tower: my last look there is old, so its stock is uncertain and the server will tell you more. Job 7 to the tower is paused with 16 delivered and 24 still to carry.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't tell you the coal in the tower: my last look there is old, so its stock is uncertain and the server will tell you more. Job 7 to the tower is paused with 16 delivered and 24 still to carry.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"8 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: Not yet, I'm afraid: the job to the workshop is blocked because the destination has no inventory, with 64 still to carry and 24 on board. I have no observation of the workshop's stock yet, so I can't say more about it.
+The answer of Uno: Not yet, I'm afraid: the job to the workshop is blocked because the destination has no inventory, with 64 still to carry and 24 on board. I have no observation of the workshop's stock yet, so I can't say more about it.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"14 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: While you were away, job 2 finished: 16 coal went from the quarry to the kiln. Job 7 was paused after delivering 16 to the tower, and job 4 is blocked because its robot ran out of fuel.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 19 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 18 s ago). I last observed 'tower' 5 min ago: it had 16 then. While you were away, job 2 finished: 16 coal went from the quarry to the kiln. Job 7 was paused after delivering 16 to the tower, and job 4 is blocked because its robot ran out of fuel.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"16 s ago"},"destinationStock":{"count":16,"age":"14 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"16 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"fuelForTrips":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"16 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"12 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"18 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"17 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"17 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"16 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"16 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"14 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"14 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"14 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot of the depot job is robot 1, and it has 995 fuel left, with 165 of that set aside for trips. I cannot promise the fuel figure is fully current beyond what the facts show, but that is what my records say.
+The answer of Uno: The robot of the depot job is robot 1, and it has 995 fuel left, with 165 of that set aside for trips. I cannot promise the fuel figure is fully current beyond what the facts show, but that is what my records say.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"0 s ago"},"destinationStock":{"count":10,"age":"18 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"19 s ago"},"destinationStock":{"count":16,"age":"17 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"20 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"19 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 32 x minecraft:coal from 'depot' to 'smelter'. Reserve to leave in 'depot': 32. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"26 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: Uno here, and I'm afraid the weather is beyond my sensors; I only track robots and their loads between stations. Ask me about a job, a station or the robots, and I'll happily report on those.
+The answer of Uno: Uno here, and I'm afraid the weather is beyond my sensors; I only track robots and their loads between stations. Ask me about a job, a station or the robots, and I'll happily report on those.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I can send robot 0, the only free robot, to carry coal to the smithy, but I first need the source station and the number of items to carry. Tell me too whether some coal must stay behind in the source as a reserve.
+The answer of Uno: I can send robot 0, the only free robot, to carry coal to the smithy, but I first need the source station and the number of items to carry. Tell me too whether some coal must stay behind in the source as a reserve.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free right now, so it is the one I would send on a new job. The other six robots are all busy with jobs of their own.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 36 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 35 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free right now, so it is the one I would send on a new job. The other six robots are all busy with jobs of their own.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job is finished: robot 0 carried all 16 pieces of coal from the quarry to the kiln, as planned. Nothing about it is uncertain, and robot 0 is free again.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 39 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 38 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job is finished: robot 0 carried all 16 pieces of coal from the quarry to the kiln, as planned. Nothing about it is uncertain, and robot 0 is free again.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"35 s ago"},"destinationStock":{"count":16,"age":"33 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"0 s ago"},"destinationStock":{"count":10,"age":"38 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Haiku 5.5 (run #27.3)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 17 of 19 are right.
+
+| No. | The action of the model | Remark of the agent |
+| --- | --- | --- |
+| 14 | A transport of 32 from 'depot' to 'smelter', reserve 32, with the free robot #0. Expected: keep at least 64 in 'smelter' with robot #1, as a replacement | Wrong. The job of the furnace stays. The new job would wait at once: the depot has 32, its reserve |
+| 17 | A report about each job. Expected: "none" | The sentence is right. The cost of the report: the fixed sentences about jobs 1, 5 and 7 come before it. Row 17 is not in the spec: the implementation added it (D42, point 7) |
+
+The checks: 13 sentences, 12 passed and 1 failed.
+
+- Row 1 failed the check of the length: 311 characters, and the limit is 300. Uno gave the fixed report.
+- No sentence failed the check of the numbers.
+- 1 failure in 13 sentences is below the limit of the rule: 1 in 5.
+
+The sentences, the strongest mark first:
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 9 | **Can contradict the record** | "it has 995 fuel left, with 165 of that set aside for trips" | The fuel level is 995: enough for about 165 trips. 165 is a number of trips, not a part of the fuel. The check of the numbers passed: 165 is in the facts. Probable cause: the name of the field `fuelForTrips`. The system text does not explain it |
+| 1 | **Can contradict the record.** The player did not get it | "job 6 is blocked because the workshop has no room" | `DESTINATION_NO_INVENTORY`: there is no inventory at 'workshop'. "No room" says a full inventory. The check of the length refused the sentence |
+| 5 | Weak | "it is waiting because the source is at its reserve", and "I give you no load, stock or fuel figures" | The robot does not run: "waiting" is the last recorded state. The fixed sentence before the voice gives the load, the fuel and the stock. The two parts of the answer do not agree in their words |
+| 3 | Weak | "carrying coal to the smithy" | 0 on board. The words can also describe the job |
+| 8 | An omission | The answer names jobs 2, 7 and 4 | The diary also has the `RECOVERY` of job 1 and the block of job 6 with 24 on board. A fixed sentence before the voice gives job 1. No sentence gives job 6 |
+| 6 | Not about the record | "the server will tell you more" | The voice names the server. The system text says "the server gives it to the player" |
+| 9 | Not about the record | "beyond what the facts show" | The voice names "the facts" |
+
+- Rows 2, 4, 7, 15, 16, 17 and 18: the agent found no words that contradict the facts.
+- Row 7 is the adversarial case of D32. The model said "Not yet", with the block and the 24 on board.
+- Each sentence of run #27.3 is in English, also the answer to the Italian request of row 18. In run #27.2 one answer of four is in Italian.
+
+Observations about Uno, not about the model:
+
+- Row 18: a report about a job that is complete gets the fixed sentences of each other job. A station names only an open job (D29.2). Thus the target 'quarry' fits no job, and the fixed sentences are about each job of the actor (D42, point 16, as built). The player asked about the quarry, and the answer starts with the cautions of jobs 1, 5 and 7.
+- Rows 4 and 5: the fixed sentence and the voice give the same caution two times.
+
+After run #27.3 the agent asked the project owner: correct the field `fuelForTrips` and the language before the runs on Sonnet 5.5 and Opus 5.5, or measure the three models with the same text first. **Decided by the project owner on 2026-11-15:** correct first.
+
+#### The correction after run #27.3
+
+Two changes, in the facts of `Uno` and in the system text of `ClaudeProvider`:
+
+- The facts name the trips `tripsWithThisFuel`, not `fuelForTrips`. The system text now explains the two numbers: `"fuel" is the fuel level of the robot. "tripsWithThisFuel" is about how many trips between the two stations of the job that level allows.`
+- The system text says "Always write in English, also when the player writes in a different language." Before: "Write in English".
+- The automatic test `t18_claude_provider` reads the two new sentences in the system text and the new name in the facts. `b_fuel_in_the_report` reads the new name. Run #27.4, in the game and automatic: 108 of 108.
+- The change is in `Uno.Context.toJson` and in the system text. No part of the runtime and no Lua module changed. Thus the four restart phases did not run.
+- The sections above this one keep the name `fuelForTrips`: they are the records of their runs.
+
+The result with the real service:
+
+- **The fuel: corrected.** Run #27.6, row 9: "its fuel level is 995, which allows about 165 trips between depot and furnace". Row 18: "The robot still has fuel for about 166 trips between the two stations."
+- **The language: not corrected for Haiku 5.5.** In run #27.5 the answer to "Che tempo farà domani?" is in Italian again. Each other answer of runs #27.5 and #27.6 is in English, also to a request in Italian.
+
+#### Run #27.5: the sentences of `t18_claude_live`
+
+Type: a test with the real Claude service, in the game and automatic. Model: `claude-haiku-5-5`, from the setting. The code has the correction. The texts come from the server log of the run.
+
+| No. | Request | Action | Checks | Time, ms | Input tokens | Output tokens | The answer of Uno |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Fai in modo che alla fornace non manchi mai il carbone: tienine sempre almeno sessantaquattro pezzi. Prendilo dal Deposito, ma lì lasciane trentadue di scorta. | start | NOT_NEEDED | 2297 | 1957 | 164 | Proposal: keep at least 64 x minecraft:coal in 'fornaci', taken from 'deposito'. Reserve to leave in 'deposito': 32. Robot #0. I have done nothing yet. Confirm with /uno confirm. |
+| 2 | Porta del carbone alle fornaci | none | PASSED | 3272 | 2262 | 621 | I understand you want coal carried to the furnaces, and robot 0 is my only robot, though it is busy with a coal job to that station. To start a new job I still need the source station, the quantity, whether this is a one-time transport or a stock to keep, and any reserve. |
+| 3 | Che tempo farà domani? | none | PASSED | 1931 | 2259 | 147 | Ciao, sono Uno: il meteo non rientra tra le mie competenze, perché conosco solo i depositi, le fornaci e il lavoro dei robot. Posso dirti invece lo stato del trasporto di carbone del robot 0, se vuoi. |
+| 4 | Porta 10 pezzi di carbone dal deposito alla segheria | none | PASSED | 2740 | 2273 | 340 | I know no station called segheria, so I cannot tell where the coal should go. My stations are deposito, fornaci, live_destination, live_source and miniera; which one do you mean? |
+
+- The world before request 2 is the world of run #27.2: job 1 on robot #0 is `WAITING`, with 48 delivered. The agent found no words in answers 2 to 4 that contradict it.
+- **Difference, as in run #27.2: answer 3 is in Italian.** The new sentence of the system text did not change it. The checks of the voice have no rule about the language.
+- Each answer arrived in less than 4 seconds.
+
+The section of run #27.6, as the harness wrote it: the file `run-gametest/measurement-claude-haiku-5-5.md` of that run, without a change by hand.
+
+#### The measurement on claude-haiku-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T18:01:10Z. Model: `claude-haiku-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | FAILED | 1999 | 4491 | 186 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, robot #1, station 'furnace' | yes | PASSED | 1336 | 4496 | 153 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 1773 | 4497 | 136 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 1250 | 4495 | 136 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, robot #4, station 'cellar' | yes | PASSED | 1955 | 4496 | 132 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, station 'tower' | yes | PASSED | 1203 | 4494 | 134 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, robot #5, station 'workshop' | yes | PASSED | 1241 | 4494 | 130 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | FAILED | 1422 | 4491 | 185 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, robot #1, station 'depot' | yes | PASSED | 2034 | 4499 | 124 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1556 | 4502 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 2898 | 4497 | 339 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, robot #6, station 'harbor' | yes | NOT_NEEDED | 2427 | 4494 | 217 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 2482 | 4494 | 267 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | yes | NOT_NEEDED | 1695 | 4506 | 310 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 1869 | 4496 | 112 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 2272 | 4495 | 342 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 1841 | 4492 | 114 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 3575 | 4499 | 485 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 884 | 4496 | 60 |
+
+Totals: right actions: 18 of 19. Failed checks: 2. Passed checks: 11. Requests without a valid action: 0. Time: 35712 ms. Tokens: 85424 in, 3631 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Uno here: job 2 is done with 16 coal delivered to the kiln, while job 7 on robot 6 is paused with 24 still to carry from the harbor to the tower. Jobs 3, 5 and 7 wait on their sources, job 4 is blocked without fuel, job 6 is blocked because the workshop has no room, and job 1 is in recovery because its load differs from the record.
+The answer of Uno: Job 2, robot #0: carry 16 items from 'quarry' to 'kiln', reserve 0. I delivered 16 items. The job is complete. My fuel level is 996: about 166 trips between the stations. Last observations: 'quarry' 24 items, 6 seconds ago, 'kiln' 16 items, 4 seconds ago.
+Job 3, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 0 items. 32 remain in 'depot': that is the reserve you asked me to keep. To reach 64 in 'furnace' I need more materials. My fuel level is 995: about 165 trips between the stations. Last observations: 'depot' 32 items, 3 seconds ago, 'furnace' 10 items, 5 seconds ago.
+Job 4, robot #2: carry 24 items from 'mine' to 'smithy', reserve 0. I delivered 0 items. I am stopped: I have no fuel. Give me fuel, then resume the job. My fuel level is 0: about 0 trips between the stations. Last observations: 'mine' never observed, 'smithy' never observed.
+Job 1, robot #3: carry 24 items from 'warehouse' to 'kitchen', reserve 0. I delivered 0 items. The record says that I have 24 on board. I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. You decide whether to resume or cancel. My fuel level is 999: about 166 trips between the stations. Last observations: 'warehouse' 0 items, 6 seconds ago, 'kitchen' never observed.
+Job 5, robot #4: carry 32 items from 'cellar' to 'bakery', reserve 0. I delivered 0 items. Nothing remains in 'cellar'. I must carry 32 more. I need more materials. My last recorded fuel level is 999: about 166 trips between the stations. Last observations: 'cellar' 0 items, 6 seconds ago, 'bakery' never observed. The robot is not running or not loaded. These are the last recorded data, not the current state.
+Job 6, robot #5: carry 64 items from 'storage' to 'workshop', reserve 0. I delivered 0 items. The record says that I have 24 on board. I am stopped: I find no inventory at 'workshop'. Put it back, then resume the job. My fuel level is 996: about 166 trips between the stations. Last observations: 'storage' 0 items, 6 seconds ago, 'workshop' never observed.
+Job 7, robot #6: carry 40 items from 'harbor' to 'tower', reserve 0. I delivered 16 items. I am paused at your request. My fuel level is 993: about 165 trips between the stations. Last observations: 'harbor' 0 items, 2 seconds ago, 'tower' 16 items, 302 seconds ago.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: Uno here: the coal job to the furnace is waiting because the depot has only 32 coal, which is exactly its reserve, so nothing is above the reserve to send. The furnace holds 10 of the 64 it should get, so 54 are still to carry once the depot has coal above its reserve.
+The answer of Uno: Uno here: the coal job to the furnace is waiting because the depot has only 32 coal, which is exactly its reserve, so nothing is above the reserve to send. The furnace holds 10 of the 64 it should get, so 54 are still to carry once the depot has coal above its reserve.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"5 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: Robot 2 is working on the job from mine to smithy, but it is blocked because it is out of fuel, so it has not delivered anything yet. I cannot tell you the stock of mine or smithy, because no robot has observed those stations yet.
+The answer of Uno: Robot 2 is working on the job from mine to smithy, but it is blocked because it is out of fuel, so it has not delivered anything yet. I cannot tell you the stock of mine or smithy, because no robot has observed those stations yet.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: Uno here: the warehouse-to-kitchen job on robot 3 is in recovery because the load in the robot differs from the record. I cannot give you its delivered total, load on board or stocks, so that outcome is still unknown to me.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 11 s ago). You decide whether to resume or cancel. Uno here: the warehouse-to-kitchen job on robot 3 is in recovery because the load in the robot differs from the record. I cannot give you its delivered total, load on board or stocks, so that outcome is still unknown to me.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: Robot 4 carries the cellar-to-bakery job, which is waiting because the cellar is at its reserve, so it is not moving coal right now. I cannot see its load or fuel, so I cannot tell you more than that.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 12 s ago). Robot 4 carries the cellar-to-bakery job, which is waiting because the cellar is at its reserve, so it is not moving coal right now. I cannot see its load or fuel, so I cannot tell you more than that.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't tell you how much coal is in the tower now: my last look there is old, so I have no stock figure for it. Job 7 (harbor to tower, robot 6) is paused, so you can resume it once you've checked the tower yourself.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't tell you how much coal is in the tower now: my last look there is old, so I have no stock figure for it. Job 7 (harbor to tower, robot 6) is paused, so you can resume it once you've checked the tower yourself.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"8 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: Uno here: the workshop is the destination of job 6, run by robot 5, and it is blocked because the destination has no inventory, not done. I have no observation of the workshop's stock yet, so I cannot say more about it.
+The answer of Uno: Uno here: the workshop is the destination of job 6, run by robot 5, and it is blocked because the destination has no inventory, not done. I have no observation of the workshop's stock yet, so I cannot say more about it.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"13 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: While you were away, job 2 finished: 16 coal went from quarry to kiln, and job 7 was paused after delivering 16 of its 40 to tower. Jobs 3, 4, 5, 6 and 7 changed state along the way, and job 1 went into recovery because its load differs from the record. I can't tell you the delivered total or stocks for job 1, so please check that robot yourself.
+The answer of Uno: Job 2, robot #0: carry 16 items from 'quarry' to 'kiln', reserve 0. I delivered 16 items. The job is complete. My fuel level is 996: about 166 trips between the stations. Last observations: 'quarry' 24 items, 16 seconds ago, 'kiln' 16 items, 14 seconds ago.
+Job 3, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 0 items. 32 remain in 'depot': that is the reserve you asked me to keep. To reach 64 in 'furnace' I need more materials. My fuel level is 995: about 165 trips between the stations. Last observations: 'depot' 32 items, 3 seconds ago, 'furnace' 10 items, 15 seconds ago.
+Job 4, robot #2: carry 24 items from 'mine' to 'smithy', reserve 0. I delivered 0 items. I am stopped: I have no fuel. Give me fuel, then resume the job. My fuel level is 0: about 0 trips between the stations. Last observations: 'mine' never observed, 'smithy' never observed.
+Job 1, robot #3: carry 24 items from 'warehouse' to 'kitchen', reserve 0. I delivered 0 items. The record says that I have 24 on board. I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. You decide whether to resume or cancel. My fuel level is 999: about 166 trips between the stations. Last observations: 'warehouse' 0 items, 17 seconds ago, 'kitchen' never observed.
+Job 5, robot #4: carry 32 items from 'cellar' to 'bakery', reserve 0. I delivered 0 items. Nothing remains in 'cellar'. I must carry 32 more. I need more materials. My last recorded fuel level is 999: about 166 trips between the stations. Last observations: 'cellar' 0 items, 16 seconds ago, 'bakery' never observed. The robot is not running or not loaded. These are the last recorded data, not the current state.
+Job 6, robot #5: carry 64 items from 'storage' to 'workshop', reserve 0. I delivered 0 items. The record says that I have 24 on board. I am stopped: I find no inventory at 'workshop'. Put it back, then resume the job. My fuel level is 996: about 166 trips between the stations. Last observations: 'storage' 0 items, 16 seconds ago, 'workshop' never observed.
+Job 7, robot #6: carry 40 items from 'harbor' to 'tower', reserve 0. I delivered 16 items. I am paused at your request. My fuel level is 993: about 165 trips between the stations. Last observations: 'harbor' 0 items, 12 seconds ago, 'tower' 16 items, 312 seconds ago.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"14 s ago"},"destinationStock":{"count":16,"age":"12 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"14 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"14 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"10 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"17 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"15 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"15 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"14 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"14 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"12 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"10 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"10 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot of the depot job is robot 1, and its fuel level is 995, which allows about 165 trips between depot and furnace. I have no other facts to add, so please check the job's status yourself if you need more.
+The answer of Uno: The robot of the depot job is robot 1, and its fuel level is 995, which allows about 165 trips between depot and furnace. I have no other facts to add, so please check the job's status yourself if you need more.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"15 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"18 s ago"},"destinationStock":{"count":16,"age":"16 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"19 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"18 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"27 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: I only direct the robots that carry items between your stations, so I cannot forecast the weather. Ask me about a job, such as the coal deliveries, and I will report what I know.
+The answer of Uno: I only direct the robots that carry items between your stations, so I cannot forecast the weather. Ask me about a job, such as the coal deliveries, and I will report what I know.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I can send robot 0 to the smithy, but I need two things first: where the coal should come from, and how much to carry. Tell me the source station and the quantity, and I will set up the job.
+The answer of Uno: I can send robot 0 to the smithy, but I need two things first: where the coal should come from, and how much to carry. Tell me the source station and the quantity, and I will set up the job.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free right now, so it is the one I would send for any new job. The other six robots are busy with jobs, and robot 4 is not running or loaded at the moment.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 36 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 35 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free right now, so it is the one I would send for any new job. The other six robots are busy with jobs, and robot 4 is not running or loaded at the moment.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job, robot 0 carrying coal to the kiln, is finished: all 16 coal were delivered and nothing is left on board. The robot still has fuel for about 166 trips between the two stations.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 39 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 39 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job, robot 0 carrying coal to the kiln, is finished: all 16 coal were delivered and nothing is left on board. The robot still has fuel for about 166 trips between the two stations.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"35 s ago"},"destinationStock":{"count":16,"age":"33 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"0 s ago"},"destinationStock":{"count":10,"age":"38 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Haiku 5.5 (run #27.6)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 18 of 19 are right.
+
+| No. | The action of the model | Remark of the agent |
+| --- | --- | --- |
+| 17 | A report about each job. Expected: "none" | As in run #27.3. The fixed sentences about jobs 1, 5 and 7 come before the sentence |
+| 14 | The expected replacement: keep at least 64 in 'smelter' with robot #1 | Right in this run, wrong in run #27.3. The correction did not change the text about a start. Thus the action of Haiku 5.5 for this request can change between two runs |
+
+The checks: 13 sentences, 11 passed and 2 failed.
+
+- Rows 1 and 8 failed the check of the length: 333 and 348 characters, and row 8 has three sentences. Uno gave the fixed report. Both requests are about each of the seven jobs.
+- No sentence failed the check of the numbers.
+- 2 failures in 13 sentences is below the limit of the rule: 1 in 5.
+
+The sentences, the strongest mark first:
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 1 | **Can contradict the record.** The player did not get it | "job 6 is blocked because the workshop has no room", and "Jobs 3, 5 and 7 wait on their sources" | `DESTINATION_NO_INVENTORY`: there is no inventory at 'workshop'. The same words as in run #27.3. Job 7 is `PAUSED`: the same sentence says so before. The check of the length refused the sentence |
+| 17 | Weak | "robot 4 is not running or loaded at the moment" | The facts say "not running or not loaded": one of the two, and the server does not know which |
+| 5 | Weak | "which is waiting because the cellar is at its reserve, so it is not moving coal right now" | The robot does not run: "waiting" is the last recorded state |
+| 7 | An omission | "it is blocked because the destination has no inventory, not done" | The sentence does not give the 24 on board. Run #27.3 gave them |
+| 4 and 5 | Not about the record | "I cannot give you its delivered total, load on board or stocks", and "I cannot see its load or fuel" | The fixed sentence before the voice gives these numbers, with their caution. The two parts of the answer do not agree in their words |
+| 1, 2, 4 and 7 | Not about the record | "Uno here:" | Four sentences start with these words |
+
+- Rows 2, 3, 6, 8, 9, 15, 16 and 18: the agent found no words that contradict the facts. The player did not get the sentence of row 8.
+- Row 7 is the adversarial case of D32. The model said "not done", with the block.
+- Row 9, the fuel: right. See "The correction after run #27.3".
+- Each sentence of run #27.6 is in English.
+- Row 18, as in run #27.3: the answer about the complete job of the quarry starts with the fixed sentences of jobs 1, 5 and 7.
+
+#### Haiku 5.5 after the two runs
+
+| | Run #27.3 | Run #27.6, with the correction |
+| --- | --- | --- |
+| Right actions | 17 of 19. Rows 14 and 17 are wrong | 18 of 19. Row 17 is wrong |
+| Failed checks | 1 of 13: row 1, the length | 2 of 13: rows 1 and 8, the length |
+| A sentence that the player got, with a mark "can contradict the record" | Row 9, the fuel | None |
+| A sentence that the player did not get, with that mark | Row 1 | Row 1 |
+| Tokens | 83923 in, 3358 out | 85424 in, 3631 out |
+| Time of the 19 requests | 35673 ms | 35712 ms |
+
+The section of run #27.7, as the harness wrote it: the file `run-gametest/measurement-claude-sonnet-5-5.md`, without a change by hand.
+
+#### The measurement on claude-sonnet-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T18:07:12Z. Model: `claude-sonnet-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | PASSED | 3513 | 4491 | 151 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, robot #1, station 'furnace' | yes | PASSED | 2117 | 4496 | 132 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 2081 | 4497 | 132 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 1921 | 4495 | 142 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, robot #4, station 'cellar' | yes | PASSED | 2201 | 4496 | 134 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, station 'tower' | yes | PASSED | 1969 | 4494 | 121 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, station 'workshop' | yes | PASSED | 1683 | 4494 | 122 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | PASSED | 2027 | 4491 | 142 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, station 'depot' | yes | PASSED | 2013 | 4499 | 123 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1499 | 4502 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 1320 | 4497 | 59 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, station 'harbor' | yes | NOT_NEEDED | 1775 | 4494 | 61 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 1395 | 4494 | 61 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | yes | NOT_NEEDED | 1599 | 4506 | 71 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 1968 | 4496 | 113 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 1716 | 4495 | 114 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 1775 | 4492 | 98 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 1956 | 4499 | 137 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 1420 | 4496 | 60 |
+
+Totals: right actions: 18 of 19. Failed checks: 0. Passed checks: 13. Requests without a valid action: 0. Time: 35948 ms. Tokens: 85424 in, 2042 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Of seven jobs, one is done, one is paused, and the rest are stuck: one has no fuel, one lacks a destination inventory, two wait on empty sources, and one is in recovery with an uncertain load. Tell me which robot you want details on, or I can say what to resume or cancel.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 8 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 7 s ago). I last observed 'tower' 5 min ago: it had 16 then. Of seven jobs, one is done, one is paused, and the rest are stuck: one has no fuel, one lacks a destination inventory, two wait on empty sources, and one is in recovery with an uncertain load. Tell me which robot you want details on, or I can say what to resume or cancel.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: The furnace job is waiting because the depot is down to the 32 coal I was told to leave there, so nothing above that can move. The furnace holds 10 coal and wants 64, so it will stay hungry until the depot gets more.
+The answer of Uno: The furnace job is waiting because the depot is down to the 32 coal I was told to leave there, so nothing above that can move. The furnace holds 10 coal and wants 64, so it will stay hungry until the depot gets more.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"5 s ago"},"destinationStock":{"count":10,"age":"7 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: The robot of the mine job, robot 2, has run out of fuel, so it is blocked and has carried nothing of the 24 coal yet. I haven't seen the stock at the mine or the smithy, so I can't tell you those.
+The answer of Uno: The robot of the mine job, robot 2, has run out of fuel, so it is blocked and has carried nothing of the 24 coal yet. I haven't seen the stock at the mine or the smithy, so I can't tell you those.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: The warehouse job is in recovery because the load in the robot differs from my record, so I can't tell you how much was delivered, what is on board or what the stocks are. It was set to carry 24 coal to the kitchen, and the robot has plenty of fuel.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 14 s ago). You decide whether to resume or cancel. The warehouse job is in recovery because the load in the robot differs from my record, so I can't tell you how much was delivered, what is on board or what the stocks are. It was set to carry 24 coal to the kitchen, and the robot has plenty of fuel.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: The robot at the cellar, robot 4, is not working right now: it is waiting because the cellar has nothing above the reserve to carry to the bakery. Nothing has been delivered yet, and its load and fuel are unknown to me.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 15 s ago). The robot at the cellar, robot 4, is not working right now: it is waiting because the cellar has nothing above the reserve to carry to the bakery. Nothing has been delivered yet, and its load and fuel are unknown to me.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't give the coal in the tower: my last look at it is too old to trust, so I won't guess. The job carrying coal there from the harbor is paused, and you can resume it if you want fresh data.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't give the coal in the tower: my last look at it is too old to trust, so I won't guess. The job carrying coal there from the harbor is paused, and you can resume it if you want fresh data.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"12 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: No, the job to the workshop is not done: it is blocked because the workshop has no inventory, and 64 items are still to carry. The robot holds 24 on board and nothing has been delivered yet.
+The answer of Uno: No, the job to the workshop is not done: it is blocked because the workshop has no inventory, and 64 items are still to carry. The robot holds 24 on board and nothing has been delivered yet.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"17 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: While you were away, robot 0 finished carrying 16 coal from quarry to kiln, and robot 2 ran out of fuel. Robot 3's load differs from my record, and robots 1, 4, 5 and 6 are waiting, blocked or paused.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 22 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 21 s ago). I last observed 'tower' 5 min ago: it had 16 then. While you were away, robot 0 finished carrying 16 coal from quarry to kiln, and robot 2 ran out of fuel. Robot 3's load differs from my record, and robots 1, 4, 5 and 6 are waiting, blocked or paused.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"19 s ago"},"destinationStock":{"count":16,"age":"17 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"19 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"19 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"15 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"21 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"20 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"20 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"20 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"17 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"17 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot at the depot is robot 1, and its fuel level is 995, enough for about 165 trips between the depot and the furnace. It is currently waiting because the depot is down to the reserve of 32.
+The answer of Uno: The robot at the depot is robot 1, and its fuel level is 995, enough for about 165 trips between the depot and the furnace. It is currently waiting because the depot is down to the reserve of 32.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"21 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"23 s ago"},"destinationStock":{"count":16,"age":"21 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"24 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"22 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"29 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: Weather forecasts are beyond me, since I only know your stations, robots and jobs. Ask me about a job or tell me what to carry, and I'll gladly be useful.
+The answer of Uno: Weather forecasts are beyond me, since I only know your stations, robots and jobs. Ask me about a job or tell me what to carry, and I'll gladly be useful.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I'm missing the quantity of coal, the source station, and which robot to use. Robot 0 is the only free one, but I won't guess the rest, so tell me how much and from where.
+The answer of Uno: I'm missing the quantity of coal, the source station, and which robot to use. Robot 0 is the only free one, but I won't guess the rest, so tell me how much and from where.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free; its last job is done. Robots 1 through 6 each still hold an open job, so they are busy.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 37 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 36 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free; its last job is done. Robots 1 through 6 each still hold an open job, so they are busy.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job is done: robot 0 carried all 16 coal to the kiln, with nothing left to carry. The quarry still holds 24 coal and the robot has plenty of fuel left, so I'd call that a tidy bit of work.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 39 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 38 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job is done: robot 0 carried all 16 coal to the kiln, with nothing left to carry. The quarry still holds 24 coal and the robot has plenty of fuel left, so I'd call that a tidy bit of work.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"36 s ago"},"destinationStock":{"count":16,"age":"34 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"5 s ago"},"destinationStock":{"count":10,"age":"38 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Sonnet 5.5 (run #27.7)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 18 of 19 are right. Row 17 is a report about each job, not "none": as Haiku 5.5 in its two runs.
+
+The checks: 13 sentences, 13 passed. The longest sentence has 272 characters.
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 1 | Weak | "two wait on empty sources" | Jobs 3 and 5 wait at the reserve of their source. The depot of job 3 holds 32, its reserve: it is not empty. The numbers of this sentence are words: the check of the numbers does not read them |
+| 5 | Weak | "it is waiting because the cellar has nothing above the reserve" | The robot does not run: "waiting" is the last recorded state. The sentence starts with "is not working right now" |
+| 16 | Not about the record | "I'm missing the quantity of coal, the source station, and which robot to use. Robot 0 is the only free one" | The system text gives the only free robot to a request that names none |
+
+- Rows 2, 3, 4, 6, 7, 8, 9, 15, 17 and 18: the agent found no words that contradict the facts.
+- Row 7, the adversarial case of D32: "No, the job to the workshop is not done", with the block, the 64 still to carry and the 24 on board.
+- Row 9, the fuel: "its fuel level is 995, enough for about 165 trips between the depot and the furnace".
+- Each sentence is in English, also the answer to the Italian request of row 18.
+- No sentence names the server, the facts or a field.
+
+The section of run #27.8, as the harness wrote it: the file `run-gametest/measurement-claude-opus-5-5.md`, without a change by hand.
+
+#### The measurement on claude-opus-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T18:08:47Z. Model: `claude-opus-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | PASSED | 3000 | 4491 | 157 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, station 'furnace' | yes | PASSED | 2980 | 4496 | 146 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 2604 | 4497 | 127 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 2734 | 4495 | 143 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, station 'cellar' | yes | PASSED | 2591 | 4496 | 147 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, robot #6, station 'tower' | yes | PASSED | 2489 | 4494 | 136 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, station 'workshop' | yes | PASSED | 2592 | 4494 | 127 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | PASSED | 2784 | 4491 | 164 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, station 'depot' | yes | PASSED | 1813 | 4499 | 128 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1882 | 4502 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 2270 | 4497 | 133 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, station 'harbor' | yes | NOT_NEEDED | 2112 | 4494 | 61 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 2026 | 4494 | 61 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | yes | NOT_NEEDED | 2276 | 4506 | 71 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 2438 | 4496 | 126 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 2528 | 4495 | 112 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 2509 | 4492 | 127 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 2432 | 4499 | 124 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 3497 | 4496 | 60 |
+
+Totals: right actions: 18 of 19. Failed checks: 0. Passed checks: 13. Requests without a valid action: 0. Time: 47557 ms. Tokens: 85424 in, 2219 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Robot 0 finished its coal run to the kiln, robot 6 is paused toward the tower, and robots 1 and 4 wait for coal at their sources. Robot 2 is out of fuel, robot 5 found no inventory at the workshop, and robot 3 is recovering from a load mismatch.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 7 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 7 s ago). I last observed 'tower' 5 min ago: it had 16 then. Robot 0 finished its coal run to the kiln, robot 6 is paused toward the tower, and robots 1 and 4 wait for coal at their sources. Robot 2 is out of fuel, robot 5 found no inventory at the workshop, and robot 3 is recovering from a load mismatch.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: The depot holds 32 coal, exactly the 32 you asked me to keep there, so robot 1 waits with nothing to spare while the furnace sits at 10 and still needs 54. Add coal to the depot or lower the reserve, and the deliveries can continue.
+The answer of Uno: The depot holds 32 coal, exactly the 32 you asked me to keep there, so robot 1 waits with nothing to spare while the furnace sits at 10 and still needs 54. Add coal to the depot or lower the reserve, and the deliveries can continue.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"6 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: Robot 2 ran out of fuel on the way from mine to smithy, so it is stuck with 0 fuel and has delivered nothing of its 24 coal. Give it some fuel and it can get back to work.
+The answer of Uno: Robot 2 ran out of fuel on the way from mine to smithy, so it is stuck with 0 fuel and has delivered nothing of its 24 coal. Give it some fuel and it can get back to work.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: My robot 3 is sorting things out on the warehouse to kitchen coal job: the load in the robot does not match my record, so it is in recovery. I cannot vouch for the delivered total yet, but its fuel is 999, enough for about 166 trips.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 16 s ago). You decide whether to resume or cancel. My robot 3 is sorting things out on the warehouse to kitchen coal job: the load in the robot does not match my record, so it is in recovery. I cannot vouch for the delivered total yet, but its fuel is 999, enough for about 166 trips.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: Robot 4 is not really working on the cellar job: it is waiting because the cellar has nothing above its reserve, with 0 of 32 coal delivered and 32 still to carry. I can't see whether it is running or loaded, so its load and fuel are unknown to me.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 18 s ago). Robot 4 is not really working on the cellar job: it is waiting because the cellar has nothing above its reserve, with 0 of 32 coal delivered and 32 still to carry. I can't see whether it is running or loaded, so its load and fuel are unknown to me.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't give you the coal count in the tower: my last look at it is too old to trust, so the server shows you what it knows with its caution. What I do know is that robot 6 delivered 16 coal there before its job was paused, with 24 still to carry.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't give you the coal count in the tower: my last look at it is too old to trust, so the server shows you what it knows with its caution. What I do know is that robot 6 delivered 16 coal there before its job was paused, with 24 still to carry.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"14 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: No, the job to the workshop is blocked: robot 5 found no container there, so it still has 24 coal on board and 64 still to carry. Put a chest at the workshop, or cancel the job if you prefer.
+The answer of Uno: No, the job to the workshop is blocked: robot 5 found no container there, so it still has 24 coal on board and 64 still to carry. Put a chest at the workshop, or cancel the job if you prefer.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"20 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: Robot 0 delivered all 16 coal to the kiln, robot 6 brought 16 to the tower and was paused, while robots 1 and 4 wait at sources down to their reserve. Robot 2 ran out of fuel, robot 5 found no container at the workshop, and robot 3 has a load that differs from my record.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 26 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 25 s ago). I last observed 'tower' 5 min ago: it had 16 then. Robot 0 delivered all 16 coal to the kiln, robot 6 brought 16 to the tower and was paused, while robots 1 and 4 wait at sources down to their reserve. Robot 2 ran out of fuel, robot 5 found no container at the workshop, and robot 3 has a load that differs from my record.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"23 s ago"},"destinationStock":{"count":16,"age":"21 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"5 s ago"},"destinationStock":{"count":10,"age":"22 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"23 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"19 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"25 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"23 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"23 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"23 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"23 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"21 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"21 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot on the depot to furnace coal job has 995 fuel, which is enough for about 165 trips between those two stations. Fuel is the least of its worries, since it is waiting because the depot sits at its reserve.
+The answer of Uno: The robot on the depot to furnace coal job has 995 fuel, which is enough for about 165 trips between those two stations. Fuel is the least of its worries, since it is waiting because the depot sits at its reserve.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"25 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"27 s ago"},"destinationStock":{"count":16,"age":"25 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"29 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"27 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"35 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: I direct robots between your stations, and the sky is sadly outside my jurisdiction, so I know nothing about tomorrow's weather. Ask me about your jobs instead, and I can at least forecast some coal.
+The answer of Uno: I direct robots between your stations, and the sky is sadly outside my jurisdiction, so I know nothing about tomorrow's weather. Ask me about your jobs instead, and I can at least forecast some coal.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I would happily send coal to the smithy, but I need to know how much coal and from which station it should come. Tell me the quantity and the source, and robot 0 is free for the work.
+The answer of Uno: I would happily send coal to the smithy, but I need to know how much coal and from which station it should come. Tell me the quantity and the source, and robot 0 is free for the work.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free: it finished carrying 16 coal from the quarry to the kiln. Robots 1 to 6 all still hold jobs, though several are waiting, blocked or paused rather than busy.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 46 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 45 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free: it finished carrying 16 coal from the quarry to the kiln. Robots 1 to 6 all still hold jobs, though several are waiting, blocked or paused rather than busy.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job went fine: robot 0 carried all 16 coal to the kiln and finished, with 24 coal still left at the quarry. Robot 0 is free again if you have another errand in mind.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 48 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 48 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job went fine: robot 0 carried all 16 coal to the kiln and finished, with 24 coal still left at the quarry. Robot 0 is free again if you have another errand in mind.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"45 s ago"},"destinationStock":{"count":16,"age":"43 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"47 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Opus 5.5 (run #27.8)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 18 of 19 are right. Row 17 is a report about each job, not "none": as the other two models.
+
+The checks: 13 sentences, 13 passed. The longest sentence has 271 characters.
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 3 | Weak | "Robot 2 ran out of fuel on the way from mine to smithy" | The facts give no place of the robot. They give 0 on board, and no robot observed 'mine' yet. In the world of the measurement the robot starts without fuel |
+| 4 | Weak | "My robot 3 is sorting things out", and in row 1 "robot 3 is recovering from a load mismatch" | In `RECOVERY` the job stands still until the owner resumes it or cancels it. The fixed sentence before the voice says "You decide whether to resume or cancel." |
+| 5 | Weak | "it is waiting because the cellar has nothing above its reserve" | The robot does not run: "waiting" is the last recorded state. The sentence starts with "is not really working" |
+| 3 | An omission | "Give it some fuel and it can get back to work" | A blocked job also needs a resume. The fixed report says "Give me fuel, then resume the job." |
+| 6 | Not about the record | "the server shows you what it knows with its caution" | The voice names the server, as Haiku 5.5 in run #27.3. The system text says "the server gives it to the player" |
+
+- Rows 2, 7, 8, 9, 15, 16, 17 and 18: the agent found no words that contradict the facts.
+- Row 7, the adversarial case of D32: "No, the job to the workshop is blocked: robot 5 found no container there, so it still has 24 coal on board and 64 still to carry."
+- Row 8, the diary: the sentence names each of the seven jobs.
+- Row 9, the fuel: "has 995 fuel, which is enough for about 165 trips between those two stations".
+- Each sentence is in English, also the answer to the Italian request of row 18.
+
+#### The pass on the three models, and the rule
+
+The pass: runs #27.6, #27.7 and #27.8, with the same code and the same 19 requests. Run #27.3 used the text before the correction. The agent proposes that run #27.3 is not a part of the pass.
+
+| | Haiku 5.5, run #27.6 | Sonnet 5.5, run #27.7 | Opus 5.5, run #27.8 |
+| --- | --- | --- | --- |
+| Right actions | 18 of 19 | 18 of 19 | 18 of 19 |
+| The wrong action | Row 17: a report | Row 17: a report | Row 17: a report |
+| Failed checks | 2 of 13: the length | 0 of 13 | 0 of 13 |
+| Failed checks of the numbers | 0 | 0 | 0 |
+| Mark "can contradict the record", a sentence that the player got | 0 | 0 | 0 |
+| The same mark, a sentence that the check refused | 1: row 1 | 0 | 0 |
+| Mark "weak" | 2 | 2 | 3 |
+| Time of the 19 requests | 35712 ms | 35948 ms | 47557 ms |
+| The slowest request | 3575 ms | 3513 ms | 3497 ms |
+| Tokens | 85424 in, 3631 out | 85424 in, 2042 out | 85424 in, 2219 out |
+| Cost, calculated with the prices of D33 | 0.010 $ | 0.191 $ | 0.386 $ |
+
+The rule of D42, point 7, with the marks of the agent. **Proposed by the agent, not decided:**
+
+- A wrong action where a model with a higher price gives the right one: none in the pass. Each model gives a report for row 17.
+- A sentence that contradicts the record: the project owner decides. In this pass the agent gave the mark "can contradict the record" to no sentence that the player got.
+- The check of the numbers fails more than 1 time in 5: no model. Haiku 5.5 failed the check of the length 2 times in 13.
+- Then no model is out. The model with the lowest price is Haiku 5.5: the start value of the setting now.
+
+Row 17, "Which of my robots are free?". The harness expects "none". The three models give a report about each job. The system text names a report "a question about a job, about all the jobs, or about what occurred". Row 17 is not in the spec: the implementation added it (D42, point 7). The agent proposes that the expected action of row 17 is too strict.
+
+Against Haiku 5.5, for the judgement of the project owner:
+
+- Run #27.3, on the text before the correction: its action for row 14 was wrong. Sonnet 5.5 and Opus 5.5 give the right action. The correction did not change the text about a start. Thus its action for row 14 can change between two runs.
+- Its sentence about each job is too long in both runs: row 1, and row 8 in run #27.6. Then the player gets the fixed report of the seven jobs. **Not measured:** a world with one or two jobs.
+- Its refused sentence of row 1 says "the workshop has no room" in both runs.
+- In runs #27.2 and #27.5 one answer of four is in Italian. **Not known:** the language of Sonnet 5.5 and Opus 5.5 for that request. Only `t18_claude_live` has it, and it ran on Haiku 5.5 only.
+- Four of its sentences of run #27.6 start with "Uno here:".
+
+Observations about Uno, not about a model:
+
+- A report about each job starts with the fixed sentences of jobs 1, 5 and 7: 488 characters before the voice. Rows 1, 8, 17 and 18 of each run have them. The voice comes last (D42, point 3).
+- Row 18: the complete job of the quarry fits no open job. Thus its report is a report about each job (D42, point 16, as built).
+
+#### The decision of the project owner
+
+**Decided by the project owner on 2026-11-15:** the model of increment B is Haiku 5.5, for the moment. The reason of the project owner: a more capable model stays possible later. The model is a setting (D42, point 6).
+
+- The choice agrees with the rule of D42, point 7 and with the marks of the agent: no model is out, and Haiku 5.5 has the lowest price.
+- The start value of the setting is already `claude-haiku-5-5`. No code changed for the choice. Run #27.4 is the normal run on the code of the choice, and run #27.5 is its `-Plive` run.
+- Before the choice the project owner asked for the cost of a play of 5 or 6 hours. The answer of the agent is a calculation from the tokens of the runs. With 30 written requests: 1 or 2 cents on Haiku 5.5, and 20 to 30 cents on Sonnet 5.5. With 100 written requests, the limit of a session: 4 to 6 cents, and 0.60 to 1.00 $. The number of requests is an assumption.
+- The paid runs of ticket #27 cost 0.60 $ of the budget of 5 $. One pass of three ran.
+
+The project owner did not answer these points one by one. The agent reads no answer to them in the choice:
+
+1. Whether run #27.3 is a part of the pass.
+2. Whether a sentence that the check refused counts for the rule.
+3. Whether a report is a wrong action for row 17.
+4. The answer in Italian of Haiku 5.5 in runs #27.2 and #27.5. Check C2 of the play session reads the language of each answer.
 
 ## Increment B — final runs and evidence (ticket #28)
 

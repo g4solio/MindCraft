@@ -19,16 +19,33 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static io.github.g4solio.mindcraft.MindCraftTests.check;
 
 /**
- * The Claude provider with the real service of Anthropic. This check needs an API key and costs a little money: four requests.
+ * The Claude provider with the real service of Anthropic. Each test needs an API key and costs money. Each run needs the consent of the
+ * project owner (CLAUDE.md).
  * <pre>
- *   gradlew runGameTestServer -Plive       with ANTHROPIC_API_KEY in the environment
+ *   gradlew runGameTestServer -Plive                                t18_claude_live: four requests
+ *   gradlew runGameTestServer -Pmeasure -Pmodel=claude-sonnet-5-5   b_measurement: the measurement on one model, 19 requests
  * </pre>
- * The answers of a language model can change between two runs. Thus this check is not part of the normal run.
- * Forge selects game tests by the namespace of their template. Thus this class has its own namespace and template.
+ * Each run needs ANTHROPIC_API_KEY in the environment.
+ * The model is a parameter of the run: -Pmodel (D42, choices of the implementation). Without it, the model is the setting "model" of
+ * run-gametest/config/mindcraft-common.toml, as on a server (D42, point 6). The log names it.
+ * The answers of a language model can change between two runs. Thus these tests are not part of the normal run.
+ * Forge selects game tests by the namespace of their template. Thus each test has a namespace and a template of its own:
+ * mindcraft_live and mindcraft_measure. A run of one test does not run the other one.
  */
 @GameTestHolder("mindcraft_live")
 @PrefixGameTestTemplate(false)
 public class LiveTests {
+    /** The model of the run: -Pmodel of build.gradle, or empty for the setting. */
+    private static final String MODEL = System.getProperty("mindcraft.model", "");
+
+    /**
+     * The Claude provider of a run, with the key of the environment and the model of the run. The provider reads the setting when it is
+     * built. With -Pmodel the setting has the model of the run only while the provider is built: then the value of before is back.
+     */
+    private static Uno.Provider claude() {
+        return MODEL.isBlank() ? ClaudeProvider.fromEnv() : MindCraftTests.withModel(MODEL, ClaudeProvider::fromEnv);
+    }
+
     /**
      * The fixed rules cannot read this request: the numbers are words and the station names are not exact.
      * The requests are in Italian on purpose: a player can write in any language. Uno answers in English.
@@ -54,12 +71,13 @@ public class LiveTests {
         rig.runtime.addStation(player, "deposito", rig.level, helper.absolutePos(rig.source), helper.absolutePos(rig.sourceDock));
         rig.runtime.addStation(player, "fornaci", rig.level, helper.absolutePos(rig.dest), helper.absolutePos(rig.destDock));
         rig.runtime.addStation(player, "miniera", rig.level, helper.absolutePos(rig.source), helper.absolutePos(rig.sourceDock));
-        Uno.Provider claude = ClaudeProvider.fromEnv();
+        Uno.Provider claude = claude();
+        MindCraft.LOGGER.info("t18_claude_live uses {}", claude.name());
         List<String> answers = new CopyOnWriteArrayList<>();
 
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> {
-                Uno.Action rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player)).action();
+                Uno.Action rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player, rig.level.getGameTime())).action();
                 check(rules instanceof Uno.Action.None, "the fixed rules read the request: it is too easy for this check: " + rules);
                 Uno.ask(server, player, REQUEST, claude, Uno.TIMEOUT_MS, answers::add);
             })
@@ -87,8 +105,10 @@ public class LiveTests {
                 .thenExecute(() -> {
                     MindCraft.LOGGER.info("t18_claude_live request '{}': {}", request, answers.get(index));
                     check(!Uno.hasProposal(player), "this became a proposal: " + answers.get(index));
-                    // The sentence must come from the model. A failure of the service has a different answer. See Uno.failure.
-                    check(answers.get(index).startsWith("I cannot propose a job: "), answers.get(index));
+                    // The sentence must come from the model, and pass the checks of Uno: the voice of "none" (D42, point 15).
+                    // A failure of the service, the fixed rules and a failed check have different answers.
+                    check(!answers.get(index).startsWith(Uno.NO_VALID_ANSWER) && !answers.get(index).startsWith(Uno.CANNOT_PROPOSE)
+                        && !answers.get(index).equals(Uno.CANNOT_ANSWER), answers.get(index));
                 });
         }
         sequence
@@ -99,5 +119,24 @@ public class LiveTests {
                 check(usage.requests() == 4 && usage.inputTokens() > 0 && usage.outputTokens() > 0, "the counter: " + usage);
             })
             .thenSucceed();
+    }
+
+    /**
+     * The measurement of the models (D33, and D42 points 7 and 20), and the sample of the T21 case of D32 with the real service.
+     * The harness of Measurement builds the world and sends its fixed set of 19 requests, one after the other. It writes the record:
+     * the file run-gametest/measurement-(model).md and the server log. Each sentence of the model is next to its facts.
+     * The test does not judge the model: it fails only when the harness cannot build the world or write the record.
+     * The project owner and the record decide (D42, point 20). One run is about 20 requests on one model: D42, point 8 has the budget.
+     * The harness is the harness of MindCraftTests.b_measurement_with_the_stand_in, which runs in the normal run without the real service.
+     */
+    @GameTest(template = MindCraftTests.EMPTY, templateNamespace = "mindcraft_measure", timeoutTicks = 12_000)
+    public static void b_measurement(GameTestHelper helper) {
+        String key = System.getenv(ClaudeProvider.KEY_VARIABLE);
+        check(key != null && !key.isBlank(), "this check needs " + ClaudeProvider.KEY_VARIABLE + " in the environment");
+        Uno.Provider claude = claude();
+        MindCraft.LOGGER.info("b_measurement uses {}", claude.name());
+        Measurement.run(helper, world -> claude, "The measurement on " + claude.model(), "Type: a test with the real Claude service, "
+            + "in the game and automatic.", "measurement-" + claude.model() + ".md", report -> {
+        }).thenSucceed();
     }
 }

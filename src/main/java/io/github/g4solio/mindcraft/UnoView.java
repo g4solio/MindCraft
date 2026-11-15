@@ -26,17 +26,13 @@ final class UnoView {
     private UnoView() {
     }
 
-    /** Only the jobs that the actor owns. */
+    /**
+     * Only the jobs that the actor owns. The conversation part comes first, then the lines about the provider, then the jobs
+     * (D42, point 13): in a small window the player sees the sentence of Uno, the field and the buttons without a scroll.
+     */
     static String build(MindRuntime runtime, Actor actor, long now) {
         JsonArray widgets = new JsonArray();
-        runtime.jobs.forEach((robotId, job) -> {
-            if (actor.owns(job.owner)) job(widgets, robotId, job, now);
-        });
-        if (widgets.isEmpty()) widgets.add(text("I have no record of a job of yours.", "muted"));
-        long places = runtime.places.stream().filter(place -> actor.id().equals(place.owner())).count();
-        if (places > 0) widgets.add(text("Places of the base with a projector: " + places, "muted"));
         widgets.add(text("Uno › " + Uno.said(actor), "uno"));
-        providerLines(widgets, actor);
 
         // "Confirm" has one meaning only: the proposal is in words next to the button, and the action names that proposal.
         // The last sentence of Uno can be about something else, for example a report.
@@ -55,6 +51,15 @@ final class UnoView {
         if (proposal != null) buttons.add(button("confirm:" + proposal.number(), "Confirm #" + proposal.number()));
         buttons.add(button("report", "Report"));
         widgets.add(row(buttons));
+        providerLines(widgets, actor);
+
+        int conversation = widgets.size();
+        runtime.jobs.forEach((robotId, job) -> {
+            if (actor.owns(job.owner)) job(widgets, robotId, job, now);
+        });
+        if (widgets.size() == conversation) widgets.add(text("I have no record of a job of yours.", "muted"));
+        long places = runtime.places.stream().filter(place -> actor.id().equals(place.owner())).count();
+        if (places > 0) widgets.add(text("Places of the base with a projector: " + places, "muted"));
 
         JsonObject view = new JsonObject();
         view.addProperty("title", "Uno");
@@ -91,6 +96,8 @@ final class UnoView {
         if (job.state == State.BLOCKED || job.state == State.RECOVERY || job.cause == MindRuntime.Cause.PATH_OBSTRUCTED) {
             widgets.add(text("Recorded reason: " + job.reason, "muted"));
         }
+        // One line about the fuel, only when it is low (D42, point 19): the screen does not grow at each contact.
+        if (job.lowFuel()) widgets.add(text("Little fuel: " + job.fuel + ", " + Notices.trips(job.trips, "the") + ".", "normal"));
         if (job.state.open()) {
             widgets.add(number("quantity:" + robotId, job.keepStock() ? "Level to keep" : "Quantity to carry", job.quantity));
             widgets.add(number("reserve:" + robotId, "Reserve in the source", job.reserve));

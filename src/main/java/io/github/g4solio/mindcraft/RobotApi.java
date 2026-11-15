@@ -26,6 +26,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * The "mindcraft" Lua API. CC: Tweaked creates one instance for each turtle computer.
@@ -90,6 +91,11 @@ public class RobotApi implements ILuaAPI {
         return count(new InvWrapper(turtle.getInventory()), item);
     }
 
+    /** The items on board of each other kind. A new job of this item does not count them (D42, point 9). */
+    int others(Item item) {
+        return count(new InvWrapper(turtle.getInventory()), stack -> !stack.isEmpty() && !stack.is(item));
+    }
+
     @Override
     public String[] getNames() {
         return new String[]{"mindcraft"};
@@ -139,7 +145,7 @@ public class RobotApi implements ILuaAPI {
         if (job == null) return null;
         int held = held(job.item);
         if (job.state.active() && held != job.carried) {
-            runtime().set(job, State.RECOVERY, "the robot holds " + held + ", the record says " + job.carried);
+            runtime().recovery(job, Cause.LOAD_DIFFERS, "the robot holds " + held + ", the record says " + job.carried);
         }
         Map<String, Object> out = new HashMap<>();
         out.put("id", job.id);
@@ -245,12 +251,18 @@ public class RobotApi implements ILuaAPI {
         return computer.getLevel().getGameTime();
     }
 
-    /** Checks the authority of this instance. Returns the job of this robot, or null. */
+    /**
+     * Checks the authority of this instance. Returns the job of this robot, or null.
+     * At a contact with an active job the runtime reads the fuel of the turtle (D42, point 11). No Lua module changes for this.
+     */
     private @Nullable Job contact() throws LuaException {
         if (LIVE.get(id()) != this) throw new LuaException("A newer session of robot #" + id() + " replaced this session.");
         if (!runtime().robots.containsKey(id())) return null;
         Job job = runtime().jobs.get(id());
-        if (job != null) job.lastContact = now();
+        if (job != null) {
+            job.lastContact = now();
+            if (job.state.active()) runtime().checkFuel(job, turtle.getFuelLevel(), turtle.isFuelNeeded());
+        }
         return job;
     }
 
@@ -294,10 +306,15 @@ public class RobotApi implements ILuaAPI {
 
     // ponytail: items match by type only. NBT is ignored. Add a stack filter when a job needs it.
     static int count(IItemHandler inventory, Item item) {
+        return count(inventory, stack -> stack.is(item));
+    }
+
+    /** The items of the stacks that the filter accepts. */
+    private static int count(IItemHandler inventory, Predicate<ItemStack> which) {
         int total = 0;
         for (int slot = 0; slot < inventory.getSlots(); slot++) {
             ItemStack stack = inventory.getStackInSlot(slot);
-            if (stack.is(item)) total += stack.getCount();
+            if (which.test(stack)) total += stack.getCount();
         }
         return total;
     }

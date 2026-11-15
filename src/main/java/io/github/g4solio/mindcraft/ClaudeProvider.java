@@ -5,6 +5,7 @@ import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.core.JsonValue;
 import com.anthropic.errors.AnthropicIoException;
 import com.anthropic.errors.AnthropicServiceException;
+import com.anthropic.errors.NotFoundException;
 import com.anthropic.errors.PermissionDeniedException;
 import com.anthropic.errors.RateLimitException;
 import com.anthropic.errors.UnauthorizedException;
@@ -17,39 +18,50 @@ import com.google.gson.Gson;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
  * A provider of Uno that asks Claude through the official Anthropic SDK.
- * Claude gets the request of the player and the context: the names of the stations and the ids of the robots of that player.
+ * Claude gets the request of the player and the context: the names of the stations and the ids of the robots of that player,
+ * the facts of the jobs of that player and the newest lines of its diary (D42, point 2). The context holds no position.
  * Claude gives back one action of the closed list as JSON, with its parameters. See Uno.Provider.
- * The answer is only an action. Uno validates it, and an order must pass the ordinary validation and the confirmation of the player.
+ * For a report and for "none" the field "reason" also has the sentence of Uno: the voice (D42, point 1). Uno checks it.
+ * Uno validates the action, and an order must pass the ordinary validation and the confirmation of the player.
+ * The model is the setting "model" of config/mindcraft-common.toml, read when the provider is built (D42, point 6).
  */
 final class ClaudeProvider implements Uno.Provider {
-    static final String MODEL = "claude-opus-5-5";
     static final String KEY_VARIABLE = "ANTHROPIC_API_KEY";
+    /**
+     * The models with a server-side fallback for a refusal, from the model reference of the API dated 2026-11-03 (D33).
+     * Haiku 5.5 has none. A model that this list does not name gets no fallback: a refusal is then a failure of the model.
+     */
+    private static final Set<String> FALLBACK_MODELS = Set.of("claude-opus-5-5", "claude-sonnet-5-5");
     /** A limit on the cost of one request. The answer is small: this number is mostly room for the thinking. */
     private static final long MAX_TOKENS = 4096;
 
     private static final String SYSTEM = """
-        You interpret requests for Uno, an assistant in a Minecraft mod. Uno directs robots that carry items between named stations.
+        You are Uno, the central intelligence of a Minecraft mod. You direct robots that carry items between named stations of the player.
         The player writes a request in any language. Change the request into one action from this list:
         - "start": a new job.
         - "change": a new quantity, a new reserve, or both, for an open job.
         - "pause": stop a job for a while.
         - "resume": continue a job that is paused or stopped.
         - "cancel": end a job.
-        - "report": a question about a job, or about all the jobs.
+        - "report": a question about a job, about all the jobs, or about what occurred.
         - "none": the request asks for none of these actions, or it does not give a necessary value.
 
         The fields of "start":
         - module: "transport" carries a fixed quantity one time. "keep_stock" keeps at least a quantity in the destination and continues to work.
-        - robot: the id of a robot from the context. If the player names no robot and exactly one robot is free, use that robot.
+        - robot: the id of a robot from the context. If the player names no robot, use the only free robot. \
+        If no robot is free and the context has exactly one robot, use that robot. In each other case the action is "none": ask for the robot number.
         - from, to: the source station and the destination station. Write each name exactly as it is in the context. \
         The player can write a name with a different case, with an article, with other words around it or with a small error.
         - item: a Minecraft item id, for example "minecraft:coal". Translate the name of the item from the language of the player.
         - quantity: for transport, the number of items to carry. For keep_stock, the level to keep in the destination.
         - reserve: the number of items that must stay in the source station. 0 if the player gives no reserve.
+        A "start" for a robot that is not free replaces the open job of that robot: Uno proposes to cancel that job and to start the new one. \
+        Thus a new destination for a job is a "start" with the same robot, module, item, quantity, reserve and source, and the new destination.
 
         "change", "pause", "resume", "cancel" and "report" name a job with these fields:
         - robot: the id of the robot of the job, if the player gives it.
@@ -58,10 +70,24 @@ final class ClaudeProvider implements Uno.Provider {
         "change" also has quantity, reserve or both: the new values that the player gives. A value that the player does not give is null. \
         A change of anything else is "none".
 
-        The context lists only the stations and the robots of this player. Use no other station and no other robot.
-        Do not guess. If the request asks for no action of the list, or if it does not give a necessary value, the action is "none". \
-        Write in "reason" one short sentence in English that says what is missing, or why the request is not an action of the list. \
-        Speak only about the request and about the stations and robots in the context: you know nothing else about the world.
+        The context has the stations and the robots of this player, the facts of each job of this player and the newest lines of your diary. \
+        Use no other station and no other robot. You know nothing else about the world.
+        Do not guess. If the request asks for no action of the list, or if it does not give a necessary value, the action is "none".
+
+        "reason" is your sentence for the player: only for "report" and "none". For "report", answer the question from the facts and the diary. \
+        For "none", say what is missing, or answer from the context a question that is no action of the list.
+        Speak as Uno, in the first person: competent, curious and slightly ironic. Always write in English, \
+        also when the player writes in a different language. Use ordinary words: \
+        not the names of the fields, of the modules or of the states. Write two sentences and 300 characters at most.
+        Use only the numbers of the context and of the request, as they are written there. \
+        Do not calculate: the facts already give the quantity still to carry and the stock above the reserve.
+        "fuel" is the fuel level of the robot. \
+        "tripsWithThisFuel" is about how many trips between the two stations of the job that level allows.
+        A value that is not in the facts is uncertain, and the list "uncertain" says why. Do not give it and do not guess it: \
+        the server gives it to the player, with its caution, before your sentence.
+        You can say what the player can do, for example resume or cancel a job. A report and "none" change nothing: \
+        do not say that you start, change or stop something now.
+        You do not remember an earlier request or an earlier sentence. If the player asks about one, say so.
         For each other action, "reason" is empty text. Each field that the action does not use is null.""";
 
     /** The schema of an action. Each field is required, thus the model writes each one. A field that the action does not use is null. */
@@ -81,9 +107,11 @@ final class ClaudeProvider implements Uno.Provider {
           "reserve": {"type": ["integer", "null"]}}}""";
 
     private final AnthropicClient client;
+    private final String model;
 
     ClaudeProvider(AnthropicClient client) {
         this.client = client;
+        this.model = MindCraft.MODEL.get();
     }
 
     /** The SDK reads the key from the environment. The key is not in the repository, in the world or in a log. */
@@ -99,14 +127,27 @@ final class ClaudeProvider implements Uno.Provider {
 
     @Override
     public String name() {
-        return "Claude (" + MODEL + ")";
+        return "Claude (" + model + ")";
     }
 
-    /** The text of a written request leaves the server only on the route of the model. The player must know which route is used. */
+    /**
+     * The model of each request of this provider: the value of the setting when the provider was built.
+     * The record of a request and its line in the server log name it (D42).
+     */
+    @Override
+    public String model() {
+        return model;
+    }
+
+    /**
+     * The text of a written request leaves the server only on the route of the model. The player must know which route is used,
+     * and which data go with the request: the facts of the jobs and the newest lines of the diary, without a position (D42, point 18).
+     */
     @Override
     public String notice(Uno.Route route) {
         return switch (route) {
-            case MODEL -> "Written requests go to Claude, a model of Anthropic.";
+            case MODEL -> "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. "
+                + "No position leaves this server.";
             case AT_LIMIT -> "Uno uses the fixed rules for you: you reached the limit of model requests in this session. "
                 + "Your written requests stay on this server.";
             case NOT_OPERATOR, NO_MODEL -> "Uno uses the fixed rules for you: only an operator uses Claude. Your written requests stay on this server.";
@@ -114,28 +155,27 @@ final class ClaudeProvider implements Uno.Provider {
     }
 
     @Override
-    public Uno.Answer answer(String request, Uno.Context context) {
+    public Uno.Answer answer(String request, Uno.Context context) throws Uno.UnusableAnswer {
         BetaJsonOutputFormat.Schema.Builder schema = BetaJsonOutputFormat.Schema.builder();
         Map<?, ?> fields = new Gson().fromJson(SCHEMA, Map.class);
         fields.forEach((key, value) -> schema.putAdditionalProperty((String) key, JsonValue.from(value)));
-        MessageCreateParams params = MessageCreateParams.builder()
-            .model(MODEL)
+        MessageCreateParams.Builder params = MessageCreateParams.builder()
+            .model(model)
             .maxTokens(MAX_TOKENS)
-            // If the safety classifiers decline the request, the API tries it again on the model that Anthropic recommends.
-            .addBeta("server-side-fallback-2026-07-01")
-            .fallbacksDefault()
             .system(SYSTEM)
-            // Thinking is always on for this model. A low effort keeps the answer fast: the player waits in the game.
+            // Thinking is on by default for the three models of the setting. A low effort keeps the answer fast: the player waits in the game.
             .outputConfig(BetaOutputConfig.builder()
                 .effort(BetaOutputConfig.Effort.LOW)
                 .format(BetaJsonOutputFormat.builder().schema(schema.build()).build())
                 .build())
-            .addUserMessage("Context: " + context.toJson() + "\nRequest: " + request)
-            .build();
+            .addUserMessage("Context: " + context.toJson() + "\nRequest: " + request);
+        // If the safety classifiers decline the request, the API tries it again on the model that Anthropic recommends.
+        // Only a model with this fallback gets the parameter (D42, point 6).
+        if (FALLBACK_MODELS.contains(model)) params.addBeta("server-side-fallback-2026-07-01").fallbacksDefault();
 
         BetaMessage message;
         try {
-            message = client.beta().messages().create(params);
+            message = client.beta().messages().create(params.build());
         } catch (UnauthorizedException | PermissionDeniedException e) {
             throw new IllegalStateException("the API key is not valid or has no permission");
         } catch (RateLimitException e) {
@@ -143,17 +183,21 @@ final class ClaudeProvider implements Uno.Provider {
         } catch (AnthropicServiceException e) {
             // The player gets only the code. The body says why, for example a schema that the service rejects. It holds no key.
             MindCraft.LOGGER.warn("The model service answered with error {}: {}", e.statusCode(), e.body());
+            // The service answers 404 for a model that it does not know, or that it does not offer to this key: a wrong setting.
+            if (e instanceof NotFoundException) throw new IllegalStateException("the model service does not know the model '" + model + "'");
             throw new IllegalStateException("the model service answered with error " + e.statusCode());
         } catch (AnthropicIoException e) {
             throw new IllegalStateException("the model service is not reachable");
         }
 
         // A refusal or a cut answer has no usable content. Thus the stop reason comes before the content.
+        // The service billed their tokens: the failure carries them (D42, point 17).
+        long input = message.usage().inputTokens(), output = message.usage().outputTokens();
         BetaStopReason stop = message.stopReason().orElse(null);
-        if (BetaStopReason.REFUSAL.equals(stop)) throw new IllegalStateException("the model declined the request");
-        if (!BetaStopReason.END_TURN.equals(stop)) throw new IllegalStateException("the answer of the model is incomplete");
+        if (BetaStopReason.REFUSAL.equals(stop)) throw new Uno.UnusableAnswer("the model declined the request", input, output);
+        if (!BetaStopReason.END_TURN.equals(stop)) throw new Uno.UnusableAnswer("the answer of the model is incomplete", input, output);
         // The one reader of the JSON of an action. Uno still checks the values against the world.
         String json = message.content().stream().flatMap(block -> block.text().stream()).map(text -> text.text()).collect(Collectors.joining());
-        return new Uno.Answer(Uno.parse(json), message.usage().inputTokens(), message.usage().outputTokens());
+        return new Uno.Answer(Uno.parse(json), input, output);
     }
 }

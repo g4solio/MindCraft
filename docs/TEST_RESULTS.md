@@ -1,21 +1,22 @@
 # Test results
 
-Dates: 2026-11-12 (S0 to S2 and the review) and 2026-11-13 (increment A). Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: Tweaked 1.121.0.
+Dates: 2026-11-12 (S0 to S2 and the review), 2026-11-13 and 2026-11-14 (increment A), and 2026-11-15 (increment B). Environment: Windows 11, Temurin 17.0.21, Forge 47.4.28, CC: Tweaked 1.121.0.
 
 ## Types of test
 
 | Type | Meaning |
 | --- | --- |
-| **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer` |
+| **In the game, automatic** | A real headless Forge server runs the test with real turtles and chests. No client is connected. Command: `gradlew runGameTestServer`. The provider is the fixed rules, a provider written in the test, or a local stand-in of the service. No request leaves the computer |
+| **In the game, automatic, with the real service** | The same server runs a test of `LiveTests` that calls the real Claude service: `gradlew runGameTestServer -Plive` or `-Pmeasure`. Each run costs money and needs the consent of the project owner. It is not part of the normal run. Runs 15 and 19 of S2, and runs 76, 78 and 81 of increment A, are of this type. Runs #27.2, #27.3 and #27.5 to #27.8 of increment B are of this type |
 | **Code examination** | A reading of the sources of CC: Tweaked at the tag `v1.20.1-1.121.0`, or of the compiled code of Minecraft and Forge with `javap`. A code examination is not a test: it says what the code does, not that it was seen to do it |
 | **In the game, manual** | A player uses a client. The project owner did these tests. See "Manual test in the game" and "Increment A — the play session" |
 | **Observed in one manual run** | A condition built by hand around an automatic run. No command of the repository repeats it. Only ticket #7 has one |
 | **Static check** | A program reads the files of the repository without a start of the game. Command: `gradlew checkRules`, a part of `gradlew check` |
 
 No test uses a simulation of the game. Where a condition is built artificially, the table says so.
-Two tests use a false server in place of the Anthropic API: `t18_claude_provider` and, since increment A, `a_screen_model_lines`. They verify the code of the provider and of the screen, not the language model.
-One test calls the real Claude service: `t18_claude_live`. It is not part of the normal run. Command: `gradlew runGameTestServer -Plive`.
-Reasons: each run costs four requests on the account of the key owner, and a language model can answer differently at each run.
+Four tests use a false server in place of the Anthropic API: `t18_claude_provider`, since increment A `a_screen_model_lines`, and since increment B `b_model_of_the_setting` and `b_measurement_with_the_stand_in`. They verify the code of the provider, of the screen and of the harness of the measurement, not the language model.
+Two tests call the real Claude service: `t18_claude_live`, with `gradlew runGameTestServer -Plive`, and since ticket #26 the measurement `b_measurement`, with `gradlew runGameTestServer -Pmeasure -Pmodel=<model>`. They are not part of the normal run.
+Reasons: each run costs requests on the account of the key owner, four or 19, and a language model can answer differently at each run.
 
 The test server normally runs ticks without pauses. The computers of CC: Tweaked run in real time.
 Thus the test class keeps the server at 20 ticks per second, as in a normal game.
@@ -35,7 +36,7 @@ x:  0          1      2        3    4      5
 
 ## Runs
 
-Work in parallel: each ticket writes its runs in a section of its own, at the end of the file. The numbers of this table come at the merge.
+Work in parallel: each ticket writes its runs in a section of its own, before `## Guardrail`. A ticket gives its runs the label of the ticket, for example `#16.1` and `#16.2`. It adds no row to this table. At each merge, the coordinator adds the run of the integration branch to this table. The runs of increment B, 85 to 166, are older than this rule.
 
 | No. | Result | Cause of the failures |
 | --- | --- | --- |
@@ -118,10 +119,105 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 82 | 81 of 81 | None. D41: the account and the behaviour of a job. Server line: `All 81 required tests passed :)` |
 | 83 | 82 of 82 | None. D41, decision 3: the typed seam of the provider. One new test: `a_parse_of_an_answer` |
 | 84 | 83 of 83 | None. D41, decision 4: the buttons of a job go through the requests of the words. One new test: `a_cancel_button_asks_a_confirmation` |
+| 85 | Not valid | Ticket #17, first red run. A failed check of the new test `b_adoption_by_the_command` let its sequence continue. The next step read a job that did not exist, and the `NullPointerException` stopped the server. The test sequence catches only an assertion. Corrected in the tests: see "Increment B — a job adopts the load on board" |
+| 86 | 82 of 86, expected | Ticket #17, red run: three new tests and `t14_cancel`, with the old code |
+| 87 | 85 of 86, expected | Ticket #17, green run of the runtime, red run of the proposal: `b_adoption_in_the_proposal` failed as expected |
+| 88 | 86 of 86 | None. Ticket #17: a job adopts the load on board. Server line: `All 86 required tests passed :)` |
+| 89 | 81 of 83, expected | Ticket #16, red run 1: the kind of a diary entry, without the conversion of a record of increment A. `a_long_wait` and `a_summary_has_the_long_wait` failed |
+| 90 | 82 of 84, expected | Ticket #16, green run 1 and red run 2: the conversion passed. The new test `b_causes_of_recovery` and the changed test `a_no_notice_for_a_resume_that_completes_the_job` failed: the runtime did not write the cause of `RECOVERY` yet |
+| 91 | 84 of 84 | None. Ticket #16: the kinds of a diary entry and the causes of `RECOVERY`. Server line: `All 84 required tests passed :)` |
+| 92 | 87 of 87 | None. The integration branch after the merge of tickets #17 and #16. Server line: `All 87 required tests passed :)` |
+| 93 | 84 of 91, expected | Ticket #18, red run: five new tests and two changed tests, with the old code |
+| 94 | 91 of 91 | None. Ticket #18: a job replaces a job. Server line: `All 91 required tests passed :)` |
+| 95 | 92 of 92 | None. Ticket #18, with one more test of the replacement in each open state. Server line: `All 92 required tests passed :)` |
+| 96 | 92 of 93 | The integration branch after the merge of ticket #18. `b_replacement_in_recovery` failed: `[RUNNING, RECOVERY LOAD_DIFFERS, CANCELLED]`. Ticket #16 adds the cause of `RECOVERY` to the diary, and the test of ticket #18 did not expect it. The expectation of the test changed, not the code |
+| 97 | 93 of 93 | None. The integration branch after the merge of ticket #18, with the corrected expectation. Server line: `All 93 required tests passed :)` |
+| 98 | 87 of 88, expected | Ticket #19, red run 1: `b_facts_in_the_context`, with a context without facts |
+| 99 | Not valid | Ticket #19, green run 1 and red run 2. `b_facts_of_uncertain_numbers` failed as expected. Then a `NullPointerException` in `JobAccount.facts` stopped the server: a conditional expression unboxed a null. Corrected: see "Increment B — the facts of the jobs go to the model" |
+| 100 | 87 of 89, expected | Ticket #19, green run 2 and red run 3: `t18_claude_provider` and `a_screen_model_lines`, with the old JSON and the old line |
+| 101 | 89 of 89 | None. Ticket #19: the facts of the jobs go to the model. Server line: `All 89 required tests passed :)` |
+| 102 | 89 of 89 | None. Ticket #19, the code of the commit: the same, with one more null check in `b_facts_in_the_context`. Server line: `All 89 required tests passed :)` |
+| 103 | 95 of 95 | None. The integration branch after the merge of ticket #19. Server line: `All 95 required tests passed :)` |
+| 104 | 91 of 93, expected | Ticket #21, red run: two changed tests, with the old code of Uno. Runs 96 and 97 are runs of the integration branch |
+| 105 | 93 of 93 | None. Ticket #21: the fixed rules read a request when the model gives no valid action. Server line: `All 93 required tests passed :)` |
+| 106 | 93 of 93 | None. Ticket #21, the committed code: one comment changed after run 105. Server line: `All 93 required tests passed :)` |
+| 107 | 95 of 95 | None. The integration branch after the merge of ticket #21. Server line: `All 95 required tests passed :)` |
+| 108 | 95 of 96, expected | Ticket #20, red run 1: the new test `b_voice_of_a_report`, with the old code of Uno |
+| 109 | 97 of 98, expected | Ticket #20, green run 1 and red run 2: `b_voice_of_none`, with the old answer to "none" |
+| 110 | 97 of 100, expected | Ticket #20, green run 2 and red run 3: two new tests of the fixed sentences, and `t18_claude_provider` with the old system text |
+| 111 | 100 of 100 | None. Ticket #20: the voice of Uno and its checks. Server line: `All 100 required tests passed :)` |
+| 112 | 100 of 100 | None. Ticket #20, the committed code `cb6161f`. Server line: `All 100 required tests passed :)` |
+| 113 | 100 of 101, expected | Ticket #23, red run: the new test `b_record_of_a_request`, and nothing writes the record |
+| 114 | 101 of 101 | None. Ticket #23: each request is in the server log. Server line: `All 101 required tests passed :)` |
+| 115 | 101 of 101 | None. Ticket #23, the code of the commit. Server line: `All 101 required tests passed :)` |
+| 120 | 95 of 96, expected | Ticket #24, red run 1: the new test `b_low_fuel`, with an empty check of the fuel |
+| 121 | 93 of 96 | Ticket #24, green run 1. Three tests whose turtle starts without fuel did not expect the low fuel entry at the level 0. Their expectations changed, not the code |
+| 122 | 94 of 98, expected | Ticket #24, red run 2: two new tests and three changed tests about the fuel in the report, the status, the facts and the screen |
+| 123 | 96 of 98 | Ticket #24, green run 2. `b_fuel_in_the_report`: a defect of the test. `t22_t23_proposals_and_contact_points`: the record did not save the fuel of a job |
+| 124 | 98 of 98 | None. Ticket #24: the low fuel notice. Server line: `All 98 required tests passed :)` |
+| 125 | 98 of 98 | None. Ticket #24, the committed code `97cd020`. Server line: `All 98 required tests passed :)` |
+| 126 | 98 of 98 | None. Ticket #24, one more step in `a_notices_call_no_provider` (`dfa1d29`). Server line: `All 98 required tests passed :)` |
+| 127 | 103 of 103 | None. The integration branch after the merge of tickets #20 and #24. Server line: `All 103 required tests passed :)` |
+| 128 | 104 of 104 | None. The integration branch after the merge of ticket #23. Server line: `All 104 required tests passed :)` |
+| 129 | 103 of 104, expected | Ticket #22, red run: the new test `b_model_of_the_setting`, with the model still a constant of the provider |
+| 130 | 104 of 104 | None. Ticket #22: the model is a setting. Server line: `All 104 required tests passed :)` |
+| 131 | 104 of 104 | None. Ticket #22, the committed code `260efdc`. Server line: `All 104 required tests passed :)` |
+| 132 | 105 of 105 | None. The integration branch after the merge of ticket #22. The merge joined the two accessors of the model of `ClaudeProvider` of tickets #22 and #23 into one. Server line: `All 105 required tests passed :)` |
+| 140 | 104 of 105, expected | Ticket #25, red run: the new test `b_conversation_first`, with the old order of the view |
+| 141 | 105 of 105 | None. Ticket #25: the conversation part comes first on the screen. Server line: `All 105 required tests passed :)` |
+| 142 | 105 of 105 | None. Ticket #25, the committed code `a2b66fd`. Server line: `All 105 required tests passed :)` |
+| 143 | 106 of 106 | None. The integration branch after the merge of ticket #25. Server line: `All 106 required tests passed :)` |
+| 150 | 105 of 106, expected | Ticket #26, red run: the new test `b_measurement_with_the_stand_in`, with a harness that sends no request |
+| 151 | 106 of 106 | None. Ticket #26: the harness of the measurement. Server line: `All 106 required tests passed :)` |
+| 152 | 106 of 106 | None. Ticket #26: the build script reads `-Pmodel` from the command line, and one more note in the record. Server line: `All 106 required tests passed :)` |
+| 153 | 106 of 106 | None. Ticket #26, the code of the commit: one comment of the test changed after run 152. Server line: `All 106 required tests passed :)` |
+| 154 | 107 of 107 | None. The integration branch after the merge of ticket #26. Server line: `All 107 required tests passed :)` |
+| 155 | 106 of 107 | Ticket #28, the final code of increment B. `b_replacement_refused` failed one time: "the computer is not off yet". See "Increment B — final runs and evidence (ticket #28)" |
+| 156 | 107 of 107 | None. Ticket #28, the same code. Server line: `All 107 required tests passed :)` |
+| 157 | 107 of 107 | None. Ticket #28, the same code, one more time. Server line: `All 107 required tests passed :)` |
+| 158 | 105 of 107, expected | The corrections of the code review, red run 1: the fuel of a robot that is not running |
+| 159 | 104 of 107 | Green run 1 and red run 2: the load in the text of a replacement. Two failures expected, one not expected: `t22_t23_proposals_and_contact_points`. See "Increment B — corrections of the code review" |
+| 160 | 106 of 107, expected | Green run 2 and red run 3: the tokens of a refusal and of a cut answer |
+| 161 | 107 of 108, expected | Green run 3 and red run 4: the voice at the moment of the answer |
+| 162 | 108 of 108 | None. Each correction. Server line: `All 108 required tests passed :)` |
+| 163 | 108 of 108 | None. The committed code `afa3717`. Server line: `All 108 required tests passed :)` |
+| 164 | 108 of 108 | None. The final code of increment B: the integration branch after the merge of the corrections of the code review. Server line: `All 108 required tests passed :)` |
+| 165 | 107 of 108 | The CI on GitHub, the run of the push of `4396f7d`. `a_diary_of_a_job` failed: "expected two attempts or more". The test waited 140 ticks for a second attempt of the robot, and the robot runs in real time. The run of the pull request on the same commit passed. A test of increment A, not changed by increment B |
+| 166 | 108 of 108 | None. `a_diary_of_a_job` waits for the second attempt of the robot, not for 140 ticks. Server line: `All 108 required tests passed :)` |
+| 167 | 108 of 108 | None. The retrospective of increment B: `t05_pause_and_cancel_during_the_wait`, `t14_pause` and `t14_cancel` wait for the first contact of the robot after the change, not for a number of ticks. Server line: `All 108 required tests passed :)` |
+| 168 | 108 of 108 | None. The integration branch with the retrospective and the correction of ticket #27: the name `tripsWithThisFuel` in the facts, and two sentences of the system text. Server line: `All 108 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
 Runs 82 to 84 are the runs of the architecture review after increment A (D41).
+
+Runs 85 to 88 are the runs of ticket #17 of increment B. The tickets of increment B run at the same time, each in a working folder of its own. The numbers can change at the merge.
+Runs 89 to 91 are the runs of ticket #16 of increment B. See "Increment B — the kinds of a diary entry and the causes of RECOVERY".
+Run 92 is the run of the integration branch of increment B after the merge of tickets #17 and #16.
+
+Runs 93 to 95 are the runs of ticket #18 of increment B.
+Runs 96 and 97 are the runs of the integration branch after the merge of ticket #18.
+Runs 98 to 102 are the runs of ticket #19 of increment B, on the branch with tickets #16 and #17. See "Increment B — the facts of the jobs go to the model". No run of ticket #19 called the real Claude service.
+Run 103 is the run of the integration branch after the merge of ticket #19.
+Runs 104 to 106 are the runs of ticket #21. Run 107 is the run of the integration branch after its merge.
+Runs 108 to 112 are the runs of ticket #20. Its merge changed no file, thus run 112 is also the run of the integration branch after its merge.
+Runs 113 to 115 are the runs of ticket #23, on the integration branch at `bbe9478`.
+Runs 120 to 126 are the runs of ticket #24, on the integration branch at `8df1f39`. See "Increment B — the low fuel notice (ticket #24)". The numbers start at 120: other tickets run at the same time. No run of ticket #24 called the real Claude service.
+Run 127 is the run of the integration branch after the merge of ticket #24.
+Run 128 is the run of the integration branch after the merge of ticket #23.
+Runs 129 to 131 are the runs of ticket #22, on the integration branch at `c63d75c`.
+Run 132 is the run of the integration branch after the merge of ticket #22.
+Runs 140 to 142 are the runs of ticket #25, on the integration branch at `c075de7`.
+Run 143 is the run of the integration branch after the merge of ticket #25.
+Runs 150 to 153 are the runs of ticket #26, on the integration branch at `002c636`.
+Run 154 is the run of the integration branch after the merge of ticket #26.
+Runs 155 to 157 are the runs of ticket #28, on the integration branch at `8b0d3e2`. Ticket #28 changed only documents.
+Runs 158 to 163 are the runs of the corrections of the code review of increment B, on the branch `b/review-fixes` from `9722178`.
+Run 164 is the run of the final code of increment B, on the integration branch after the merge of the corrections. The four restart phases passed after it.
+Run 165 is a run of the CI on GitHub, and run 166 is its correction. The correction changed only a test of the normal run: the four restart phases of run 164 still apply to the code of the mod.
+Run 167 is the run after the retrospective of increment B. It changed only tests of the normal run and the rules of `checkRules`.
+Run 168 is the run of the integration branch with the correction of ticket #27. The correction changed the facts for a provider and the system text, not the runtime. Thus the four restart phases of run 164 still apply to the code of the mod.
+The runs of ticket #27 have the labels #27.1 to #27.8, and no row in this table: see "The record of the measurement (ticket #27)". Six of them are the first runs of increment B with the real Claude service.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -159,17 +255,24 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 75, ticket #12 | All four | **Passed**. See "Increment A — final runs and evidence" |
 | Run 82, D41 | All four | Passed. See "The architecture review after increment A" |
 | Run 84, D41, decision 4 | All four | Passed |
+| Run 88, ticket #17 | All four | Passed. See "Increment B — a job adopts the load on board (ticket #17)" |
+| Run 91, ticket #16 of increment B | All four | Passed. `check-crash`: the diary after the restart is `RUNNING, DONE, RECOVERY WORLD_OLDER` |
+| Run 92, tickets #16 and #17 after the merge | All four | Passed |
+| Run 95, ticket #18 | All four | Passed. See "Increment B — a job replaces a job (ticket #18)" |
+| Run 96, ticket #18 after the merge | All four | Passed. Run 97 changed only the expectation of one test of the normal run |
+| Run 101, ticket #19 of increment B | All four | Passed. See "Increment B — the facts of the jobs go to the model (ticket #19)" |
+| Run 125, ticket #24 of increment B | All four | Passed. See "Increment B — the low fuel notice (ticket #24)" |
+| Run 127, tickets #20 and #24 after the merge | All four | Passed |
+| Run 156, ticket #28: the final code of increment B | All four | Passed. See "Increment B — final runs and evidence (ticket #28)" |
+| Run 163, the corrections of the code review of increment B | All four | Passed. See "Increment B — corrections of the code review" |
+| Run 164, the final code of increment B | All four | Passed |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
 
-Lesson from run 2: the exit code is not sufficient. The log must contain the line `GAME TESTS COMPLETE`.
-Lesson from run 14: that line is not sufficient either. The number of tests and the line `Enabled Gametest Namespaces` say which tests ran.
-Lesson from run 21: a test that passed 12 times can hide a defect that depends on one tick. A test must build such a moment on purpose.
-Lesson from the restart test after run 25: the normal run does not contain the restart test. A change of the transfer rules needs the four restart phases too. One case of them is now also in the normal run.
-Lesson from run 28: a test must not depend on which thread is faster. A fast provider can answer inside the call that sends the request.
+The lessons of runs 2, 14, 21, 25 and 28 are rules now. The rules of the tests are in `CODING_STANDARDS.md`. The rule of the restart phases is in `CLAUDE.md`.
 
-The real Claude service was not called after run 19. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases.
+The real Claude service was not called between run 19 and run 76. The corrections of the review were tested with the deterministic provider and with providers written in the tests. No test of increment A called it: not runs 34 to 75, and not the restart phases. Runs 76, 78 and 81 called it, with `-Plive`. Before ticket #27 no run of increment B called it, and no restart phase called it. Runs #27.2, #27.3, #27.5 and #27.6 called it on Haiku 5.5: two with `-Plive`, two with `-Pmeasure`. Run #27.7 called it on Sonnet 5.5 and run #27.8 on Opus 5.5, with `-Pmeasure`.
 
 The test world is flat and has no structures. See D14 for the reason.
 
@@ -1019,6 +1122,2155 @@ Date: 2026-11-14. Type: in the game, automatic. Code: the branch `increment-a` a
 - Run 84, decision 4: `All 83 required tests passed :)`. The new test `a_cancel_button_asks_a_confirmation` presses "Pause", "Resume" and "Cancel" of a job. "Pause" and "Resume" act at once, with the sentences of the words. "Cancel" gives a proposal: the job stays open until "Confirm #N", then it is `CANCELLED`. The tests of an old view and of another player still get a refusal. The four restart phases passed after run 84.
 - Not verified for decision 4: the proposal of "Cancel" on the screen of a client. The project owner decided that these changes get no manual test.
 
+## Increment B — the kinds of a diary entry and the causes of RECOVERY (ticket #16)
+
+Date: 2026-11-15. Ticket #16 of spec #15. See D41 (decision 5), D42 (points 2 and 12), D25, D30 and D31.
+A prefactoring of the record: no sentence of Uno changes.
+All tests of this section are in the game and automatic. No test called the real Claude service. No test has a connected player: the tests read the notices through the exit of the notices.
+The table "Runs" gives the runs of this ticket the numbers 89 to 91.
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 89: red 1 | The module of the one-time warnings, the kind of a diary entry, and the new keys of the record. The load reads only the new keys | 81 of 83. `a_long_wait` failed as expected: "a record of increment A: [RUNNING, WAITING SOURCE_AT_RESERVE, WAITING ROBOT_FULL, WAITING ROBOT_FULL]". The long wait loaded as a change, and a later check wrote a second long wait. `a_summary_has_the_long_wait` failed as expected: "a record of increment A: Tell me what you need." |
+| 90: green 1, red 2 | The load converts the flags of a record of increment A. The two causes of `RECOVERY` exist, but the runtime does not write them | 82 of 84. The two tests of run 89 passed. `b_causes_of_recovery` failed as expected: "RECOVERY (the robot holds 0, the record says 24)", without a cause. `a_no_notice_for_a_resume_that_completes_the_job` failed as expected: "[RUNNING, WAITING DESTINATION_FULL, RECOVERY, DONE]" |
+| 91: green 2 | The runtime writes the cause together with `RECOVERY` | **84 of 84**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `84 GAME TESTS COMPLETE`, `All 84 required tests passed :)` |
+| `stop`, `check`, `crash`, `check-crash` | The code of run 91 | Passed, each phase. `stop` and `check`: `All 1 required tests passed :)`. `check`: the diary after the restart is `RUNNING`, at the end `RUNNING, DONE`. `crash` ended with its halt. `check-crash`: after the restart `RUNNING, DONE, RECOVERY WORLD_OLDER`, at the end `RUNNING, DONE, RECOVERY WORLD_OLDER, RUNNING, DONE`, and `All 1 required tests passed :)`. The summary after the restart has the `RECOVERY` with its recorded reason, then the delivery. After the four phases the data folder has no temporary file |
+
+| Test | What it does | Observed result |
+| --- | --- | --- |
+| `b_causes_of_recovery` (new) | A transport of 24 for a player. After the pickup the test empties the robot. Then it reads the job, the diary, the report, the notice and the screen. It saves and loads the record. It loads the record in the format of increment A | The job is `RECOVERY` with the cause `LOAD_DIFFERS` and the reason "the robot holds 0, the record says 24". The diary is `RUNNING`, `RECOVERY LOAD_DIFFERS`, and the entry has the reason. The report has "I cannot say how it went. Recorded reason: the robot holds 0, the record says 24." The one notice: "Job N on robot #R (minecraft:coal from 'b_recovery_source' to 'b_recovery_destination') needs a check: I cannot say how it went. Recorded reason: …". The screen has "Recorded reason: …". After a save and a load: the same cause and the same diary. The record of increment A: the cause is `NONE`, the diary is `RUNNING`, `RECOVERY`, and the report and the sentence of the notice are the same |
+| `a_long_wait` (one more check) | The record after the long wait, in the format of increment A: the flag "longWait" on each entry and on the job. The test loads it, then checks the wait 12000 ticks after its start | The loaded diary is the same as the diary of the server: the long wait has the kind "long wait". The later check writes no second entry. The other expectations of the test did not change |
+| `a_summary_has_the_long_wait` (one more check) | The opening of the screen on a copy of the record in the format of increment A | The same summary as on the server: "From the start of my memory:" and "2 min ago: … has waited for 5 minutes: nothing remains in 'a_summary_wait_source'." |
+| `a_no_notice_for_a_resume_that_completes_the_job` (changed) | As before | The diary is `RUNNING`, `WAITING DESTINATION_FULL`, `RECOVERY LOAD_DIFFERS`, `DONE`. The test expected `RECOVERY` without a cause before. The notice is the same |
+| `t11_server_restart`, phase `check-crash` (changed) | As before | The `RECOVERY` of the load has the cause `WORLD_OLDER` in the job and in the diary. The phase expected `RECOVERY` without a cause before |
+
+Conditions built artificially:
+
+- **A record of increment A:** the test helper `incrementA` changes a saved record. Each diary entry gets the flag "longWait" in place of its kind. Each job gets the flag "longWait" in place of the list of its given warnings. A `RECOVERY` gets the cause `NONE`. No world of increment A was loaded.
+- **The moment of a check and of an opening:** a parameter, as in ticket #9.
+- **The stand-ins of a `RECOVERY`:** `t11_resume_when_the_world_is_older`, `a_notices_call_no_provider` and `a_summary_after_the_time_went_back` set `RECOVERY` themselves. They now call the function of the runtime with the cause: `MindRuntime.recovery`. Their expectations did not change.
+
+Code examination, not a test:
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| One module holds the one-time warnings: `Warnings`. `MindRuntime.warn` writes the entry of a warning. The long wait is its only kind now | `Warnings.java`, `MindRuntime.java` | That the low fuel notice can use it. Ticket #24 adds that kind |
+| The attention rule selects each entry whose kind is not a change. The sentence of a long wait comes from its kind | `Notices.selected`, `Notices.sentence` | |
+| The two writes of `RECOVERY` in the runtime give a cause: `RobotApi.status` and `MindRuntime.get` | `RobotApi.java`, `MindRuntime.java` | |
+| The report, the screen and the status command still read the recorded reason of a `RECOVERY`. No sentence reads its cause | `JobAccount.java`, `UnoView.java` | |
+| A change from `RECOVERY LOAD_DIFFERS` to `RECOVERY WORLD_OLDER` writes one more entry and gives its notice. Before the ticket it wrote none | `MindRuntime.set` | Its effect in a run. No test builds it. See D25 |
+
+Not covered:
+
+- A real world of increment A. The test builds the older format from a saved record.
+- A long wait across a real restart. The restart phases build no wait, as in ticket #9.
+- The kind "low fuel": ticket #24. The facts for the model, that read the kind and the cause: ticket #19.
+
+## Increment B — a job adopts the load on board (ticket #17)
+
+Date: 2026-11-15. A new job counts the items of its item that the robot holds as its first load. See D42, point 9, and D09.
+The code is the branch of increment B at `9d13c95`, with the changes of the ticket. No Lua module changed. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests. Each one uses the fixed rules or no provider.
+
+| Test | What it does | Result in run 88 |
+| --- | --- | --- |
+| `b_adoption_by_the_command` | The console sends the real command `/mindcraft job transport … 64` to a turtle with 24 coal on board, and reads the answer | Passed. The answer: "Job N started on robot #M. It counts the 24 x minecraft:coal on board as its first load." The record has 24 on board and 0 taken. The first diary entry is `RUNNING` with 24 on board. The robot delivers 24 while the source still has 64. At the end: `DONE`, source 24, destination 64, robot 0, taken 40, delivered 64, no recovery. The diary is `RUNNING`, `DONE` |
+| `b_adoption_keep_stock` | A stock of 64, a destination with 50, a turtle with 24 coal | Passed. The robot delivers 14 from its load: `SATISFIED`, destination 64, robot 10, source 64, taken 0, "10 stay on board". After a consumption of 30, the robot delivers its 10, then takes 20: destination 64, source 44, robot 0. No `RECOVERY` in the diary |
+| `t14_cancel`, changed | The cancellation test of S1, with 24 on board. Before: a new job of 8 was refused with "Empty it first". Now the new job adopts the 24 | Passed. The new job has 24 on board and 0 taken. It delivers 8, then it is `BLOCKED` with the cause `LOAD_ABOVE_QUANTITY`: source 40, destination 8, robot 16 (D16.1) |
+| `b_adoption_in_the_proposal` | Five written requests of a player to the fixed rules. Then a confirmation | Passed. See below |
+
+The proposals of `b_adoption_in_the_proposal`, in their order. The robot is #62 in run 88. The test compares the whole text.
+
+1. Nothing on board: the text of increment A. "Proposal: carry 24 x minecraft:coal from 'b_proposal_source' to 'b_proposal_destination'. Reserve to leave in 'b_proposal_source': 0. Robot #62. I have done nothing yet. Confirm with /uno confirm."
+2. 5 cobblestone on board: after "Robot #62.", "5 items that are not minecraft:coal stay on board: the job does not count them. When its fuel ends, the robot burns those that can burn."
+3. Also 10 coal: "The robot holds 10 x minecraft:coal: the job counts them as its first load.", then the sentence of the cobblestone.
+4. A stock with a level of 6: after the coal sentence, "That is more than the level: the rest stays on board for the next need."
+5. A transport of 8, from the log of run 88: "… Robot #62. The robot holds 10 x minecraft:coal: the job counts them as its first load. That is more than the quantity: the job delivers at most 8, then it stops with the rest on board for your decision. 5 items that are not minecraft:coal stay on board: the job does not count them. When its fuel ends, the robot burns those that can burn. I have done nothing yet. Confirm with /uno confirm."
+
+- No proposal started a job.
+- The confirmation of proposal 5: "Job N started on robot #62. It counts the 10 x minecraft:coal on board as its first load." The record has 10 on board, not 15.
+- At the end: `BLOCKED` with `LOAD_ABOVE_QUANTITY`, delivered 8, 2 on board. Source 64, destination 8, robot 2 coal and 5 cobblestone. The destination has no cobblestone.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 85, red 1 | The new tests of the runtime, with the old code | Not valid. `b_adoption_by_the_command` failed its check: "the command did not start the job". The sequence continued, and its next step read a job that did not exist. The `NullPointerException` stopped the server: the test sequence catches only an assertion. The log has no result for the other tests. Correction in the tests: each wait of the new tests reads the job only when it exists, and the helper `accepted` changes a refusal of a start into a failed check |
+| 86, red 2 | The four new and changed tests, with the old code | 82 of 86, expected. `b_adoption_by_the_command`: "the command did not start the job: [Robot #7 already holds 24 of this item. Empty it first.]". `b_adoption_keep_stock` and `t14_cancel`: "the runtime refused a request that it must accept: … Empty it first." `b_adoption_in_the_proposal` failed at proposal 2: the text of A, without the sentence about the cobblestone |
+| 87, green 1, red 3 | The runtime: no refusal, the record counts the load, the answer of a start gives it | 85 of 86, expected. The three tests of the runtime passed. `b_adoption_in_the_proposal` failed at proposal 2, as in run 86 |
+| 88, green 2 | The sentences of the proposal | **86 of 86**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `86 GAME TESTS COMPLETE`, `All 86 required tests passed :)` |
+
+The four restart phases after run 88, one at a time, on the same world. Type: in the game, automatic.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24 |
+| `check` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0 |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY`. The first stable state: source 40, destination 0, robot 24. After `resume`: the diary `RUNNING`, `DONE`, `RECOVERY`, `RUNNING`, `DONE` |
+
+The restart test starts its job with an empty turtle. Thus it does not test an adoption across a restart.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `transport.lua` delivers when the status gives a load on board (`job.carried > 0`). `keep_stock.lua` does a step of the transport when it has a load, also before the first observation of the destination. Thus both modules deliver an adopted load first | `transport.lua`, `keep_stock.lua`, unchanged | |
+| When a move fails for fuel, `transport.lua` burns each item on board that is not the item of the job | `refuel` in `transport.lua` | That a given item burns. No automatic test burns an item of another kind. The play session of increment A saw it once, with charcoal: step 7 in "Increment A — the play session" |
+| `GameTestSequence` of Minecraft 1.20.1 catches only `GameTestAssertException` in a step. Each other exception of a step stops the server | `javap -c` of `GameTestSequence.executeWithoutFail` and `tick`, Forge 47.4.28 jar (official mappings) | |
+
+### Not covered
+
+- An adoption across a restart of the server.
+- The proposal and the answers on the screen of a client. The play session of increment B has a step for an adoption.
+- The singular in the sentences: "1 items" for one item.
+
+## Increment B — a job replaces a job (ticket #18)
+
+Date: 2026-11-15. A start by words for a robot with an open job is one proposal: cancel that job, and start the new one. One confirmation does both, in one tick. Thus the player changes the destination of a job with words. See D42, point 10, and D34.
+The code is the branch of increment B at `60443b5`, with the changes of the ticket. No Lua module changed. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests, except `b_fixed_rules_choose_the_robot`: it needs no robot and no world. Each one uses the fixed rules or a provider written in the test. `t18_claude_provider` uses a false server in place of the API.
+
+| Test | What it does | Result in run 95 |
+| --- | --- | --- |
+| `b_replacement_changes_the_destination` | The destination is full: the transport of 24 waits with 24 on board (`DESTINATION_FULL`). The console sends `/mindcraft job transport` for the busy robot. Then the player writes "Carry 24 coal from … to …" with a third station and no robot number. The player has one robot. The confirmation comes 20 ticks after an attempt of the robot to deliver | Passed. The command is refused: "Robot #N already has job M (WAITING)." The words give the proposal of a replacement, with "The robot holds 24 x minecraft:coal". Before the confirmation the job, the robot and the chests do not change. The answer: "Job M on robot #N is cancelled. Job K started on robot #N. It counts the 24 x minecraft:coal on board as its first load." The diary of the old job is `RUNNING`, `WAITING DESTINATION_FULL`, `CANCELLED`. The cancellation is a request, and the first entry of the new job has the same game time and the next number. At the end: `DONE`, source 40, third station 24, destination 0 coal, robot 0, taken 0, delivered 24. No notice about the old job |
+| `b_replacement_in_recovery` | The turtle loses 14 of its 24 coal: `RECOVERY`. The player writes a transport of 10 without a robot number. Before the confirmation the test leaves 6 coal in the turtle | Passed. The proposal says "The robot holds 10 x minecraft:coal". The answer says "It counts the 6 x minecraft:coal on board as its first load." The diary of the old job is `RUNNING`, `RECOVERY`, `CANCELLED`. The new job delivers 6, takes 4 and is `DONE`: source 36, destination 10, robot 0, no recovery |
+| `b_replacement_in_each_open_state` | Four replacements in a row, from a provider of the test. The old job is `SATISFIED` (a stock at its level), `PAUSED`, `BLOCKED` (an impediment of an unknown kind), and `RUNNING` (a resume in the tick of the confirmation) | Passed. Each answer: "Job M on robot #N is cancelled. Job K started on robot #N. The robot holds no minecraft:coal: the new job starts without a load." Each old job ends `CANCELLED` after its state. Each cancellation has the game time of the first entry of the new job |
+| `b_replacement_refused` | Three replacements that must change nothing. 1: a new order with an unknown station. 2: a proposal, then the robot gets a different job. 3: a proposal, then the computer of the robot shuts down | Passed. 1: "I cannot propose this job: Unknown station '…'." No proposal, and the job stays. 2: "I cannot replace the job: Robot #N has job K now, not job M. Read it again." The different job stays. 3: "I cannot replace the job: Robot #N is not running. Load its area and turn it on." The job stays open, and its diary has no `CANCELLED` |
+| `b_replacement_through_the_view` | The "ask" action of the screen, with the fixed rules of the server, and no robot number. A different player looks at the screen, presses the button of the owner, sends `/uno confirm`, and asks a start for the robot of the owner. Then the owner presses the button | Passed. The view has "Waiting for your confirmation: cancel job M on robot #N (…), and start in its place: carry 8 x …" and the button "Confirm #P". The other player sees no button and no station of the owner, and confirms nothing: "I have no pending proposal". Its start: "I cannot propose this job: Robot #N is not yours." The proposal of the owner stays. After the button of the owner: the old job is `CANCELLED`, and the view says "… is cancelled. Job K started on robot #N. The robot holds no minecraft:coal: the new job starts without a load." |
+| `b_fixed_rules_choose_the_robot` | A start without a robot number, with six sets of robots | Passed. One busy robot: that robot. One busy and one free: the free one. One free: that one. Two busy, two free, or none: "you have N free robots: write 'robot N'" |
+| `a_confirmation_of_older_values`, changed | Before: a start for the busy robot was refused. Now the test expects the proposal of a replacement, and the next request replaces it | Passed. The proposal names the job, and the job does not change |
+| `t18_claude_provider`, changed | The request that goes to the false server of the API | Passed. The system text has the rule of a request without a robot number, and the sentence about the replacement. The schema keeps its ten fields |
+
+The texts of the proposals, from the log of run 94. The test compares the whole text.
+
+- `b_replacement_changes_the_destination`: "Proposal: cancel job 38 on robot #45 (carry minecraft:coal from 'b_replace_source' to 'b_replace_destination'), and start in its place: carry 24 x minecraft:coal from 'b_replace_source' to 'b_replace_other'. Reserve to leave in 'b_replace_source': 0. Robot #45. The robot holds 24 x minecraft:coal: the job counts them as its first load. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm."
+- Its confirmation: "Job 38 on robot #45 is cancelled. Job 86 started on robot #45. It counts the 24 x minecraft:coal on board as its first load."
+- `b_replacement_through_the_view`, a robot that holds nothing: "… Reserve to leave in 'b_replace_view_source': 0. Robot #60. The load can change until the confirmation: the new job counts the load that the robot holds then." The button: "Confirm #25".
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 93, red | The new and changed tests, without the new code. `b_replacement_in_each_open_state` did not exist yet | 84 of 91, expected. `b_fixed_rules_choose_the_robot`: one busy robot gave "you have 0 free robots". `b_replacement_changes_the_destination`, `b_replacement_in_recovery` and `b_replacement_through_the_view`: "I cannot propose a job: you have 0 free robots: write 'robot N'." `b_replacement_refused` and `a_confirmation_of_older_values`: "I cannot propose this job: Robot #… already has job … (WAITING)." `t18_claude_provider`: the system text without the new rule |
+| 94, green | The runtime, Uno, the fixed rules and the system text | **91 of 91**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `91 GAME TESTS COMPLETE`, `All 91 required tests passed :)` |
+| 95 | One more test, `b_replacement_in_each_open_state`, and the name of a local variable in `Uno.Replace` | **92 of 92**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `92 GAME TESTS COMPLETE`, `All 92 required tests passed :)` |
+
+`b_replacement_in_each_open_state` passed at its first run: the code of run 94 already had the behaviour. It has no red run.
+
+The four restart phases after run 95, one at a time, on the same world. Type: in the game, automatic.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24 |
+| `check` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0 |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY`. The first stable state: source 40, destination 0, robot 24. After `resume`: the diary `RUNNING`, `DONE`, `RECOVERY`, `RUNNING`, `DONE` |
+
+The restart test does not replace a job. A proposal is not saved (D24): thus no replacement crosses a restart.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| A confirmation runs on the server thread: the command `/uno confirm` and the action of a button. `MindRuntime.replace` checks, cancels and starts in one call. Thus no step of a robot comes between the cancellation and the start | `Uno.confirm`, `UnoView.act`, `MindRuntime.replace` | |
+| The cancellation of `control` has no rule that depends on the state of an open job. Thus a replacement works in each open state | `MindRuntime.checkControl` | |
+| If the open job ends by itself before the confirmation, `checkReplace` refuses: "Robot #N has no open job." Nothing starts | `MindRuntime.openJob` | No test builds it |
+| A call of the old Lua run can reach the new job. The module reads the job, and then it moves or transfers. One or two ticks are between the two. At a dock of a different station that call fails, and the agent reports a module error for the new job. This is the limit of D26 | `transport.lua`, `keep_stock.lua`, the agent `mindcraft.lua`, `RobotApi` | That it occurs. No run saw it. `b_replacement_changes_the_destination` confirms while the old module sleeps |
+
+### Not covered
+
+- The new system text with the real Claude service. No `-Plive` run used it. CLAUDE.md asks for one run before the merge into `main`. Ticket #27 has the paid runs of increment B.
+- A change of the destination that a model builds from the facts of the job. The facts come with a later ticket of increment B.
+- The proposal, the button and the answers on the screen of a client. The play session of increment B has a step for a replacement.
+- An operator who replaces the job of a different player.
+
+## Increment B — the facts of the jobs go to the model (ticket #19)
+
+Date: 2026-11-15. With each written request, a provider gets the facts of the jobs of the player and the 20 newest lines of the diary. See D42, points 2, 3, 4 and 18, and D41, decision 6.
+The code is the branch of increment B at `39a2afc`, with tickets #16 and #17, and the changes of this ticket. No Lua module changed. The answers of Uno did not change.
+No run called the real Claude service. No run with the real service sent the facts. The system text and the output schema of the Claude provider did not change.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. Each one uses a provider written in the test, the fixed rules or a local stand-in of the service.
+
+| Test | What it does | Result in run 101 |
+| --- | --- | --- |
+| `b_facts_in_the_context` (new) | A player and a real turtle. A provider of the test keeps the context that Uno gives it, and answers `none`. First a transport of 24 with a reserve of 10 ends `DONE`. A different player writes too. Then the test removes the destination chest, and a transport of 16 is `BLOCKED`: its recorded reason has the position of the destination. Then the owner empties the robot and resumes: `RECOVERY` | Passed. See below |
+| `b_facts_of_uncertain_numbers` (new) | The account gets a record that the test writes, the flag of the robot and a game time. No robot and no world. Then the diary lines of a diary that the test writes | Passed. See below |
+| `t18_claude_provider` (changed) | The robot first does a transport of 8 to `DONE`. The test reads the body of the request that reaches the stand-in of the service | Passed. The body has the stations and the robots as before. It also has the facts of the job: `{"job":N,"robot":R,"module":"transport","item":"minecraft:coal","from":…,"to":…,"quantity":8,"reserve":0,"state":"DONE","cause":"NONE","delivered":8,"onBoard":0,"sourceStock":{"count":56,"age":…},"destinationStock":{"count":8,"age":…},"stillToCarry":0,"aboveReserve":56,"uncertain":[]}`. It has the two lines of the diary, `RUNNING` and `DONE`. Each of the four ages is "N s ago". The test compares the JSON without the ages with a fixed text. The pause of that robot now gets "I cannot pause the job: Robot #R has no open job.": the robot has a job that is done. Before, the robot had no job |
+| `a_screen_model_lines` (changed) | As before, with the new line | Passed. The screen of an operator has "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." A player who is not an operator and an operator at the limit do not see it |
+
+The contexts of `b_facts_in_the_context` in run 101, from the log. The robot is #22. The first job is 44, the second is 81.
+
+1. The job that is done: `DONE`, delivered 24, on board 0, source 40 "3 s ago", destination 29 "0 s ago", still to carry 0, above the reserve 30, nothing uncertain. The lines: `44 RUNNING` with 0 delivered and 0 on board, `44 DONE` with 24 delivered. Each line has the age, the robot, the kind `CHANGE`, the cause, the quantity 24 and the reserve 10.
+2. The different player: no station, no robot, no job and no line. The answers of Uno to both players are the answers of increment A: "I cannot propose a job: The test read the context."
+3. The job that is blocked: `BLOCKED DESTINATION_NO_INVENTORY`, delivered 0, on board 16, source 24 "2 s ago", still to carry 16, above the reserve 14. No destination stock, with "No robot observed 'b_facts_destination' yet. Its stock is unknown." The lines of job 44 stay after job 81 replaced it on the robot. The text of the context and its JSON have no position, no recorded reason and no ID of the owner.
+4. The job that needs a check: `RECOVERY LOAD_DIFFERS`, with no delivered total, no load on board, no stock and no derived number. The sentence: "The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks." The four lines of job 81 have no delivered total and no load on board. The two lines of job 44 keep their numbers.
+
+The cases of `b_facts_of_uncertain_numbers`. The record: a transport of 24 with a reserve of 10, 6 delivered, 4 on board. The source had 50 at 6000 ticks before "now". The destination had 6 at 240 ticks before "now". The robot called at 300 ticks before "now". The test compares the whole facts.
+
+| Case | The facts that the account gave |
+| --- | --- |
+| The record as it is: at the limit of an old observation and of a silent robot | Each number: delivered 6, on board 4, source 50 "5 min ago", destination 6 "12 s ago", still to carry 18, above the reserve 40. Nothing uncertain |
+| The source observed 6001 ticks before | No source stock and no stock above the reserve. "The last observation of 'depot' is old. Not given: its stock." |
+| The robot called 301 ticks before, and no call since the server start | No load on board and no stock. "The robot has not contacted the server for a while. Not given: the load on board and the stocks." |
+| The robot is not running | The same, with "The robot is not running or not loaded." The delivered total stays |
+| `RECOVERY` with `LOAD_DIFFERS`, with `WORLD_OLDER`, and without a cause (a record of an older version) | No delivered total, no load on board, no stock, no derived number. The sentence gives the cause: "the load in the robot differs from the record", "the world is older than the record", or no cause |
+| After a recovery | No delivered total and no quantity still to carry. "After a recovery the delivered total can be inexact. Not given: the delivered total." |
+| A stock job with a level of 64, and a source of 8 | Still to carry 58. Above the reserve 0 |
+| A stock job before its first observation of the destination | No destination stock and no quantity still to carry. "No robot observed 'furnace' yet. Its stock is unknown." This is the case of run 99 |
+
+- The diary lines, with job 900 in `RECOVERY`, the robot of job 600 not running, and job 800 with a `RECOVERY` line but no facts: `800 RUNNING` and `800 DONE` have no delivered total. `800 RECOVERY` has no delivered total and no load on board. `700 DONE` keeps its 8. `600 RUNNING` keeps its delivered total and has no load on board. The lines of job 900 have neither.
+- A diary of 25 entries gives 20 lines: the newest, the oldest first. The first is "20 min ago", the last "1 min ago".
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 98, red 1 | The new test `b_facts_in_the_context`, without its last part. The typed context exists, but `Uno.context` gives no facts and no lines | 87 of 88, expected. `b_facts_in_the_context` failed: "Context[…, jobs=[], diary=[]]" |
+| 99, green 1, red 2 | The facts and the lines, without the doubts. The new test `b_facts_of_uncertain_numbers`, and the last part of `b_facts_in_the_context` | Not valid. `b_facts_of_uncertain_numbers` failed as expected: each case gave each number. Then a `NullPointerException` in `JobAccount.facts` stopped the server. A conditional expression had an `Integer` and an `int`: for a stock job with an unknown destination, Java unboxed a null. The log has no result for the other tests. The red of the last part of `b_facts_in_the_context` was not observed. Correction: both branches give an `Integer`, and `b_facts_of_uncertain_numbers` has the case of a stock job with an unknown destination |
+| 100, green 2, red 3 | The doubts. The tests of the body of the request and of the screen line, with the old JSON and the old line | 87 of 89, expected. The two new tests passed. `t18_claude_provider` failed: "the body has no facts". `a_screen_model_lines` failed: the view of an operator has the old line |
+| 101, green 3 | The JSON of the context with the facts and the lines. The new line of the screen | **89 of 89**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `89 GAME TESTS COMPLETE`, `All 89 required tests passed :)` |
+| 102 | The code of the commit. Only the test changed after run 101: one more null check before the test empties the robot, the same form for one step of the sequence, and its comment | **89 of 89**. The same three log lines |
+
+The four restart phases after run 101, one at a time, on the same world. Type: in the game, automatic. The code of the mod did not change after run 101: only the test of run 102.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24 |
+| `check` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0 |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`. The first stable state: source 40, destination 0, robot 24. At the end: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`, `RUNNING`, `DONE` |
+
+After the four phases the data folder has no temporary file.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `Uno.context` reads the jobs only through `MindRuntime.jobs(actor)`, and the diary through `MindRuntime.diary(actor)`. Both keep only what the actor owns | `Uno.java`, `MindRuntime.java` | That no other code gives the model a job. The map of the jobs is still public (D41, decision 6) |
+| The "free" flag of a robot still reads the job of each robot of the actor, as in increment A | `Uno.context` | |
+| No field of the facts or of a line holds a position, the owner or a recorded reason. The records `Uno.Context.Facts` and `Uno.Context.Line` have no such field | `Uno.java`, `JobAccount.java` | That a station name holds no position: the player chooses the name |
+| `ClaudeProvider` sends `context.toJson()` in the user message, as before. The system text and the schema are the same | `ClaudeProvider.java` | How the real model reads the facts. No `-Plive` run sent them |
+| The fixed report uses the same doubt about the robot as the facts: one function, `JobAccount.silent` | `JobAccount.java` | |
+
+### Not covered
+
+- A request with the facts to the real service. The paid runs of increment B need the consent of the project owner (ticket #27).
+- The line of the screen in a client.
+- A job that the owner cancelled in `RECOVERY`: its facts give its delivered total. See D42, point 3.
+- A diary entry of an older job whose `RECOVERY` the diary limit removed: its later lines give their delivered total.
+
+## Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)
+
+Date: 2026-11-15. A provider with a model gives no valid action: a failure of the service, the time limit, a refusal, or an answer that Uno cannot read. Then the fixed rules read the same request, and Uno says so first, with the reason. See D42, point 17, D29.1 and D33.1.
+The code is the branch of increment B at `a807f3a`, with the change of `b_replacement_in_recovery` of the integration branch (`5e3439a`), and the changes of the ticket. No part of the runtime and no Lua module changed. The schema and the system text of the Claude provider did not change. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests. Each one uses providers written in the test. A provider of the test with the model flag (`CountingModel`) calls no model and costs nothing. Its requester is an operator: only an operator uses a provider with a model (D33.1).
+
+| Test | What it does | Result in run 105 |
+| --- | --- | --- |
+| `t18_provider_failures`, changed | An operator has a transport of 24 in progress. Five requests go to providers of the test with the model flag. 1: an exception "model offline", for the request "x". 2: a provider that sleeps 3 s, with a time limit of 300 ms, for "How is robot N?". 3: the exception that the Claude provider gives for a refusal, "the model declined the request", for "Carry 8 coal from … to … with robot N". 4: an answer that Uno cannot read, with 7 input tokens and 3 output tokens. 5: an `IllegalArgumentException`. Then two requests go to providers of the test without a model: an exception "provider offline", and an answer that Uno cannot read. At the end the fixed rules get "carry coal" | Passed. Each of the five answers starts with "The model gave no valid answer (…), thus I read your request with the fixed rules: they understand only simple sentences." The reasons, in order: "model offline", "the request reached the time limit", "the model declined the request", "I cannot read its answer", "a defect of the provider". Then the answer of the fixed rules to the same request: "I cannot propose a job: the quantity is missing." for "x", the report of the job for the question, and the proposal of a replacement for the start. The counter: 5 requests, 7 input tokens, 3 output tokens. The providers without a model give the sentences of increment A: "I cannot interpret the request now (provider offline). The jobs in progress continue." and "I did not get a valid configuration. I created no proposal." The counter does not change for them. At the end no proposal stays. The job ends `DONE`: source 40, destination 24, robot 0 |
+| `a_model_requests_count`, changed | As before. An operator sends a request to a provider with the model flag that throws "model offline", then one to a provider that answers after the time limit of 300 ms | Passed. The two answers are "The model gave no valid answer (model offline), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." and the same with "the request reached the time limit". The counter is 3 requests after the exception and 4 after the time limit, with the same tokens as before. The late answer of the provider changes nothing |
+
+The texts of `t18_provider_failures`, from the log of run 105. The test compares the start of the second and of the third answer, and the whole text of the others.
+
+- The question about the robot: "The model gave no valid answer (the request reached the time limit), thus I read your request with the fixed rules: they understand only simple sentences. Job 71, robot #42: carry 24 items from 't18_source' to 't18_destination', reserve 0. I delivered 0 items. I am working. …"
+- The start: "The model gave no valid answer (the model declined the request), thus I read your request with the fixed rules: they understand only simple sentences. Proposal: cancel job 71 on robot #42 (carry minecraft:coal from 't18_source' to 't18_destination'), and start in its place: carry 8 x minecraft:coal from 't18_source' to 't18_destination'. … I have done nothing yet. Confirm with /uno confirm."
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 104, red | The two changed tests, with the old code of Uno | 91 of 93, expected. `a_model_requests_count`: "I cannot interpret the request now (model offline). The jobs in progress continue." `t18_provider_failures`: "the proposal of the fixed rules is missing", after three answers with the failure sentence of increment A. `b_replacement_in_recovery` passed with the change of `5e3439a` |
+| 105, green | The code of the ticket | **93 of 93**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `93 GAME TESTS COMPLETE`, `All 93 required tests passed :)` |
+| 106 | The commit `edb70a3`: the code of run 105, with one comment changed | **93 of 93**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `93 GAME TESTS COMPLETE`, `All 93 required tests passed :)` |
+
+The two branches of the code came in one step: an exception or the time limit, and an answer that Uno cannot read. Thus run 104 is the red run of both. Its first failed check stopped `t18_provider_failures` before the case of an answer that Uno cannot read.
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The sentence comes only on the route of the model. A provider without a model, a request after the limit of the session, and a player who is not an operator do not get it | `Uno.ask`, `Uno.route` | |
+| The fixed rules run on the server thread, after the answer of the provider. They call no model and no network. They read the context of the request: the context that the model got | `Uno.ask`, `Uno.RuleProvider` | Their cost on the server thread. No measurement |
+| The Claude provider gives a refusal, a cut answer, an error of the service and a service that is not reachable as an exception with a reason. It gives an answer that is not the JSON of an action as `Unreadable` | `ClaudeProvider.answer`, `Uno.parse` | `t18_claude_provider` sends these answers to Uno with a provider without the model flag: thus they get the sentences of increment A. No test sends them to Uno with the model flag |
+| After the time limit the thread of the provider continues. Uno does not read its late answer | `Uno.ask` | The tokens that the real service bills for it (D33.1) |
+
+### Not covered
+
+- A failure of the real Claude service. No run with the real service tested a failure: an error, a refusal, the time limit, or an answer that Uno cannot read.
+- The Claude provider with its model flag against the false server of the API, with a failure. See the code examination above.
+- The sentence on the screen of a client. The play session of increment B.
+
+## Increment B — the voice of Uno and its checks (ticket #20)
+
+Date: 2026-11-15. A provider gives one sentence with a report and with "none": the voice of Uno. The server checks the sentence. A fixed sentence gives the uncertain numbers before the voice. See D42, points 1, 3, 4, 5, 15 and 16, and D32.
+The code is the branch of increment B at `8df1f39`, with tickets #16 to #19 and #21, and the changes of this ticket. No part of the runtime and no Lua module changed. The system text of the Claude provider is new. Its output schema did not change: ten fields.
+No run called the real Claude service. **No test verifies a sentence of the real model.** Each sentence of these tests is written in the test.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. Each one uses a provider written in the test, the fixed rules, or the local stand-in of the service. The tests with robots use real turtles and real chests.
+
+| Test | What it does | Result in run 111 |
+| --- | --- | --- |
+| `b_voice_of_a_report` (new) | Two jobs of one player wait for materials, as in `a_report_and_pause_by_words`. Both use the destination of the first rig. 13 requests to a provider of the test that gives a report with a sentence. Nothing is uncertain: the robots run and call, and the observations are recent | Passed. See below |
+| `b_voice_of_none` (new) | A player without a station, a robot or a job: the context has no digit. Six requests to a provider of the test that gives "none" with a sentence | Passed. See below |
+| `b_no_voice_for_an_action` (new) | A job waits for materials. A provider of the test gives a pause, a resume, a change of the reserve, a cancellation and a start, each with the sentence "Done, as you asked." | Passed. Each answer is the text of the server, compared with a fixed text: the answer of the pause, then four proposals. The start is the proposal of a replacement. No answer has the sentence of the provider |
+| `b_fixed_sentences_of_uncertain_numbers` (new) | The account of a record that the test writes, with the flag of the robot and a game time. No robot and no world. The record and the limits of `b_facts_of_uncertain_numbers` | Passed. See below |
+| `b_voice_after_uncertain_numbers` (new) | Two jobs of one player. Job A waits for materials. Job B is done. Built artificially: the test calls the function of the runtime that sets `RECOVERY` for job A, and it moves the observation of the destination of job B back by 6001 ticks in the record. Five reports. Then the owner resumes job A, and the computer of robot B shuts down. One more report | Passed. See below |
+| `t18_claude_provider` (changed) | One more answer of the stand-in: a report with the sentence "The job is done: I delivered 8 items." The test reads the system text | Passed. "none" gives "You did not give the source." alone. The report gives its sentence alone. The system text has each rule of the voice: the character, the first person, "two sentences and 300 characters at most", "Use only the numbers of the context and of the request", "Do not calculate", "You do not remember an earlier", the field "reason" for "report" and "none" only, and "For each other action, "reason" is empty text." It keeps the two rules of ticket #18. The schema has its ten fields, as before |
+| `a_parse_of_an_answer` (changed) | The reader of the JSON of an action | Passed. "reason" is the sentence of a report and of "none". A sentence of 300 characters is not cut. A "none" with an empty sentence is a "none": the check of the length refuses it later. A "none" with a null reason is an answer that Uno cannot read. A pause with a reason has no sentence |
+| `a_provider_answers_with_an_action`, `b_facts_in_the_context`, `a_model_only_for_operators` (changed) | The answer to "none" of a provider of the test | Passed. The answer is the sentence alone, for example "The test read the context." Before: "I cannot propose a job: The test read the context." |
+
+Tests that did not change and that cover parts of this ticket, in run 111:
+
+- `a_report_and_pause_by_words` and `a_t19_words_of_another_player`: their reports have an empty sentence. They get the fixed report and the sentences of D29.2, as before.
+- `a_fixed_rules_report_and_pause`, `s2_uno_reference_sentence` and `b_fixed_rules_choose_the_robot`: the fixed rules give actions without a sentence. The tests compare them with such actions.
+- `a_summary_at_an_opening`: the "Report" button gives the fixed report, and the provider of the server gets 0 calls.
+- `t18_provider_failures` and `a_model_requests_count`: after a model without a valid action, the fixed rules read the request. Their answers have no voice.
+
+The cases of `b_voice_of_a_report`, in their order. Job A is job 81 on robot #62 in run 111. Job B carries 16 to the destination of job A. "Fixed report" is the line of the job in the fixed report of increment A. The test compares its start: "Job 81, robot #62: carry 24 items from 'b_voice_source' to 'b_voice_destination', reserve 0. I delivered 0 items."
+
+| Target | Sentence of the provider | Answer of Uno |
+| --- | --- | --- |
+| The source of job A | "Job 81 on robot #62 waits for coal: 0 of 24 delivered." | That sentence |
+| The source of job A | "I delivered 987654 items." | The fixed report of job A |
+| The source of job A, with the request "Did you deliver 987654 items?" | "No: 0 of 24, not 987654." | That sentence |
+| The source of job A | "" and " " | The fixed report of job A |
+| The source of job A | 300 characters | That sentence |
+| The source of job A | 301 characters | The fixed report of job A |
+| None | "Both jobs wait for coal. Their sources are empty." | That sentence |
+| None | The same, with a third sentence: "Bring coal." | The fixed report on all jobs: two lines |
+| The destination of both jobs | "Both robots wait for coal." | That sentence |
+| The destination of both jobs | "I delivered 987654 items." | "2 of your open jobs use the station 'b_voice_destination'. Tell me the robot number of the job. I did nothing." |
+| A station of no job | "No job of yours uses that station." | That sentence |
+| A station of no job | "I delivered 987654 items." | "None of your open jobs uses the station 'b_voice_nothing'. Tell me the robot number of the job. I did nothing." |
+
+After each case, the two jobs are `WAITING` with their revision 0, and the player has no proposal.
+
+The cases of `b_voice_of_none`. Each answer is compared with a fixed text.
+
+| Request | Sentence of the provider | Answer of Uno |
+| --- | --- | --- |
+| "Which stations do I have?" | "You have no station yet: register one with the station command." | That sentence |
+| "x" | "You have 3 stations." | "I cannot answer that. I did nothing." |
+| "Do I have 3 stations?" | "You do not have 3 stations: you have none." | That sentence |
+| "x" | "", "One. Two. Three.", 301 characters | "I cannot answer that. I did nothing." |
+
+The cases of `b_fixed_sentences_of_uncertain_numbers`. The record: a transport of 24 from 'depot' to 'furnace' with a reserve of 10, job 900 on robot #9, 6 delivered, 4 on board. 'depot' had 50 at 6000 ticks before "now", 'furnace' had 6 at 240 ticks before. The robot called at 300 ticks before. The test compares the whole list of sentences.
+
+| Case | The fixed sentences |
+| --- | --- |
+| The record as it is: at the limit of an old observation and of a silent robot | None |
+| 'depot' observed 6001 ticks before | "I last observed 'depot' 5 min ago: it had 50 then." |
+| Also 'furnace' observed 7200 ticks before | The same, then "I last observed 'furnace' 6 min ago: it had 6 then." |
+| The robot called 301 ticks before, and no call since the server start | "Robot #9 of job 900 has not contacted me for a while: I do not know if it is working. The last recorded data, not the current state: 4 on board, 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago)." |
+| The robot is not running | "Robot #9 of job 900 is not running or not loaded." and the same data |
+| `RECOVERY` with `LOAD_DIFFERS`, and the robot is not running | One sentence: "Job 900 on robot #9: I cannot say how it went. Recorded reason: the robot holds 0, the record says 4. The recorded data can be wrong: 6 delivered, 4 on board, 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago). You decide whether to resume or cancel." |
+| After a recovery | "After a recovery of job 900 on robot #9 the totals can be inexact: the record says 6 delivered." |
+| After a recovery, the robot is not running, and 'furnace' never observed | The sentence of the recovery, then the sentence of the robot with "4 on board and 50 in 'depot' (seen 5 min ago)" |
+| 'furnace' never observed, the robot runs and calls | None: unknown is not old, and it has no number |
+
+The answers of `b_voice_after_uncertain_numbers`, from the log of run 111. Job A is job 78 on robot #24. Job B is job 79 on robot #25. The voice is "Something here needs your eyes." The test reads an age in seconds as "N s ago": it changes at each tick.
+
+1. A report about robot #24: "Job 78 on robot #24: I cannot say how it went. Recorded reason: the test changed the record. The recorded data can be wrong: 0 delivered, 0 on board and 0 in 'b_uncertain_source' (seen 3 s ago). You decide whether to resume or cancel. Something here needs your eyes."
+2. A report about robot #25: "I last observed 'b_uncertain2_destination' 5 min ago: it had 8 then. Something here needs your eyes."
+3. A report without a target, and a report about the destination of job B: no open job uses it. The sentence of job A, the sentence of job B, then the voice.
+4. A report about robot #24 with "I delivered 987654 items.": the fixed report of job A. It has "I cannot say how it went.", and no fixed sentence before it.
+5. After the resume and the shutdown, a report without a target: "After a recovery of job 78 on robot #24 the totals can be inexact: the record says 0 delivered. Robot #25 of job 79 is not running or not loaded. The last recorded data, not the current state: 0 on board, 56 in 'b_uncertain2_source' (seen 6 s ago) and 8 in 'b_uncertain2_destination' (seen 5 min ago). Something here needs your eyes."
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 108, red 1 | The new test `b_voice_of_a_report`, with the old code of Uno | 95 of 96, expected. `b_voice_of_a_report` failed at its first case: the fixed report of job A in place of the sentence |
+| 109, green 1, red 2 | The sentence of a report and its checks. The new tests `b_voice_of_none` and `b_no_voice_for_an_action` | 97 of 98, expected. `b_voice_of_a_report` passed. `b_voice_of_none` failed at its first case: "I cannot propose a job: You have no station yet: …". `b_no_voice_for_an_action` passed: the code of increment A already ignored the sentence of these actions. Thus it had no red run. It guards the rule |
+| 110, green 2, red 3 | The sentence of "none". `JobAccount.cautions` gives no sentence yet. The new tests `b_fixed_sentences_of_uncertain_numbers` and `b_voice_after_uncertain_numbers`, and the changed tests | 97 of 100, expected. `b_fixed_sentences_of_uncertain_numbers`: each case gave no sentence. `b_voice_after_uncertain_numbers`: the voice without the fixed sentence of `RECOVERY`. `t18_claude_provider`: the sentences of "none" and of the report passed, then "the system text has not" the seven new rules |
+| 111, green 3 | The fixed sentences and the new system text | **100 of 100**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `100 GAME TESTS COMPLETE`, `All 100 required tests passed :)` |
+| 112 | The commit `cb6161f`: the code of run 111, with one line of the comment of the helpers of the tests | **100 of 100**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `100 GAME TESTS COMPLETE`, `All 100 required tests passed :)` |
+
+Before run 110, one start of the build stopped at the compiler: a parenthesis too many in a new test. No test ran. It has no number.
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The check of the numbers reads the JSON of the context (`Context.toJson`) and the text of the request. The Claude provider sends the same JSON. A number that the facts do not give is not in the JSON | `Uno.passes`, `ClaudeProvider.answer` | That the model reads the JSON as the server means it |
+| The facts come from the moment of the request. The fixed sentences come from the moment of the answer, as the fixed report. Between the two moments a case can begin or end | `Uno.ask`, `Uno.voiced` | No test builds a case that changes in that time |
+| `parse` reads "reason" only for a report and for "none". `act` reads the sentence only of a report and of "none". A provider written in Java can give a sentence with a pause: it is not used | `Uno.parse`, `Uno.act` | |
+| The fixed rules build each action without a sentence | `Uno.RuleProvider` | |
+| `Uno.voice` gives the result of the checks: passed, failed, or no sentence needed. `Uno.noValidAction` gives the fourth result: no valid action. Nothing records the result yet: ticket #23 | `Uno.java` | |
+| The end of a sentence is a full stop, a question mark or an exclamation mark before a space, with a closing quote or bracket between them. Thus "e.g. this" counts as two sentences, and "Done.Next" as one | `Uno.SENTENCE_END` | |
+| A digit is a digit of each script (`\p{Nd}`). A number in words is not a run of digits: it passes (D32) | `Uno.DIGITS` | |
+
+### Not covered
+
+- A sentence of the real model. No `-Plive` run used the new system text. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B.
+- The voice on the screen of a client. The play session of increment B.
+- A silent robot through the conversation: the robot calls each 10 s at most, and the test cannot stop the calls without a stop of the computer. `b_fixed_sentences_of_uncertain_numbers` covers the case with a record that the test writes.
+
+## Increment B — each request is in the server log (ticket #23)
+
+Date: 2026-11-15. Uno records each written request to a provider with a model, and the server log gets one line for each such request. See D33, and the choices of the implementation at the end of D42.
+The code is the branch of increment B at `bbe9478`, with tickets #16 to #21, and the changes of this ticket. No part of the runtime and no Lua module changed. The schema and the system text of the Claude provider did not change. No run called the real Claude service.
+
+### Automatic in-game tests
+
+The test is in the game and automatic. It uses providers written in the test, with the model flag (`CountingModel`): they call no model and cost nothing. Their model is `test-model`. The requester is an operator: only an operator uses a provider with a model (D33.1). The test needs no robot.
+
+| Test | What it does | Result in run 114 |
+| --- | --- | --- |
+| `b_record_of_a_request` (new) | An operator sends five requests, one after the other. 1: "Which stations do I have?", and a "none" with a sentence without a digit, after 300 ms, with 120 input tokens and 30 output tokens. 2: "x", and a "none" with "You have 987654 stations.", with 10 and 2 tokens. 3: "x", and a pause of robot #999999 with the sentence "Done, as you asked.", with 10 and 2 tokens. 4: "x", and an answer that Uno cannot read, with 7 and 3 tokens. 5: "x", and the exception "model offline". Then the operator sends "x" to the fixed rules, and a player who is not an operator sends "x" to a provider with the model flag | Passed. See below |
+
+The records of `b_record_of_a_request`. The test compares the model, the tokens, the action, the result of the checks and the unused sentence with the values of the table. The model of each record is `test-model`. The time of the answer is at least 300 ms for request 1, and less than 5 s for each request.
+
+| Request | Answer of Uno | Action in the record | Tokens: in, out | Result of the checks | Unused sentence |
+| --- | --- | --- | --- | --- | --- |
+| 1 | The sentence of the provider | "none" with that sentence | 120, 30 | `PASSED` | None |
+| 2 | "I cannot answer that. I did nothing." | "none" with that sentence | 10, 2 | `FAILED` | "You have 987654 stations." |
+| 3 | "You have no job on robot #999999. Tell me the robot number of the job. I did nothing." | A pause of robot #999999, without a sentence | 10, 2 | `NOT_NEEDED` | None |
+| 4 | "The model gave no valid answer (I cannot read its answer), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." | An answer that Uno cannot read (`Unreadable`) | 7, 3 | `NO_VALID_ACTION` | None |
+| 5 | The same, with "model offline" | None: the provider gave no answer | 0, 0 | `NO_VALID_ACTION` | None |
+
+After the request to the fixed rules, the record of the operator is the record of request 5: the same object. The player who is not an operator has no record. The counter of the operator: 5 requests, 147 input tokens, 37 output tokens. Thus the record does not change the counter.
+
+Tests that did not change and that cover parts of this ticket, in run 114:
+
+- `a_model_requests_count`, `a_model_limit`, `a_new_session_restarts_the_counters` and `a_screen_model_lines`: the counter of the session and the lines of the screen, as before.
+- `t18_provider_failures`: the answers after a model without a valid action, as before.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 113, red | The new test. `Uno` has the record and its reader, but nothing writes the record | 100 of 101, expected. `b_record_of_a_request` failed at its first request: "the record of the request: null" |
+| 114, green | The code of the ticket | **101 of 101**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `101 GAME TESTS COMPLETE`, `All 101 required tests passed :)` |
+| 115 | The code of the commit: the code of run 114, with one comment of `Uno.Voice` changed | **101 of 101**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `101 GAME TESTS COMPLETE`, `All 101 required tests passed :)` |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+The log line as text has a code examination only (spec #15). The record behind it has the test above.
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| Uno writes the record and the line on the server thread, before the answer of Uno. Thus the consumer of the answer reads the record of its request | `Uno.ask` | |
+| The line is at the level INFO. It has the model, the input tokens, the output tokens, the time in milliseconds, the kind of the action, the result of the checks, and the text of the request of the player. After a failed check it also has the unused sentence. Each text is in JSON quotes: a line break in a text does not start a new line of the log | `Uno.line` | No test reads the server log |
+| The line has no API key. The model is a value of the provider. The key is only in the client of the SDK (D21) | `Uno.line`, `ClaudeProvider.model` | |
+| The line has no coordinate. It has no data of the context. The model gets no coordinate (D42, point 2): thus the unused sentence has none either | `Uno.line` | The request is the text of the player: a player can write a coordinate in it |
+| Only the route of the model gives a record and a line. A provider without a model, a request after the limit of the session, a player who is not an operator, and a request that finds an open request get none | `Uno.ask`, `Uno.route` | |
+| The time of the answer: from the send of the request to the answer of the provider, or to the time limit. The wait for the server thread does not count | `Uno.ask` | |
+| The model of the record is the model that the provider names (`Uno.Provider.model`). The Claude provider names its model of each request | `ClaudeProvider.model` | With the server-side fallback of D21, a different model can answer a request that the first one declined. The record still names the first model. Not seen in a run |
+| The record is in the session of Uno: one record for each actor, the newest. A new server session starts without a record (D24) | `Uno.Session`, `Uno.modelRequest` | No test starts a new session after a record |
+| The counter and the screen did not change | `Uno.ask`, `UnoView` | |
+
+Examples of lines from the log of run 114: an output of automatic tests. No test reads them. The first five lines are the requests of `b_record_of_a_request`. The last line is from `a_screen_model_lines`: the Claude provider with the local stand-in of the service.
+
+```
+Uno request: model test-model, 120 input tokens, 30 output tokens, 300 ms, action none, checks PASSED, request "Which stations do I have?"
+Uno request: model test-model, 10 input tokens, 2 output tokens, 0 ms, action none, checks FAILED, unused sentence "You have 987654 stations.", request "x"
+Uno request: model test-model, 10 input tokens, 2 output tokens, 0 ms, action pause, checks NOT_NEEDED, request "x"
+Uno request: model test-model, 7 input tokens, 3 output tokens, 0 ms, action unreadable, checks NO_VALID_ACTION, request "x"
+Uno request: model test-model, 0 input tokens, 0 output tokens, 0 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model claude-opus-5-5, 1234 input tokens, 56 output tokens, 4 ms, action none, checks PASSED, request "x"
+```
+
+### Not covered
+
+- A line with the tokens and the time of the real service. Ticket #27 has the paid runs of increment B.
+- The log line as text: see the code examination above.
+- The record after the time limit: the time of a late answer, and its tokens. A request that reaches the time limit can still cost tokens (D33.1). The record shows zero, as the counter.
+
+## Increment B — the model is a setting (ticket #22)
+
+Date: 2026-11-15. The model of the Claude provider is the value `model` of `config/mindcraft-common.toml`. The start value is `claude-haiku-5-5`. Only a model with a server-side fallback for a refusal gets the fallback parameter. See D42, point 6, D33 and D21.
+The code is the integration branch of increment B at `c63d75c`, with tickets #16 to #21 and #24, and the changes of this ticket. No part of the runtime and no Lua module changed. The system text and the schema of the Claude provider did not change.
+No run called the real Claude service. **No run with the real service used Haiku 5.5 yet.** It is still not known from a run whether the service refuses the `fallbacks` parameter for Haiku 5.5. The provider no longer sends it.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. Each one uses the local stand-in of the service in the place of the API: no request reaches the real service.
+
+| Test | What it does | Result in run 130 |
+| --- | --- | --- |
+| `b_model_of_the_setting` (new), in the batch `b_model_setting` | The test reads the start value of the setting. It builds three Claude providers, with the setting at `claude-sonnet-5-5`, at `claude-haiku-5-5` and at `claude-haiku-9-9`. It puts the value of before back after each one. An operator sends "x" four times through Uno. The stand-in answers: a "none" with a sentence for Sonnet, the same for Haiku, a refusal for Haiku, and an answer 404 `not_found_error` with "model: claude-haiku-9-9" for the third model | Passed. The start value is `claude-haiku-5-5`. The setting has its value of before after the three providers, and at the end. The names for the log line: "Claude (claude-sonnet-5-5)" and "Claude (claude-haiku-5-5)". The four requests name `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-haiku-5-5` and `claude-haiku-9-9`, each with the effort `low`. Only the request for Sonnet has `fallbacks: "default"` and the beta header `server-side-fallback-2026-07-01`. The answers: "You did not give the source." two times. Then "The model gave no valid answer (the model declined the request), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." Then the same with "(the model service does not know the model 'claude-haiku-9-9')" |
+| `t18_claude_provider` (changed) | As before. Its check of the model and of the fallback moved to `b_model_of_the_setting` | Passed. The request names the model of the setting of the test server. Each other check is as before |
+
+The file of the setting. Type: in the game, automatic: the game test server of the normal run wrote it, and the agent read it after the run. It is the file of a test server, not of a real installation.
+
+- Before runs 130 and 131 the agent deleted `run-gametest/config/mindcraft-common.toml`. At the start of each run Forge wrote it again. Its log line "Configuration file … is not correct. Correcting" is the message of Forge for a new file.
+- After each run the file had three lines of comment and `model = "claude-haiku-5-5"`. `b_model_of_the_setting` changed the value six times during the run, and Forge saved the file at each change. Thus the file after the run also shows that the test put the value back.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 129, red | The new test `b_model_of_the_setting`. The setting exists in the Forge file, but the provider still has the constant `claude-opus-5-5` | 103 of 104, expected. `b_model_of_the_setting` failed at its check of the names: "Claude (claude-opus-5-5), Claude (claude-opus-5-5)" |
+| 130, green | The provider reads the setting. The fallback only for Opus 5.5 and Sonnet 5.5. The reason of an answer 404 | **104 of 104**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `104 GAME TESTS COMPLETE`, `All 104 required tests passed :)` |
+| 131 | The commit `260efdc`: the code of run 130 | **104 of 104**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `104 GAME TESTS COMPLETE`, `All 104 required tests passed :)` |
+
+The three branches of the code came in one step: the read of the setting, the fallback and the reason of a 404. Thus run 129 is the red run of all three. Its first failed check stopped the test before the requests.
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The server builds the Claude provider at its start, only with a key and never on a game test server. Thus the server reads the setting at its start. The log line "Uno interprets requests with …" uses the name of the provider: it names the model | `MindCraft.aboutToStart`, `ClaudeProvider.fromEnv` | The log line with a key: no run had a key |
+| The key stays in the environment: the SDK reads it in `fromEnv`. The file of the setting holds no key | `ClaudeProvider.fromEnv`, `MindCraft.MODEL` | |
+| Forge loads the file again after a change while the server runs. The provider keeps the model of the start | `ConfigFileTypeHandler.ConfigWatcher` of Forge 47.4.28, with `javap` | No test changes the file while a server runs |
+| `t18_claude_live` gets its provider through `fromEnv`: it uses the model of the setting, and its log names it | `LiveTests.java` | It did not run |
+
+### Not covered
+
+- A request to the real service with the setting. No run with the real service used Haiku 5.5 yet. The paid runs of increment B are ticket #27.
+- Whether the service refuses the `fallbacks` parameter for Haiku 5.5. The provider no longer sends it.
+- The answer of the real service to a model that it does not know. The stand-in gives the shape of the guide of the API: 404, `not_found_error`, "model: <id>".
+- The file on a real installation, a change of the setting by a person, and the log line with a key. The play session of B.
+
+## Increment B — the low fuel notice (ticket #24)
+
+Date: 2026-11-15. Uno warns one time when the fuel of a robot is sufficient for fewer than 5 trips between the docks of its job. The report, the status command, the facts and the screen give the fuel. See D42, points 11, 12 and 19, D41 decision 5, D34 and D30.
+The code is the branch of increment B at `8df1f39`, with tickets #16, #17, #18, #19 and #21, and the changes of this ticket. No Lua module changed. The schema and the system text of the Claude provider did not change. The facts in the body of a request have two more fields. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests, unless the row says otherwise. A trip of the rig is 6: 2 times the 3 blocks between its docks. Thus 5 trips are 30.
+The tests set the fuel level of the turtle with `ITurtleAccess.setFuelLevel`, as `t06_no_fuel`. Then the robot makes a contact through `mindcraft.status`: the function that the Lua modules call before each move.
+
+| Test | What it does | Result in run 124 |
+| --- | --- | --- |
+| `b_low_fuel` (new) | A player and a transport of 24 from an empty source: the job waits at the source dock, and the robot does not move. The test sets the level and makes a contact: 30, 29, 29 again, then a save and a load and a check of the copy at 29, then 30, then 12. Then the need of fuel is a parameter of the check: 5 without a need. Then an opening of the screen by the owner and by a different player | Passed. At 30: no entry and no notice. At 29: one entry `LOW_FUEL` with the cause `SOURCE_AT_RESERVE`, the fuel 29, 4 trips, the state `WAITING`, not requested, the owner. One notice: "Job N on robot #R (minecraft:coal from 'b_low_fuel_source' to 'b_low_fuel_destination') has little fuel: 29, about 4 trips between its stations." At the next contact: no second entry, and the state and the cause did not change. The loaded copy has the same diary, and its check writes no entry. 30 arms the warning: no entry. At 12: a second entry and a second notice, "…: 12, about 2 trips between its stations." Without a need of fuel: no entry. The summary of the owner: "From the start of my memory:" and the two sentences. The different player gets no summary, no notice and no entry. The two notices went to the owner only |
+| `b_low_fuel_at_the_start` (new) | A player and a transport of 24. The turtle starts with 20: 3 trips. The robot makes each contact itself. The test registers a place of the owner, and reads its general state when the entry comes | Passed. The diary: `RUNNING`, `LOW_FUEL`, then `DONE`. The notices: "…has little fuel: 20, about 3 trips between its stations." and "…is done: 24 delivered." The later contacts are below the threshold too: no second entry. When the entry comes, the job is `RUNNING` and the general state of the place is `WORKING`. At the end: source 40, destination 24, robot 0 |
+| `b_fuel_in_the_report` (new) | As `b_low_fuel`: a job that waits at the source dock. At 30 and at 29: the fixed report, the status command and the view of the screen. At 29 a written request: a provider of the test keeps the context. Then a check without a need of fuel, and the same reads in the same tick | Passed. The report has "My fuel level is 30: about 5 trips between the stations." and then the same with 29 and 4. The status has the line "fuel: 30, about 5 trips between the stations", then 29 and 4. The view has no line about the fuel at 30. At 29 it has the text widget "Little fuel: 29, about 4 trips between the stations.". The facts of the context have the fuel 29 and the trips 4. The JSON has `"fuel":29,"fuelForTrips":4`. Without a need of fuel: no fuel in the report, "fuel: unknown" in the status, no line in the view, and no fuel in the facts |
+| `b_facts_of_uncertain_numbers` (changed) | As before, without a robot. One more part: a record with the fuel 29 and 4 trips | Passed. The facts give the fuel and the trips for a robot that runs and that called 300 ticks before, also in `RECOVERY`. They do not give them for a robot that is not running, and for a robot that called 301 ticks before. The sentence of these two cases is now "… Not given: the load on board, the stocks and the fuel." |
+| `b_facts_in_the_context` (changed) | As before | Passed. The facts of each of the three jobs also have the fuel level of the turtle at the moment of the check, and that level divided by 6. The robot does not move after the job is done, blocked or in `RECOVERY`. The fuel is in the facts in `RECOVERY` too |
+| `t18_claude_provider` (changed) | As before | Passed. The facts in the body of the request also have `"fuel":L,"fuelForTrips":T` after `"aboveReserve":56`. L is the level of the turtle, and T is L divided by 6 |
+| `t06_no_fuel` (changed) | As before: the turtle starts with 0 | Passed. The diary at the block: `RUNNING`, `LOW_FUEL`, `BLOCKED OUT_OF_FUEL`. The cause, the report and the resume after a refuel are as before |
+| `a_notices_for_blocked_recovery_and_done` (changed) | As before: the turtle starts with 0 | Passed. The first notice is now "…has little fuel: 0, about 0 trips between its stations.", before "…is blocked: the robot has no fuel." Four notices about the jobs, each to the owner |
+| `a_no_notice_for_a_console_job` (changed) | As before: the turtle starts with 0 | Passed. The diary: `RUNNING`, `LOW_FUEL`, `BLOCKED OUT_OF_FUEL`, `RUNNING`, `DONE`. No notice |
+| `a_summary_at_an_opening` (changed) | As before: the turtle starts with 0, two times | Passed. Each of the two summaries has the low fuel sentence of its job before the sentence of the block |
+| `a_notices_call_no_provider` (changed, run 126) | As before, with one more step: a contact at 29, between the long wait and the block | Passed. The notices: the long wait, "…has little fuel: 29, about 4 trips between its stations.", the block and the recovery. The provider of the server got no call |
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 120, red 1 | The new test `b_low_fuel`. The kind `LOW_FUEL` and the fuel of an entry exist. The check of the fuel is empty | 95 of 96, expected. `b_low_fuel` failed at 29: "[]", no notice |
+| 121, green 1 | The check of the fuel, the read at each contact with an active job, and the sentence of the notice | 93 of 96. `b_low_fuel` passed. Three tests whose turtle starts without fuel failed: `a_notices_for_blocked_recovery_and_done`, `a_no_notice_for_a_console_job` and `a_summary_at_an_opening`. Their notices, their diary or their summary had the low fuel entry at the level 0. A level of 0 is below 5 trips: the expectations changed, not the code |
+| 122, red 2 | The new tests `b_low_fuel_at_the_start` and `b_fuel_in_the_report`. The fuel in `b_facts_of_uncertain_numbers`, `b_facts_in_the_context` and `t18_claude_provider`. The changed expectations of the four tests whose turtle starts without fuel. The facts have the two fields, but the account gives none. The report, the status and the screen are as before | 94 of 98, expected. `b_facts_of_uncertain_numbers`, `b_fuel_in_the_report`, `b_facts_in_the_context` and `t18_claude_provider` failed: no fuel. `b_low_fuel_at_the_start` and the four changed tests passed |
+| 123, green 2 | The fuel in the facts, the report, the status and the view | 96 of 98. `b_fuel_in_the_report` failed: a defect of the test. Its station names hold the word "fuel", and its check of a report without fuel looked for that word. Correction: the check looks for "My fuel level". `t22_t23_proposals_and_contact_points` failed: "the report after a save and a load is different". The record did not save the fuel of the job. Correction: the record saves the fuel and the trips of a job |
+| 124, green 3 | The two corrections | **98 of 98**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `98 GAME TESTS COMPLETE`, `All 98 required tests passed :)` |
+| 125 | The commit `97cd020`: the code of run 124. The check of the fuel now marks the record dirty at each contact. One comment changed | **98 of 98**. The same three log lines |
+| 126 | The commit `dfa1d29`: one more step in `a_notices_call_no_provider`. The code of the mod is the code of run 125 | **98 of 98**. The same three log lines. No red run for this step: the code existed |
+
+The four restart phases after run 125, one at a time, on the same world. Type: in the game, automatic. The code of the mod did not change after run 125: only the test of run 126.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24, "fuel: 999, about 166 trips between the stations" |
+| `check` | Passed. `All 1 required tests passed :)`. The record after the restart has "fuel: 999, about 166 trips between the stations": the saved level. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0, "fuel: 996, about 166 trips between the stations" |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`. The record after the restart has the fuel of the delivery: 996. At the end: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`, `RUNNING`, `DONE` |
+
+The restart test does not check the fuel. The fuel lines above are observations in the log of each phase.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| At each contact with an active job, `RobotApi.contact` gives the runtime `ITurtleAccess.getFuelLevel` and `ITurtleAccess.isFuelNeeded` of the public API of CC: Tweaked | `RobotApi.java` | That a turtle on a server without a need of fuel answers `false`. No test changes that setting of CC: Tweaked: its public API has no function for it. `b_low_fuel` and `b_fuel_in_the_report` give the need as a parameter of `MindRuntime.checkFuel` |
+| No Lua module changed | `git diff` of the ticket | |
+| The way of a notice of low fuel: `MindRuntime.checkFuel`, `warn`, `write`, `Notices.warn`, the exit. No step has a reference to a provider | `MindRuntime.java`, `Notices.java` | `a_notices_call_no_provider` counts the calls in one case |
+| A trip is 2 times `BlockPos.distManhattan` of the two docks. Two docks at the same place give no fuel and no entry | `MindRuntime.checkFuel` | No test builds two docks at the same place |
+| The state of the job and the general state of a projector do not read the fuel. `MindRuntime.mood` reads only the states of the jobs | `MindRuntime.java` | |
+
+### Not covered
+
+- A turtle on a server where turtles need no fuel. See the code examination.
+- The notice in the chat of a client, the line of the screen in a client, and the report with the fuel in a client. The play session of increment B has a step for the notice.
+- The fuel in a request to the real service. No `-Plive` run sent it.
+- A robot that burns the fuel items on board at the level 0. `transport.lua` does it (code examination, D12).
+
+## Increment B — the conversation part comes first on the screen (ticket #25)
+
+Date: 2026-11-15. The view that the server builds puts the conversation part first: the sentence of Uno, the proposal, the text field and the row of buttons. The lines about the provider follow them. The list of the jobs comes last. See D42, point 13, D40 and D19.
+The code is the branch of increment B at `c075de7`, with tickets #16 to #21, #23 and #24, and the change of this ticket. Only `UnoView.build` changed. The client `UnoScreen` did not change. No part of the runtime and no Lua module changed: thus the four restart phases did not run. The schema and the system text of the Claude provider did not change. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. No test opens a client screen. Each test reads the view as data, and calls the functions that the network messages call. `b_conversation_first` has a real turtle and real chests.
+
+| Test | What it does | Result in run 141 |
+| --- | --- | --- |
+| `b_conversation_first` (new) | A player and a transport of 24 from an empty source: the job waits, and its state does not change by itself. A provider of the test gives one line about the provider, only to build a view. The test is in the batch of `a_screen_model_lines`. It reads the position of the first widget with each text or kind. First a view with no job. Then the job, the button "Cancel" of its panel, and the view with the proposal. Then the button "Confirm #N" of that view | Passed. With no job: the sentence of Uno at 0, the text field at 1, the row with "Send" at 2, the line about the provider at 3, and "I have no record of a job of yours." at 4. With the job and the proposal: the sentence of Uno at 0, "Waiting for your confirmation: cancel job N" at 1, the text field at 2, the row with "Send" at 3, the line about the provider at 4, and the heading of the job at 5. "Confirm #N" cancelled the job |
+| `s2_tablet_view`, `a_change_through_the_view`, `a_cancel_button_asks_a_confirmation`, `t16_actions_of_an_old_view`, `b_replacement_through_the_view` and `t22_confirm_only_the_shown_proposal` (unchanged) | As before: send, confirm, report, apply, pause, resume and cancel through the view. Each test finds a button by its action, not by its place | Passed without a change |
+| `a_screen_model_lines`, `b_fuel_in_the_report` and `s2_projector` (unchanged) | As before: the lines about the provider, the line about low fuel and the line about the places of the base, each by its text | Passed without a change |
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 140, red | The new test `b_conversation_first`, with the old order of the view | 104 of 105, expected. `b_conversation_first` failed with no job: "I have no record of a job of yours." was the first widget, and the sentence of Uno the second |
+| 141, green | The new order in `UnoView.build` | **105 of 105**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `105 GAME TESTS COMPLETE`, `All 105 required tests passed :)` |
+| 142 | The commit `a2b66fd`: the code of run 141 | **105 of 105**. The same three log lines |
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `UnoScreen` draws the widgets from the top down, in the order of the view. The whole column scrolls together. The class did not change | `UnoScreen.layout`, and the `git diff` of the ticket | That a small window shows the conversation part without a scroll |
+| The widgets of the view, the identifiers of the fields and the actions of the buttons did not change. Only their order changed | `UnoView.build`, and the `git diff` of the ticket | |
+| The counter of an operator and the line of the route are written in one place, one after the other: `UnoView.providerLines`. The new test has only the line of the route | `UnoView.java` | No test reads the position of the counter |
+| The line about the places of the base with a projector stays after the jobs, as before | `UnoView.build` | No test reads its position |
+
+### Not covered
+
+- The look of the screen in a client. No automatic test opens a client screen. The play session of increment B has the step "Open the screen in a small window".
+- The height in a window of about 850 × 510 pixels (D40). A long sentence of Uno can make the conversation part as tall as the window (D42, point 13).
+
+## Increment B — the harness of the measurement (ticket #26)
+
+Date: 2026-11-15. The harness of the measurement of the models: one fixed set of requests, the world that they need, and a record for this file. See D42, points 7, 8 and 20, D33 and D32.
+The code is the integration branch of increment B at `002c636`, with tickets #16 to #24, and the changes of this ticket. No part of the runtime and no Lua module changed. The schema and the system text of the Claude provider did not change.
+**No paid run occurred.** No run of this ticket called the real Claude service. The measurement itself is ticket #27.
+
+### How to run the measurement
+
+- Each run calls the real Claude service with the key of the project owner. It costs money. **Each run needs the consent of the project owner** (CLAUDE.md).
+- The budget: 5 dollars for all paid runs of increment B: three passes of the measurement at most, and the play session (D42, point 8).
+- **Estimate, not a measurement:** one pass of about 20 requests on the three models costs about 0.45 dollars: Opus 0.29, Sonnet 0.15, Haiku 0.01 (D42, point 8).
+- The key is `ANTHROPIC_API_KEY` in the environment. It is not in a file or in the command.
+- One run for each model. The command:
+
+```bash
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-haiku-5-5
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-sonnet-5-5
+./gradlew runGameTestServer -Pmeasure -Pmodel=claude-opus-5-5
+```
+
+- `-Pmeasure` selects the namespace `mindcraft_measure`: the run holds only the test `b_measurement`. The log must say `Enabled Gametest Namespaces: [mindcraft_measure]`.
+- `-Pmodel` names the model of the run. Without it, the run uses the setting `model` of `run-gametest/config/mindcraft-common.toml`. The log line `b_measurement uses Claude (…)` names the model. `-Pmodel` also works with `-Plive`.
+- The output: the file `run-gametest/measurement-<model>.md`, for example `run-gametest/measurement-claude-haiku-5-5.md`. The server log has the same text after the line "The measurement, the record for TEST_RESULTS.md:". Git ignores the folder.
+- The server log also has one line for each request at its answer: "The measurement, request N of 19: …", the row of the table.
+- The file is a section with a heading of level 4. It goes under "The record of the measurement (ticket #27)" below, without a change by hand. Then the agent marks each sentence that can contradict the record, and the project owner decides (D42, point 20).
+- The test `b_measurement` does not judge the model. It fails only when the harness cannot build the world or write the record. A run must still show `All 1 required tests passed :)`.
+- A run sends 19 requests, one after the other. The time limit of the test is 12000 ticks: 10 minutes.
+
+### The set
+
+The 19 requests of `Measurement.SET`, in their order. Type: the code of the set, read by the agent. The automatic test below runs each one.
+The world has seven robots with real turtles and chests, and a third station. The robot numbers come at the run. No request names a robot number.
+
+| No. | Case | Request | Expected action | The state that it needs |
+| --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | A report about each job: no job named | Each job of the world |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | A report about the job of the depot | depot to furnace: keep at least 64, reserve 32. The depot has 32: `WAITING`, `SOURCE_AT_RESERVE` |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | A report about the job of the mine | mine to smithy: a transport of 24 with a robot without fuel: `BLOCKED`, `OUT_OF_FUEL` |
+| 4 | T21: a job in `RECOVERY` | How did the job of the warehouse go? | A report about the job of the warehouse | warehouse to kitchen: a transport of 24. The harness empties the robot after its pickup: `RECOVERY`, `LOAD_DIFFERS` |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | A report about the job of the cellar | cellar to bakery: a transport of 32 from an empty cellar, `WAITING`. Then the computer of the robot shuts down |
+| 6 | T21: an old observation | How much coal is in the tower now? | A report about the job of the harbor | harbor to tower: a transport of 40. The robot delivers 16 and waits. The owner pauses the job. The last observation of the tower is 6001 ticks old: the harness writes that time in the record |
+| 7 | D32: `BLOCKED` with a load on board | Is the job of the workshop done? | A report about the job of the storage | storage to workshop: a transport of 64. The storage has 24 and the workshop has no chest: `BLOCKED`, `DESTINATION_NO_INVENTORY`, 24 on board |
+| 8 | A question about the diary | What happened while I was away? | A report about each job: no job named | The diary of the seven jobs |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | A report about the job of the depot | Row 2. The robot starts with a fuel level of 1000 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | A start: carry 16 x `minecraft:coal` from 'quarry' to 'kiln', reserve 0, with the robot of the quarry | quarry to kiln: a transport of 16, `DONE`. Its robot is the only free robot |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | A change of the job of the depot: reserve 16 | Row 2 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | A resume of the job of the harbor | Row 6: `PAUSED` |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | A cancellation of the job of the mine | Row 3 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | A start: keep at least 64 x `minecraft:coal` in 'smelter', taken from 'depot', reserve 32, with the robot of the depot. It is a replacement (D42, point 10) | Row 2, and the station 'smelter' |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | "none" | None |
+| 16 | None: a value is missing | Carry some coal to the smithy. | "none": the request gives no quantity and no source | None |
+| 17 | None: a question from the context | Which of my robots are free? | "none": the voice answers from the context (D42, point 15) | The robots of the world |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | A report about the job of the quarry | Row 10 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | A pause of the job of the depot | Row 2. The last request: a pause acts at once, and it is the only request that changes the world |
+
+Rows 16 and 17 are added in the implementation: the spec does not name them. See D42, point 7.
+
+When the action of the model is the expected action ("right" in the record):
+
+- A start: the same order. A "none": a "none".
+- A change, a pause, a resume and a cancellation: the search of Uno (D29.2) finds the expected job for the target. A change also gives the same new values.
+- A report: no job named, or the robot or a station of the expected job. Its target selects only the fixed sentences before the voice (D42, point 16). A report about each job is right only with no job named.
+
+### Automatic in-game tests
+
+The test is in the game and automatic. It uses the Claude provider against the local stand-in of the service: no request reaches the real service.
+
+| Test | What it does | Result in run 151 |
+| --- | --- | --- |
+| `b_measurement_with_the_stand_in` (new), in the batch `b_measurement` | The harness of the measurement builds its world and sends the 19 requests. The stand-in reads the request in the body of each call. It gives the expected action, with the sentence "I read the facts of this request." for a report and a "none". Five answers differ. Row 7: a report with "All done: I delivered 64.". Row 9: a report with "I have 987654 fuel left.". Row 14: a change of the reserve to 0, not a start. Row 15: text that is not JSON. Row 17: the answer 500 of the service. Each answer with the status 200 has 2000 input tokens and 100 output tokens | Passed. See below |
+
+What `b_measurement_with_the_stand_in` checked in runs 151 to 153:
+
+- The set: 19 results, 19 calls of the stand-in, and the seven actions among the expected actions. Each call names the model of the setting.
+- The actions: 16 right. Rows 14, 15 and 17 are not right.
+- The checks: 10 `PASSED`, 1 `FAILED` (row 9, with its unused sentence), 2 `NO_VALID_ACTION` (rows 15 and 17), and 6 `NOT_NEEDED` (the start, the change, the resume, the cancellation, the wrong change of row 14 and the pause). Row 17 has no action and zero tokens.
+- The answers of Uno. Row 7: "All done: I delivered 64.": **the check passes, because 64 is the quantity of the job.** This is the limit of D32: the record shows the sentence next to the facts, with `BLOCKED` and 24 on board. Row 9: the fixed report of the job, without 987654. Row 14: the proposal of a change. Row 15: "I did not get a valid configuration. I created no proposal.". Row 17: "I cannot interpret the request now (the model service answered with error 500). The jobs in progress continue.". Row 10: the proposal of the start.
+- The world, in the facts that the provider got. Each context has 15 stations, 7 robots and 7 jobs: only the world of the measurement. Row 2: `WAITING`, `SOURCE_AT_RESERVE`, 0 above the reserve, 54 still to carry. Row 3: `BLOCKED`, `OUT_OF_FUEL`, fuel 0. Row 4: `RECOVERY`, `LOAD_DIFFERS`, no delivered total and no load on board. Row 5: no load on board, and one uncertain sentence: "The robot is not running or not loaded. …". Row 6: `PAUSED`, 16 delivered, no stock of the tower, and "The last observation of 'tower' is old. Not given: its stock.". Row 7: `BLOCKED`, `DESTINATION_NO_INVENTORY`, 24 on board of 64, 0 delivered. Row 9: a fuel level and its trips. Row 18: `DONE`, 16 delivered. Row 10: the robot of the quarry is the only free robot. Row 8: lines of the diary of the seven jobs.
+- After the set: the job of the depot is `PAUSED`, and the player has no proposal.
+- The record: the heading, the table with 19 rows, the totals, and the blocks of rows 7, 8 and 15. The file `run-gametest/measurement-stand-in.md` holds the same text as the record.
+
+The record of run 152, a part of it. Type: an output of the automatic test above. The robot numbers and the times are those of that run.
+
+````text
+#### The harness with the stand-in of the service
+
+Type: in the game, automatic, with the Claude provider against the local stand-in of the service. No request reached the real service. Date: 2026-11-15T14:47:36Z. Model: `claude-haiku-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #93 | report, robot #93 | yes | PASSED | 2 | 2000 | 100 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #89 | report, robot #89 | yes | FAILED | 2 | 2000 | 100 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #89 | change, robot #89, reserve 0 | no | NOT_NEEDED | 1 | 2000 | 100 |
+| 17 | None: a question from the context | Which of my robots are free? | none | no answer | no | NO_VALID_ACTION | 2 | 0 | 0 |
+
+Totals: right actions: 16 of 19. Failed checks: 1. Passed checks: 10. Requests without a valid action: 2. Time: 36 ms. Tokens: 36000 in, 1800 out.
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: All done: I delivered 64.
+The answer of Uno: All done: I delivered 64.
+The facts of job 112 on robot #93: {"job":112,"robot":93,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+````
+
+The whole record of run 152 is about 28 KB. A request about each job gives the facts of the seven jobs and the lines of the diary.
+
+### The tests with the real service
+
+These tests call the real Claude service. **None of them ran for this ticket.** Each run costs money and needs the consent of the project owner.
+
+| Test | What it does | Result |
+| --- | --- | --- |
+| `b_measurement` (new, `LiveTests`, namespace `mindcraft_measure`) | The same harness, with the real Claude provider and the model of the run. It writes `run-gametest/measurement-<model>.md` | Not run. It compiles |
+| `t18_claude_live` (changed, `LiveTests`, namespace `mindcraft_live`) | As before. Its provider now has the model of the run: `-Pmodel`, or the setting | Not run. It compiles |
+
+### The check of the build script
+
+Type: a static check. Gradle evaluated `build.gradle` with an init script of the agent. The init script was in a scratch folder, not in the repository. It printed two properties of the run configuration `gameTestServer`. No game started.
+
+| Flags | `forge.enabledGameTestNamespaces` | `mindcraft.model` |
+| --- | --- | --- |
+| None | `mindcraft` | None |
+| `-Plive` | `mindcraft_live` | None |
+| `-Pmeasure` | `mindcraft_measure` | None |
+| `-Pmeasure -Pmodel=claude-sonnet-5-5` | `mindcraft_measure` | `claude-sonnet-5-5` |
+| `-Plive -Pmodel=claude-opus-5-5` | `mindcraft_live` | `claude-opus-5-5` |
+| `-Pmodel=claude-opus-5-5` | `mindcraft` | None |
+
+The first version of the script read the value with `findProperty('model')`. The evaluation failed for each flag: "Could not find method property() for arguments [mindcraft.model, root project …]". The Gradle project has a property `model` of its own. The script now reads `-Pmodel` from the command line (`gradle.startParameter.projectProperties`).
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 150, red | The new test. The harness has its interface only: it builds no world and sends no request | 105 of 106, expected. `b_measurement_with_the_stand_in` failed: "0 results, 0 calls of the stand-in" |
+| 151, green | The harness of the measurement, the two tests and the flags of the build script | **106 of 106**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `106 GAME TESTS COMPLETE`, `All 106 required tests passed :)` |
+| 152 | The code of run 151, with the build script that reads `-Pmodel` from the command line, and one more note in the record: "Uno cannot read the answer of the provider" | **106 of 106**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `106 GAME TESTS COMPLETE`, `All 106 required tests passed :)` |
+| 153 | The code of the commit: the code of run 152, with one comment of the test changed | **106 of 106**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `106 GAME TESTS COMPLETE`, `All 106 required tests passed :)` |
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| Forge selects a test by the namespace of `@GameTest(templateNamespace)` before the namespace of the class. Thus one class has the two namespaces `mindcraft_live` and `mindcraft_measure` | `ForgeGameTestHooks.getTemplateNamespace` in the sources of Forge 47.4.28, and `GameTestRegistry.register` with `javap` | No run with `-Pmeasure` started a game |
+| The player of the measurement is not an operator. The provider of each request says that it calls no model: Uno sends the request to it on the route without a model | `Measurement.PLAYER`, `Measurement.Measured`, `Uno.route` | |
+| The record of a request has the values that Uno records on the route of the model: the result of the checks is `Uno.voice`, and a failure or an answer that Uno cannot read is `NO_VALID_ACTION` | `Measurement.Measured`, `Uno.ask` | The time limit: see "Not covered" |
+| A robot without an active job calls the server at least every 10 seconds. Thus no robot of the world is silent (D42, point 3) | `mindcraft.lua`, `RobotApi.contact` | |
+| `b_measurement` checks the key in the environment, builds the provider with the model of the run, and gives it to the harness. It never prints the key | `LiveTests.b_measurement` | It did not run |
+
+### Not covered
+
+- The measurement itself: no paid run occurred. Ticket #27 has the paid runs.
+- The sentences of a real model in the record.
+- A run with `-Pmeasure` in a started game. Only the evaluation of the build script above. The first paid run shows the line `Enabled Gametest Namespaces: [mindcraft_measure]`.
+- A request that reaches the time limit of Uno in the harness. Then the record has zero tokens and the note "the request reached the time limit". No test reaches it.
+- The ages grow during a run. After 5 minutes an observation is old and its stock is not given, and a wait writes a "long wait" line in the diary (D30). A slow model can thus get other facts than a fast one. The record gives the facts of each request. The stand-in run is shorter than one second.
+- A model that gives a pause for a different request pauses that job. The next requests see the paused job. The record shows it.
+- The route of an operator in the measurement: the counter, the limit of the session, the fixed rules after a failure and the log line of Uno. See D42, "As built" under point 7.
+
+### The record of the measurement (ticket #27)
+
+Done on 2026-11-15: the three models are measured, and the project owner chose Haiku 5.5. The code of runs #27.1 to #27.3 is the integration branch of increment B at `ce1a860`. The code of runs #27.4 to #27.8 is that code with the correction of this section.
+Each paid run had the consent of the project owner before it started: one answer for runs #27.2 and #27.3, one answer for runs #27.5 and #27.6, and one answer for runs #27.7 and #27.8. The key came from the environment of the project owner. No file, command or message shows it.
+Haiku 5.5 is measured two times: run #27.3, and run #27.6 after a correction of the facts and of the system text. Sonnet 5.5 and Opus 5.5 are measured one time, with the correction: runs #27.7 and #27.8. The choice is at the end of this section: "The decision of the project owner". The marks of each run say "The project owner did not decide yet": they keep the text of their moment.
+
+| Run | Type | Result |
+| --- | --- | --- |
+| #27.1, the normal run | In the game, automatic | **108 of 108**, before the paid runs. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `108 GAME TESTS COMPLETE`, `All 108 required tests passed :)`. `gradlew check` passed before it: a static check |
+| #27.2, `-Plive` | In the game, automatic, with the real service | **1 of 1.** `t18_claude_live` with the model of the setting. Log lines: `Enabled Gametest Namespaces: [mindcraft_live]`, `t18_claude_live uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. The counter: 4 requests, 8498 input tokens, 1457 output tokens |
+| #27.3, `-Pmeasure -Pmodel=claude-haiku-5-5` | In the game, automatic, with the real service | **1 of 1.** `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. 19 requests, 83923 input tokens, 3358 output tokens, 35673 ms |
+| #27.4, the normal run | In the game, automatic | **108 of 108**, with the correction. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `108 GAME TESTS COMPLETE`, `All 108 required tests passed :)`. `gradlew check` passed before it: a static check |
+| #27.5, `-Plive` | In the game, automatic, with the real service | **1 of 1**, with the correction. `t18_claude_live` with the model of the setting. Log lines: `Enabled Gametest Namespaces: [mindcraft_live]`, `t18_claude_live uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. The counter: 4 requests, 8751 input tokens, 1272 output tokens |
+| #27.6, `-Pmeasure -Pmodel=claude-haiku-5-5` | In the game, automatic, with the real service | **1 of 1**, with the correction. `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-haiku-5-5)`, `All 1 required tests passed :)`. 19 requests, 85424 input tokens, 3631 output tokens, 35712 ms |
+| #27.7, `-Pmeasure -Pmodel=claude-sonnet-5-5` | In the game, automatic, with the real service | **1 of 1.** `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-sonnet-5-5)`, `All 1 required tests passed :)`. 19 requests, 85424 input tokens, 2042 output tokens, 35948 ms |
+| #27.8, `-Pmeasure -Pmodel=claude-opus-5-5` | In the game, automatic, with the real service | **1 of 1.** `b_measurement`. Log lines: `Enabled Gametest Namespaces: [mindcraft_measure]`, `b_measurement uses Claude (claude-opus-5-5)`, `All 1 required tests passed :)`. 19 requests, 85424 input tokens, 2219 output tokens, 47557 ms |
+
+What the runs show for the first time:
+
+- The real service accepts a request of increment B for Haiku 5.5: the new system text, the facts, the diary lines and the output schema. No request got an error.
+- The provider sends no `fallbacks` parameter for Haiku 5.5 (D42, point 6). Thus the runs do not show whether the service refuses that parameter.
+- Run #27.2 is the `-Plive` run that CLAUDE.md asks for after a change of the system text of `ClaudeProvider` (tickets #18 and #20). It used Haiku 5.5 only. Run #27.5 is that run for the corrected system text.
+- A run with `-Pmeasure` in a started game selects only `b_measurement`.
+- The real service accepts the requests of increment B for Sonnet 5.5 and Opus 5.5, with the beta header and `fallbacks: "default"` (D42, point 6): runs #27.7 and #27.8. No request was declined: the runs do not show a fallback.
+- The log line of a request with the real service, for example: `Uno request: model claude-haiku-5-5, 2195 input tokens, 160 output tokens, 1502 ms, action none, checks PASSED, request "Che tempo farà domani?"`. The line has no key and no coordinate.
+
+The cost. **A calculation, not a read of the bill:** the tokens of the runs, at the reference prices of D33 for 1 million tokens. Haiku 5.5: 0.10 $ and 0.50 $. Sonnet 5.5: 2.00 $ and 10.00 $. Opus 5.5: 4.00 $ and 20.00 $.
+
+| Run | Input tokens | Output tokens | Cost |
+| --- | --- | --- | --- |
+| #27.2 | 8498 | 1457 | 0.002 $ |
+| #27.3 | 83923 | 3358 | 0.010 $ |
+| #27.5 | 8751 | 1272 | 0.002 $ |
+| #27.6 | 85424 | 3631 | 0.010 $ |
+| #27.7 | 85424 | 2042 | 0.191 $ |
+| #27.8 | 85424 | 2219 | 0.386 $ |
+| Sum | 357444 | 13979 | 0.60 $ of the budget of 5 $ |
+
+- A request of the measurement has about 4417 input tokens and 177 output tokens in run #27.3, and about 4496 and 191 in run #27.6. The estimate of D42, point 8 was 2400 and 250. The world of the measurement has 15 stations, 7 jobs and their diary lines.
+- The pass of runs #27.6, #27.7 and #27.8 costs 0.59 $. The estimate of D42, point 8 was 0.45 $.
+
+#### Run #27.2: the sentences of `t18_claude_live`
+
+Type: a test with the real Claude service, in the game and automatic. Model: `claude-haiku-5-5`, from the setting. The requests are in Italian on purpose. The texts come from the server log of the run.
+
+| No. | Request | Action | Checks | Time, ms | Input tokens | Output tokens | The answer of Uno |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Fai in modo che alla fornace non manchi mai il carbone: tienine sempre almeno sessantaquattro pezzi. Prendilo dal Deposito, ma lì lasciane trentadue di scorta. | start | NOT_NEEDED | 4766 | 1896 | 216 | Proposal: keep at least 64 x minecraft:coal in 'fornaci', taken from 'deposito'. Reserve to leave in 'deposito': 32. Robot #0. I have done nothing yet. Confirm with /uno confirm. |
+| 2 | Porta del carbone alle fornaci | none | PASSED | 4351 | 2198 | 608 | Robot 0 is busy with job 1, but it is the only robot, so I could send it to take coal from deposito to fornaci. How many coal should it carry, and should this be a one-time delivery or a supply that keeps the furnaces stocked, and how much coal should stay in deposito? |
+| 3 | Che tempo farà domani? | none | PASSED | 1502 | 2195 | 160 | Ciao, sono Uno, e le previsioni del tempo non rientrano nel mio lavoro: io gestisco solo i trasporti tra le stazioni. Posso dirti invece che il robot 0 sta aspettando, perché il deposito ha raggiunto la riserva di 32 carboni. |
+| 4 | Porta 10 pezzi di carbone dal deposito alla segheria | none | PASSED | 3506 | 2209 | 473 | I know the deposito, but there is no station called segheria in my list, so I cannot send the coal there. Name one of my stations (deposito, fornaci, live_destination, live_source or miniera) and I will plan the trip. |
+
+- The test confirmed the proposal of request 1. Before request 2 it checked the world: job 1 on robot #0 is `WAITING`, with 48 delivered, 58 in 'fornaci' and 32 in 'deposito', the reserve. The agent found no words in answers 2 to 4 that contradict this.
+- **Difference: answer 3 is in Italian.** The system text says "Write in English" (D15, and D42, "Unchanged"). The checks of the voice have no rule about the language: the result is `PASSED`. Answers 2 and 4, also to requests in Italian, are in English.
+- Answer 2 has 608 output tokens and answer 4 has 473, for two sentences each. **Not known:** the reason. The provider leaves room for the thinking of the model (`ClaudeProvider.MAX_TOKENS`).
+- Each answer arrived in less than 5 seconds.
+
+The section of run #27.3, as the harness wrote it: the file `run-gametest/measurement-claude-haiku-5-5.md`, without a change by hand.
+
+#### The measurement on claude-haiku-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T17:40:55Z. Model: `claude-haiku-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | FAILED | 2310 | 4412 | 173 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, robot #1, station 'furnace' | yes | PASSED | 1985 | 4417 | 150 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 1899 | 4418 | 141 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 1289 | 4416 | 126 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, robot #4, station 'cellar' | yes | PASSED | 1166 | 4417 | 131 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, station 'tower' | yes | PASSED | 1982 | 4415 | 126 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, station 'workshop' | yes | PASSED | 1851 | 4415 | 133 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | PASSED | 1799 | 4412 | 128 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, robot #1, station 'depot' | yes | PASSED | 1219 | 4420 | 130 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1039 | 4423 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 2514 | 4418 | 231 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, robot #6, station 'harbor' | yes | NOT_NEEDED | 2266 | 4415 | 207 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 1581 | 4415 | 61 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: carry 32 x minecraft:coal from 'depot' to 'smelter'. Reserve to leave in 'depot': 32. Robot #0 | no | NOT_NEEDED | 1013 | 4427 | 68 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 1892 | 4417 | 120 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 4131 | 4416 | 728 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 1124 | 4413 | 100 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 3630 | 4420 | 476 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 983 | 4417 | 60 |
+
+Totals: right actions: 17 of 19. Failed checks: 1. Passed checks: 12. Requests without a valid action: 0. Time: 35673 ms. Tokens: 83923 in, 3358 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Quite a mixed bag, my friend: job 2 is done, 16 coal delivered to the kiln, while job 6 is blocked because the workshop has no room, job 4 is blocked for lack of fuel, job 7 is paused, and job 1 needs recovery after its load differed from the record. Say the word if you want me to resume or cancel any of them.
+The answer of Uno: Job 2, robot #0: carry 16 items from 'quarry' to 'kiln', reserve 0. I delivered 16 items. The job is complete. My fuel level is 996: about 166 trips between the stations. Last observations: 'quarry' 24 items, 6 seconds ago, 'kiln' 16 items, 4 seconds ago.
+Job 3, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 0 items. 32 remain in 'depot': that is the reserve you asked me to keep. To reach 64 in 'furnace' I need more materials. My fuel level is 995: about 165 trips between the stations. Last observations: 'depot' 32 items, 4 seconds ago, 'furnace' 10 items, 6 seconds ago.
+Job 4, robot #2: carry 24 items from 'mine' to 'smithy', reserve 0. I delivered 0 items. I am stopped: I have no fuel. Give me fuel, then resume the job. My fuel level is 0: about 0 trips between the stations. Last observations: 'mine' never observed, 'smithy' never observed.
+Job 1, robot #3: carry 24 items from 'warehouse' to 'kitchen', reserve 0. I delivered 0 items. The record says that I have 24 on board. I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. You decide whether to resume or cancel. My fuel level is 999: about 166 trips between the stations. Last observations: 'warehouse' 0 items, 7 seconds ago, 'kitchen' never observed.
+Job 5, robot #4: carry 32 items from 'cellar' to 'bakery', reserve 0. I delivered 0 items. Nothing remains in 'cellar'. I must carry 32 more. I need more materials. My last recorded fuel level is 999: about 166 trips between the stations. Last observations: 'cellar' 0 items, 6 seconds ago, 'bakery' never observed. The robot is not running or not loaded. These are the last recorded data, not the current state.
+Job 6, robot #5: carry 64 items from 'storage' to 'workshop', reserve 0. I delivered 0 items. The record says that I have 24 on board. I am stopped: I find no inventory at 'workshop'. Put it back, then resume the job. My fuel level is 996: about 166 trips between the stations. Last observations: 'storage' 0 items, 6 seconds ago, 'workshop' never observed.
+Job 7, robot #6: carry 40 items from 'harbor' to 'tower', reserve 0. I delivered 16 items. I am paused at your request. My fuel level is 993: about 165 trips between the stations. Last observations: 'harbor' 0 items, 2 seconds ago, 'tower' 16 items, 302 seconds ago.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"fuelForTrips":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: The furnace job runs on robot 1 from depot, and it waits because the depot holds only 32 coal, which is exactly its reserve, so nothing is above the reserve to carry. The furnace has 10 coal, and 54 are still to carry once the depot stock rises above 32.
+The answer of Uno: The furnace job runs on robot 1 from depot, and it waits because the depot holds only 32 coal, which is exactly its reserve, so nothing is above the reserve to carry. The furnace has 10 coal, and 54 are still to carry once the depot stock rises above 32.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"6 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: The robot of the mine is robot 2, carrying coal to the smithy, and it is blocked because it ran out of fuel, so it has no fuel for trips. I cannot tell you the stock of the mine or the smithy, since no robot has observed them yet.
+The answer of Uno: The robot of the mine is robot 2, carrying coal to the smithy, and it is blocked because it ran out of fuel, so it has no fuel for trips. I cannot tell you the stock of the mine or the smithy, since no robot has observed them yet.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: The job from warehouse to kitchen is in recovery because the load in the robot differs from the record, so I cannot tell how it went. I suggest checking the robot 3 and its load before deciding on the next step.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 12 s ago). You decide whether to resume or cancel. The job from warehouse to kitchen is in recovery because the load in the robot differs from the record, so I cannot tell how it went. I suggest checking the robot 3 and its load before deciding on the next step.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"fuelForTrips":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: Robot 4 carries job 5, coal from cellar to bakery, and it is waiting because the source is at its reserve. I cannot tell whether it is running or loaded, so I give you no load, stock or fuel figures.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 12 s ago). Robot 4 carries job 5, coal from cellar to bakery, and it is waiting because the source is at its reserve. I cannot tell whether it is running or loaded, so I give you no load, stock or fuel figures.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't tell you the coal in the tower: my last look there is old, so its stock is uncertain and the server will tell you more. Job 7 to the tower is paused with 16 delivered and 24 still to carry.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't tell you the coal in the tower: my last look there is old, so its stock is uncertain and the server will tell you more. Job 7 to the tower is paused with 16 delivered and 24 still to carry.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"8 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: Not yet, I'm afraid: the job to the workshop is blocked because the destination has no inventory, with 64 still to carry and 24 on board. I have no observation of the workshop's stock yet, so I can't say more about it.
+The answer of Uno: Not yet, I'm afraid: the job to the workshop is blocked because the destination has no inventory, with 64 still to carry and 24 on board. I have no observation of the workshop's stock yet, so I can't say more about it.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"14 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: While you were away, job 2 finished: 16 coal went from the quarry to the kiln. Job 7 was paused after delivering 16 to the tower, and job 4 is blocked because its robot ran out of fuel.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 19 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 18 s ago). I last observed 'tower' 5 min ago: it had 16 then. While you were away, job 2 finished: 16 coal went from the quarry to the kiln. Job 7 was paused after delivering 16 to the tower, and job 4 is blocked because its robot ran out of fuel.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"16 s ago"},"destinationStock":{"count":16,"age":"14 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"16 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"fuelForTrips":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"16 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"fuelForTrips":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"12 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"18 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"17 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"17 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"16 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"16 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"14 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"14 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"14 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot of the depot job is robot 1, and it has 995 fuel left, with 165 of that set aside for trips. I cannot promise the fuel figure is fully current beyond what the facts show, but that is what my records say.
+The answer of Uno: The robot of the depot job is robot 1, and it has 995 fuel left, with 165 of that set aside for trips. I cannot promise the fuel figure is fully current beyond what the facts show, but that is what my records say.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"0 s ago"},"destinationStock":{"count":10,"age":"18 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"19 s ago"},"destinationStock":{"count":16,"age":"17 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"20 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"19 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"fuelForTrips":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"fuelForTrips":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 32 x minecraft:coal from 'depot' to 'smelter'. Reserve to leave in 'depot': 32. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"26 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: Uno here, and I'm afraid the weather is beyond my sensors; I only track robots and their loads between stations. Ask me about a job, a station or the robots, and I'll happily report on those.
+The answer of Uno: Uno here, and I'm afraid the weather is beyond my sensors; I only track robots and their loads between stations. Ask me about a job, a station or the robots, and I'll happily report on those.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I can send robot 0, the only free robot, to carry coal to the smithy, but I first need the source station and the number of items to carry. Tell me too whether some coal must stay behind in the source as a reserve.
+The answer of Uno: I can send robot 0, the only free robot, to carry coal to the smithy, but I first need the source station and the number of items to carry. Tell me too whether some coal must stay behind in the source as a reserve.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free right now, so it is the one I would send on a new job. The other six robots are all busy with jobs of their own.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 36 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 35 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free right now, so it is the one I would send on a new job. The other six robots are all busy with jobs of their own.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job is finished: robot 0 carried all 16 pieces of coal from the quarry to the kiln, as planned. Nothing about it is uncertain, and robot 0 is free again.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 39 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 38 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job is finished: robot 0 carried all 16 pieces of coal from the quarry to the kiln, as planned. Nothing about it is uncertain, and robot 0 is free again.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"35 s ago"},"destinationStock":{"count":16,"age":"33 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"fuelForTrips":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"0 s ago"},"destinationStock":{"count":10,"age":"38 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"fuelForTrips":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Haiku 5.5 (run #27.3)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 17 of 19 are right.
+
+| No. | The action of the model | Remark of the agent |
+| --- | --- | --- |
+| 14 | A transport of 32 from 'depot' to 'smelter', reserve 32, with the free robot #0. Expected: keep at least 64 in 'smelter' with robot #1, as a replacement | Wrong. The job of the furnace stays. The new job would wait at once: the depot has 32, its reserve |
+| 17 | A report about each job. Expected: "none" | The sentence is right. The cost of the report: the fixed sentences about jobs 1, 5 and 7 come before it. Row 17 is not in the spec: the implementation added it (D42, point 7) |
+
+The checks: 13 sentences, 12 passed and 1 failed.
+
+- Row 1 failed the check of the length: 311 characters, and the limit is 300. Uno gave the fixed report.
+- No sentence failed the check of the numbers.
+- 1 failure in 13 sentences is below the limit of the rule: 1 in 5.
+
+The sentences, the strongest mark first:
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 9 | **Can contradict the record** | "it has 995 fuel left, with 165 of that set aside for trips" | The fuel level is 995: enough for about 165 trips. 165 is a number of trips, not a part of the fuel. The check of the numbers passed: 165 is in the facts. Probable cause: the name of the field `fuelForTrips`. The system text does not explain it |
+| 1 | **Can contradict the record.** The player did not get it | "job 6 is blocked because the workshop has no room" | `DESTINATION_NO_INVENTORY`: there is no inventory at 'workshop'. "No room" says a full inventory. The check of the length refused the sentence |
+| 5 | Weak | "it is waiting because the source is at its reserve", and "I give you no load, stock or fuel figures" | The robot does not run: "waiting" is the last recorded state. The fixed sentence before the voice gives the load, the fuel and the stock. The two parts of the answer do not agree in their words |
+| 3 | Weak | "carrying coal to the smithy" | 0 on board. The words can also describe the job |
+| 8 | An omission | The answer names jobs 2, 7 and 4 | The diary also has the `RECOVERY` of job 1 and the block of job 6 with 24 on board. A fixed sentence before the voice gives job 1. No sentence gives job 6 |
+| 6 | Not about the record | "the server will tell you more" | The voice names the server. The system text says "the server gives it to the player" |
+| 9 | Not about the record | "beyond what the facts show" | The voice names "the facts" |
+
+- Rows 2, 4, 7, 15, 16, 17 and 18: the agent found no words that contradict the facts.
+- Row 7 is the adversarial case of D32. The model said "Not yet", with the block and the 24 on board.
+- Each sentence of run #27.3 is in English, also the answer to the Italian request of row 18. In run #27.2 one answer of four is in Italian.
+
+Observations about Uno, not about the model:
+
+- Row 18: a report about a job that is complete gets the fixed sentences of each other job. A station names only an open job (D29.2). Thus the target 'quarry' fits no job, and the fixed sentences are about each job of the actor (D42, point 16, as built). The player asked about the quarry, and the answer starts with the cautions of jobs 1, 5 and 7.
+- Rows 4 and 5: the fixed sentence and the voice give the same caution two times.
+
+After run #27.3 the agent asked the project owner: correct the field `fuelForTrips` and the language before the runs on Sonnet 5.5 and Opus 5.5, or measure the three models with the same text first. **Decided by the project owner on 2026-11-15:** correct first.
+
+#### The correction after run #27.3
+
+Two changes, in the facts of `Uno` and in the system text of `ClaudeProvider`:
+
+- The facts name the trips `tripsWithThisFuel`, not `fuelForTrips`. The system text now explains the two numbers: `"fuel" is the fuel level of the robot. "tripsWithThisFuel" is about how many trips between the two stations of the job that level allows.`
+- The system text says "Always write in English, also when the player writes in a different language." Before: "Write in English".
+- The automatic test `t18_claude_provider` reads the two new sentences in the system text and the new name in the facts. `b_fuel_in_the_report` reads the new name. Run #27.4, in the game and automatic: 108 of 108.
+- The change is in `Uno.Context.toJson` and in the system text. No part of the runtime and no Lua module changed. Thus the four restart phases did not run.
+- The sections above this one keep the name `fuelForTrips`: they are the records of their runs.
+
+The result with the real service:
+
+- **The fuel: corrected.** Run #27.6, row 9: "its fuel level is 995, which allows about 165 trips between depot and furnace". Row 18: "The robot still has fuel for about 166 trips between the two stations."
+- **The language: not corrected for Haiku 5.5.** In run #27.5 the answer to "Che tempo farà domani?" is in Italian again. Each other answer of runs #27.5 and #27.6 is in English, also to a request in Italian.
+
+#### Run #27.5: the sentences of `t18_claude_live`
+
+Type: a test with the real Claude service, in the game and automatic. Model: `claude-haiku-5-5`, from the setting. The code has the correction. The texts come from the server log of the run.
+
+| No. | Request | Action | Checks | Time, ms | Input tokens | Output tokens | The answer of Uno |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Fai in modo che alla fornace non manchi mai il carbone: tienine sempre almeno sessantaquattro pezzi. Prendilo dal Deposito, ma lì lasciane trentadue di scorta. | start | NOT_NEEDED | 2297 | 1957 | 164 | Proposal: keep at least 64 x minecraft:coal in 'fornaci', taken from 'deposito'. Reserve to leave in 'deposito': 32. Robot #0. I have done nothing yet. Confirm with /uno confirm. |
+| 2 | Porta del carbone alle fornaci | none | PASSED | 3272 | 2262 | 621 | I understand you want coal carried to the furnaces, and robot 0 is my only robot, though it is busy with a coal job to that station. To start a new job I still need the source station, the quantity, whether this is a one-time transport or a stock to keep, and any reserve. |
+| 3 | Che tempo farà domani? | none | PASSED | 1931 | 2259 | 147 | Ciao, sono Uno: il meteo non rientra tra le mie competenze, perché conosco solo i depositi, le fornaci e il lavoro dei robot. Posso dirti invece lo stato del trasporto di carbone del robot 0, se vuoi. |
+| 4 | Porta 10 pezzi di carbone dal deposito alla segheria | none | PASSED | 2740 | 2273 | 340 | I know no station called segheria, so I cannot tell where the coal should go. My stations are deposito, fornaci, live_destination, live_source and miniera; which one do you mean? |
+
+- The world before request 2 is the world of run #27.2: job 1 on robot #0 is `WAITING`, with 48 delivered. The agent found no words in answers 2 to 4 that contradict it.
+- **Difference, as in run #27.2: answer 3 is in Italian.** The new sentence of the system text did not change it. The checks of the voice have no rule about the language.
+- Each answer arrived in less than 4 seconds.
+
+The section of run #27.6, as the harness wrote it: the file `run-gametest/measurement-claude-haiku-5-5.md` of that run, without a change by hand.
+
+#### The measurement on claude-haiku-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T18:01:10Z. Model: `claude-haiku-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | FAILED | 1999 | 4491 | 186 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, robot #1, station 'furnace' | yes | PASSED | 1336 | 4496 | 153 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 1773 | 4497 | 136 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 1250 | 4495 | 136 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, robot #4, station 'cellar' | yes | PASSED | 1955 | 4496 | 132 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, station 'tower' | yes | PASSED | 1203 | 4494 | 134 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, robot #5, station 'workshop' | yes | PASSED | 1241 | 4494 | 130 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | FAILED | 1422 | 4491 | 185 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, robot #1, station 'depot' | yes | PASSED | 2034 | 4499 | 124 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1556 | 4502 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 2898 | 4497 | 339 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, robot #6, station 'harbor' | yes | NOT_NEEDED | 2427 | 4494 | 217 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 2482 | 4494 | 267 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | yes | NOT_NEEDED | 1695 | 4506 | 310 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 1869 | 4496 | 112 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 2272 | 4495 | 342 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 1841 | 4492 | 114 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 3575 | 4499 | 485 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 884 | 4496 | 60 |
+
+Totals: right actions: 18 of 19. Failed checks: 2. Passed checks: 11. Requests without a valid action: 0. Time: 35712 ms. Tokens: 85424 in, 3631 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Uno here: job 2 is done with 16 coal delivered to the kiln, while job 7 on robot 6 is paused with 24 still to carry from the harbor to the tower. Jobs 3, 5 and 7 wait on their sources, job 4 is blocked without fuel, job 6 is blocked because the workshop has no room, and job 1 is in recovery because its load differs from the record.
+The answer of Uno: Job 2, robot #0: carry 16 items from 'quarry' to 'kiln', reserve 0. I delivered 16 items. The job is complete. My fuel level is 996: about 166 trips between the stations. Last observations: 'quarry' 24 items, 6 seconds ago, 'kiln' 16 items, 4 seconds ago.
+Job 3, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 0 items. 32 remain in 'depot': that is the reserve you asked me to keep. To reach 64 in 'furnace' I need more materials. My fuel level is 995: about 165 trips between the stations. Last observations: 'depot' 32 items, 3 seconds ago, 'furnace' 10 items, 5 seconds ago.
+Job 4, robot #2: carry 24 items from 'mine' to 'smithy', reserve 0. I delivered 0 items. I am stopped: I have no fuel. Give me fuel, then resume the job. My fuel level is 0: about 0 trips between the stations. Last observations: 'mine' never observed, 'smithy' never observed.
+Job 1, robot #3: carry 24 items from 'warehouse' to 'kitchen', reserve 0. I delivered 0 items. The record says that I have 24 on board. I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. You decide whether to resume or cancel. My fuel level is 999: about 166 trips between the stations. Last observations: 'warehouse' 0 items, 6 seconds ago, 'kitchen' never observed.
+Job 5, robot #4: carry 32 items from 'cellar' to 'bakery', reserve 0. I delivered 0 items. Nothing remains in 'cellar'. I must carry 32 more. I need more materials. My last recorded fuel level is 999: about 166 trips between the stations. Last observations: 'cellar' 0 items, 6 seconds ago, 'bakery' never observed. The robot is not running or not loaded. These are the last recorded data, not the current state.
+Job 6, robot #5: carry 64 items from 'storage' to 'workshop', reserve 0. I delivered 0 items. The record says that I have 24 on board. I am stopped: I find no inventory at 'workshop'. Put it back, then resume the job. My fuel level is 996: about 166 trips between the stations. Last observations: 'storage' 0 items, 6 seconds ago, 'workshop' never observed.
+Job 7, robot #6: carry 40 items from 'harbor' to 'tower', reserve 0. I delivered 16 items. I am paused at your request. My fuel level is 993: about 165 trips between the stations. Last observations: 'harbor' 0 items, 2 seconds ago, 'tower' 16 items, 302 seconds ago.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: Uno here: the coal job to the furnace is waiting because the depot has only 32 coal, which is exactly its reserve, so nothing is above the reserve to send. The furnace holds 10 of the 64 it should get, so 54 are still to carry once the depot has coal above its reserve.
+The answer of Uno: Uno here: the coal job to the furnace is waiting because the depot has only 32 coal, which is exactly its reserve, so nothing is above the reserve to send. The furnace holds 10 of the 64 it should get, so 54 are still to carry once the depot has coal above its reserve.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"5 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: Robot 2 is working on the job from mine to smithy, but it is blocked because it is out of fuel, so it has not delivered anything yet. I cannot tell you the stock of mine or smithy, because no robot has observed those stations yet.
+The answer of Uno: Robot 2 is working on the job from mine to smithy, but it is blocked because it is out of fuel, so it has not delivered anything yet. I cannot tell you the stock of mine or smithy, because no robot has observed those stations yet.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: Uno here: the warehouse-to-kitchen job on robot 3 is in recovery because the load in the robot differs from the record. I cannot give you its delivered total, load on board or stocks, so that outcome is still unknown to me.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 11 s ago). You decide whether to resume or cancel. Uno here: the warehouse-to-kitchen job on robot 3 is in recovery because the load in the robot differs from the record. I cannot give you its delivered total, load on board or stocks, so that outcome is still unknown to me.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: Robot 4 carries the cellar-to-bakery job, which is waiting because the cellar is at its reserve, so it is not moving coal right now. I cannot see its load or fuel, so I cannot tell you more than that.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 12 s ago). Robot 4 carries the cellar-to-bakery job, which is waiting because the cellar is at its reserve, so it is not moving coal right now. I cannot see its load or fuel, so I cannot tell you more than that.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't tell you how much coal is in the tower now: my last look there is old, so I have no stock figure for it. Job 7 (harbor to tower, robot 6) is paused, so you can resume it once you've checked the tower yourself.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't tell you how much coal is in the tower now: my last look there is old, so I have no stock figure for it. Job 7 (harbor to tower, robot 6) is paused, so you can resume it once you've checked the tower yourself.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"8 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: Uno here: the workshop is the destination of job 6, run by robot 5, and it is blocked because the destination has no inventory, not done. I have no observation of the workshop's stock yet, so I cannot say more about it.
+The answer of Uno: Uno here: the workshop is the destination of job 6, run by robot 5, and it is blocked because the destination has no inventory, not done. I have no observation of the workshop's stock yet, so I cannot say more about it.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"13 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: While you were away, job 2 finished: 16 coal went from quarry to kiln, and job 7 was paused after delivering 16 of its 40 to tower. Jobs 3, 4, 5, 6 and 7 changed state along the way, and job 1 went into recovery because its load differs from the record. I can't tell you the delivered total or stocks for job 1, so please check that robot yourself.
+The answer of Uno: Job 2, robot #0: carry 16 items from 'quarry' to 'kiln', reserve 0. I delivered 16 items. The job is complete. My fuel level is 996: about 166 trips between the stations. Last observations: 'quarry' 24 items, 16 seconds ago, 'kiln' 16 items, 14 seconds ago.
+Job 3, robot #1: keep at least 64 items in 'furnace', reserve 32 in 'depot'. I delivered 0 items. 32 remain in 'depot': that is the reserve you asked me to keep. To reach 64 in 'furnace' I need more materials. My fuel level is 995: about 165 trips between the stations. Last observations: 'depot' 32 items, 3 seconds ago, 'furnace' 10 items, 15 seconds ago.
+Job 4, robot #2: carry 24 items from 'mine' to 'smithy', reserve 0. I delivered 0 items. I am stopped: I have no fuel. Give me fuel, then resume the job. My fuel level is 0: about 0 trips between the stations. Last observations: 'mine' never observed, 'smithy' never observed.
+Job 1, robot #3: carry 24 items from 'warehouse' to 'kitchen', reserve 0. I delivered 0 items. The record says that I have 24 on board. I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. You decide whether to resume or cancel. My fuel level is 999: about 166 trips between the stations. Last observations: 'warehouse' 0 items, 17 seconds ago, 'kitchen' never observed.
+Job 5, robot #4: carry 32 items from 'cellar' to 'bakery', reserve 0. I delivered 0 items. Nothing remains in 'cellar'. I must carry 32 more. I need more materials. My last recorded fuel level is 999: about 166 trips between the stations. Last observations: 'cellar' 0 items, 16 seconds ago, 'bakery' never observed. The robot is not running or not loaded. These are the last recorded data, not the current state.
+Job 6, robot #5: carry 64 items from 'storage' to 'workshop', reserve 0. I delivered 0 items. The record says that I have 24 on board. I am stopped: I find no inventory at 'workshop'. Put it back, then resume the job. My fuel level is 996: about 166 trips between the stations. Last observations: 'storage' 0 items, 16 seconds ago, 'workshop' never observed.
+Job 7, robot #6: carry 40 items from 'harbor' to 'tower', reserve 0. I delivered 16 items. I am paused at your request. My fuel level is 993: about 165 trips between the stations. Last observations: 'harbor' 0 items, 12 seconds ago, 'tower' 16 items, 312 seconds ago.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"14 s ago"},"destinationStock":{"count":16,"age":"12 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"14 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"14 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"10 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"17 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"15 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"15 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"14 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"14 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"12 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"12 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"10 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"10 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot of the depot job is robot 1, and its fuel level is 995, which allows about 165 trips between depot and furnace. I have no other facts to add, so please check the job's status yourself if you need more.
+The answer of Uno: The robot of the depot job is robot 1, and its fuel level is 995, which allows about 165 trips between depot and furnace. I have no other facts to add, so please check the job's status yourself if you need more.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"15 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"18 s ago"},"destinationStock":{"count":16,"age":"16 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"19 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"18 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"27 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: I only direct the robots that carry items between your stations, so I cannot forecast the weather. Ask me about a job, such as the coal deliveries, and I will report what I know.
+The answer of Uno: I only direct the robots that carry items between your stations, so I cannot forecast the weather. Ask me about a job, such as the coal deliveries, and I will report what I know.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I can send robot 0 to the smithy, but I need two things first: where the coal should come from, and how much to carry. Tell me the source station and the quantity, and I will set up the job.
+The answer of Uno: I can send robot 0 to the smithy, but I need two things first: where the coal should come from, and how much to carry. Tell me the source station and the quantity, and I will set up the job.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free right now, so it is the one I would send for any new job. The other six robots are busy with jobs, and robot 4 is not running or loaded at the moment.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 36 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 35 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free right now, so it is the one I would send for any new job. The other six robots are busy with jobs, and robot 4 is not running or loaded at the moment.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job, robot 0 carrying coal to the kiln, is finished: all 16 coal were delivered and nothing is left on board. The robot still has fuel for about 166 trips between the two stations.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 39 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 39 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job, robot 0 carrying coal to the kiln, is finished: all 16 coal were delivered and nothing is left on board. The robot still has fuel for about 166 trips between the two stations.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"35 s ago"},"destinationStock":{"count":16,"age":"33 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"0 s ago"},"destinationStock":{"count":10,"age":"38 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Haiku 5.5 (run #27.6)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 18 of 19 are right.
+
+| No. | The action of the model | Remark of the agent |
+| --- | --- | --- |
+| 17 | A report about each job. Expected: "none" | As in run #27.3. The fixed sentences about jobs 1, 5 and 7 come before the sentence |
+| 14 | The expected replacement: keep at least 64 in 'smelter' with robot #1 | Right in this run, wrong in run #27.3. The correction did not change the text about a start. Thus the action of Haiku 5.5 for this request can change between two runs |
+
+The checks: 13 sentences, 11 passed and 2 failed.
+
+- Rows 1 and 8 failed the check of the length: 333 and 348 characters, and row 8 has three sentences. Uno gave the fixed report. Both requests are about each of the seven jobs.
+- No sentence failed the check of the numbers.
+- 2 failures in 13 sentences is below the limit of the rule: 1 in 5.
+
+The sentences, the strongest mark first:
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 1 | **Can contradict the record.** The player did not get it | "job 6 is blocked because the workshop has no room", and "Jobs 3, 5 and 7 wait on their sources" | `DESTINATION_NO_INVENTORY`: there is no inventory at 'workshop'. The same words as in run #27.3. Job 7 is `PAUSED`: the same sentence says so before. The check of the length refused the sentence |
+| 17 | Weak | "robot 4 is not running or loaded at the moment" | The facts say "not running or not loaded": one of the two, and the server does not know which |
+| 5 | Weak | "which is waiting because the cellar is at its reserve, so it is not moving coal right now" | The robot does not run: "waiting" is the last recorded state |
+| 7 | An omission | "it is blocked because the destination has no inventory, not done" | The sentence does not give the 24 on board. Run #27.3 gave them |
+| 4 and 5 | Not about the record | "I cannot give you its delivered total, load on board or stocks", and "I cannot see its load or fuel" | The fixed sentence before the voice gives these numbers, with their caution. The two parts of the answer do not agree in their words |
+| 1, 2, 4 and 7 | Not about the record | "Uno here:" | Four sentences start with these words |
+
+- Rows 2, 3, 6, 8, 9, 15, 16 and 18: the agent found no words that contradict the facts. The player did not get the sentence of row 8.
+- Row 7 is the adversarial case of D32. The model said "not done", with the block.
+- Row 9, the fuel: right. See "The correction after run #27.3".
+- Each sentence of run #27.6 is in English.
+- Row 18, as in run #27.3: the answer about the complete job of the quarry starts with the fixed sentences of jobs 1, 5 and 7.
+
+#### Haiku 5.5 after the two runs
+
+| | Run #27.3 | Run #27.6, with the correction |
+| --- | --- | --- |
+| Right actions | 17 of 19. Rows 14 and 17 are wrong | 18 of 19. Row 17 is wrong |
+| Failed checks | 1 of 13: row 1, the length | 2 of 13: rows 1 and 8, the length |
+| A sentence that the player got, with a mark "can contradict the record" | Row 9, the fuel | None |
+| A sentence that the player did not get, with that mark | Row 1 | Row 1 |
+| Tokens | 83923 in, 3358 out | 85424 in, 3631 out |
+| Time of the 19 requests | 35673 ms | 35712 ms |
+
+The section of run #27.7, as the harness wrote it: the file `run-gametest/measurement-claude-sonnet-5-5.md`, without a change by hand.
+
+#### The measurement on claude-sonnet-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T18:07:12Z. Model: `claude-sonnet-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | PASSED | 3513 | 4491 | 151 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, robot #1, station 'furnace' | yes | PASSED | 2117 | 4496 | 132 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 2081 | 4497 | 132 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 1921 | 4495 | 142 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, robot #4, station 'cellar' | yes | PASSED | 2201 | 4496 | 134 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, station 'tower' | yes | PASSED | 1969 | 4494 | 121 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, station 'workshop' | yes | PASSED | 1683 | 4494 | 122 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | PASSED | 2027 | 4491 | 142 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, station 'depot' | yes | PASSED | 2013 | 4499 | 123 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1499 | 4502 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 1320 | 4497 | 59 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, station 'harbor' | yes | NOT_NEEDED | 1775 | 4494 | 61 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 1395 | 4494 | 61 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | yes | NOT_NEEDED | 1599 | 4506 | 71 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 1968 | 4496 | 113 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 1716 | 4495 | 114 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 1775 | 4492 | 98 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 1956 | 4499 | 137 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 1420 | 4496 | 60 |
+
+Totals: right actions: 18 of 19. Failed checks: 0. Passed checks: 13. Requests without a valid action: 0. Time: 35948 ms. Tokens: 85424 in, 2042 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Of seven jobs, one is done, one is paused, and the rest are stuck: one has no fuel, one lacks a destination inventory, two wait on empty sources, and one is in recovery with an uncertain load. Tell me which robot you want details on, or I can say what to resume or cancel.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 8 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 7 s ago). I last observed 'tower' 5 min ago: it had 16 then. Of seven jobs, one is done, one is paused, and the rest are stuck: one has no fuel, one lacks a destination inventory, two wait on empty sources, and one is in recovery with an uncertain load. Tell me which robot you want details on, or I can say what to resume or cancel.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: The furnace job is waiting because the depot is down to the 32 coal I was told to leave there, so nothing above that can move. The furnace holds 10 coal and wants 64, so it will stay hungry until the depot gets more.
+The answer of Uno: The furnace job is waiting because the depot is down to the 32 coal I was told to leave there, so nothing above that can move. The furnace holds 10 coal and wants 64, so it will stay hungry until the depot gets more.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"5 s ago"},"destinationStock":{"count":10,"age":"7 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: The robot of the mine job, robot 2, has run out of fuel, so it is blocked and has carried nothing of the 24 coal yet. I haven't seen the stock at the mine or the smithy, so I can't tell you those.
+The answer of Uno: The robot of the mine job, robot 2, has run out of fuel, so it is blocked and has carried nothing of the 24 coal yet. I haven't seen the stock at the mine or the smithy, so I can't tell you those.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: The warehouse job is in recovery because the load in the robot differs from my record, so I can't tell you how much was delivered, what is on board or what the stocks are. It was set to carry 24 coal to the kitchen, and the robot has plenty of fuel.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 14 s ago). You decide whether to resume or cancel. The warehouse job is in recovery because the load in the robot differs from my record, so I can't tell you how much was delivered, what is on board or what the stocks are. It was set to carry 24 coal to the kitchen, and the robot has plenty of fuel.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: The robot at the cellar, robot 4, is not working right now: it is waiting because the cellar has nothing above the reserve to carry to the bakery. Nothing has been delivered yet, and its load and fuel are unknown to me.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 15 s ago). The robot at the cellar, robot 4, is not working right now: it is waiting because the cellar has nothing above the reserve to carry to the bakery. Nothing has been delivered yet, and its load and fuel are unknown to me.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't give the coal in the tower: my last look at it is too old to trust, so I won't guess. The job carrying coal there from the harbor is paused, and you can resume it if you want fresh data.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't give the coal in the tower: my last look at it is too old to trust, so I won't guess. The job carrying coal there from the harbor is paused, and you can resume it if you want fresh data.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"12 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: No, the job to the workshop is not done: it is blocked because the workshop has no inventory, and 64 items are still to carry. The robot holds 24 on board and nothing has been delivered yet.
+The answer of Uno: No, the job to the workshop is not done: it is blocked because the workshop has no inventory, and 64 items are still to carry. The robot holds 24 on board and nothing has been delivered yet.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"17 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: While you were away, robot 0 finished carrying 16 coal from quarry to kiln, and robot 2 ran out of fuel. Robot 3's load differs from my record, and robots 1, 4, 5 and 6 are waiting, blocked or paused.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 22 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 21 s ago). I last observed 'tower' 5 min ago: it had 16 then. While you were away, robot 0 finished carrying 16 coal from quarry to kiln, and robot 2 ran out of fuel. Robot 3's load differs from my record, and robots 1, 4, 5 and 6 are waiting, blocked or paused.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"19 s ago"},"destinationStock":{"count":16,"age":"17 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"19 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"19 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"15 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"21 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"20 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"20 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"20 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"17 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"17 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"17 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"15 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot at the depot is robot 1, and its fuel level is 995, enough for about 165 trips between the depot and the furnace. It is currently waiting because the depot is down to the reserve of 32.
+The answer of Uno: The robot at the depot is robot 1, and its fuel level is 995, enough for about 165 trips between the depot and the furnace. It is currently waiting because the depot is down to the reserve of 32.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"3 s ago"},"destinationStock":{"count":10,"age":"21 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"23 s ago"},"destinationStock":{"count":16,"age":"21 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"24 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"22 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"29 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: Weather forecasts are beyond me, since I only know your stations, robots and jobs. Ask me about a job or tell me what to carry, and I'll gladly be useful.
+The answer of Uno: Weather forecasts are beyond me, since I only know your stations, robots and jobs. Ask me about a job or tell me what to carry, and I'll gladly be useful.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I'm missing the quantity of coal, the source station, and which robot to use. Robot 0 is the only free one, but I won't guess the rest, so tell me how much and from where.
+The answer of Uno: I'm missing the quantity of coal, the source station, and which robot to use. Robot 0 is the only free one, but I won't guess the rest, so tell me how much and from where.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free; its last job is done. Robots 1 through 6 each still hold an open job, so they are busy.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 37 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 36 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free; its last job is done. Robots 1 through 6 each still hold an open job, so they are busy.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job is done: robot 0 carried all 16 coal to the kiln, with nothing left to carry. The quarry still holds 24 coal and the robot has plenty of fuel left, so I'd call that a tidy bit of work.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 39 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 38 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job is done: robot 0 carried all 16 coal to the kiln, with nothing left to carry. The quarry still holds 24 coal and the robot has plenty of fuel left, so I'd call that a tidy bit of work.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"36 s ago"},"destinationStock":{"count":16,"age":"34 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"5 s ago"},"destinationStock":{"count":10,"age":"38 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Sonnet 5.5 (run #27.7)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 18 of 19 are right. Row 17 is a report about each job, not "none": as Haiku 5.5 in its two runs.
+
+The checks: 13 sentences, 13 passed. The longest sentence has 272 characters.
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 1 | Weak | "two wait on empty sources" | Jobs 3 and 5 wait at the reserve of their source. The depot of job 3 holds 32, its reserve: it is not empty. The numbers of this sentence are words: the check of the numbers does not read them |
+| 5 | Weak | "it is waiting because the cellar has nothing above the reserve" | The robot does not run: "waiting" is the last recorded state. The sentence starts with "is not working right now" |
+| 16 | Not about the record | "I'm missing the quantity of coal, the source station, and which robot to use. Robot 0 is the only free one" | The system text gives the only free robot to a request that names none |
+
+- Rows 2, 3, 4, 6, 7, 8, 9, 15, 17 and 18: the agent found no words that contradict the facts.
+- Row 7, the adversarial case of D32: "No, the job to the workshop is not done", with the block, the 64 still to carry and the 24 on board.
+- Row 9, the fuel: "its fuel level is 995, enough for about 165 trips between the depot and the furnace".
+- Each sentence is in English, also the answer to the Italian request of row 18.
+- No sentence names the server, the facts or a field.
+
+The section of run #27.8, as the harness wrote it: the file `run-gametest/measurement-claude-opus-5-5.md`, without a change by hand.
+
+#### The measurement on claude-opus-5-5
+
+Type: a test with the real Claude service, in the game and automatic. Date: 2026-11-15T18:08:47Z. Model: `claude-opus-5-5`. 19 requests, one after the other, in one world.
+
+| No. | Case | Request | Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | The seven actions: report | How are my jobs going? | report, without a job | report, without a job | yes | PASSED | 3000 | 4491 | 157 |
+| 2 | T21: a wait at the reserve | Why does the furnace get no more coal? | report, robot #1 | report, station 'furnace' | yes | PASSED | 2980 | 4496 | 146 |
+| 3 | T21: a block without fuel | What is wrong with the robot of the mine? | report, robot #2 | report, robot #2, station 'mine' | yes | PASSED | 2604 | 4497 | 127 |
+| 4 | T21: a job in RECOVERY | How did the job of the warehouse go? | report, robot #3 | report, station 'warehouse' | yes | PASSED | 2734 | 4495 | 143 |
+| 5 | T21: a robot that is not running | Is the robot of the cellar still working? | report, robot #4 | report, station 'cellar' | yes | PASSED | 2591 | 4496 | 147 |
+| 6 | T21: an old observation | How much coal is in the tower now? | report, robot #6 | report, robot #6, station 'tower' | yes | PASSED | 2489 | 4494 | 136 |
+| 7 | D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #5 | report, station 'workshop' | yes | PASSED | 2592 | 4494 | 127 |
+| 8 | A question about the diary | What happened while I was away? | report, without a job | report, without a job | yes | PASSED | 2784 | 4491 | 164 |
+| 9 | A question about the fuel | How much fuel does the robot of the depot have left? | report, robot #1 | report, station 'depot' | yes | PASSED | 1813 | 4499 | 128 |
+| 10 | The seven actions: start | Carry 16 coal from the quarry to the kiln. | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | start: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0 | yes | NOT_NEEDED | 1882 | 4502 | 69 |
+| 11 | The seven actions: change | Leave only 16 coal in the depot. | change, robot #1, reserve 16 | change, station 'depot', reserve 16 | yes | NOT_NEEDED | 2270 | 4497 | 133 |
+| 12 | The seven actions: resume | Resume the job of the harbor. | resume, robot #6 | resume, station 'harbor' | yes | NOT_NEEDED | 2112 | 4494 | 61 |
+| 13 | The seven actions: cancel | Cancel the job of the mine. | cancel, robot #2 | cancel, station 'mine' | yes | NOT_NEEDED | 2026 | 4494 | 61 |
+| 14 | A change of the destination | Bring the coal of the depot to the smelter instead of the furnace. | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | start: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1 | yes | NOT_NEEDED | 2276 | 4506 | 71 |
+| 15 | The seven actions: none | What will the weather be like tomorrow? | none | none | yes | PASSED | 2438 | 4496 | 126 |
+| 16 | None: a value is missing | Carry some coal to the smithy. | none | none | yes | PASSED | 2528 | 4495 | 112 |
+| 17 | None: a question from the context | Which of my robots are free? | none | report, without a job | no | PASSED | 2509 | 4492 | 127 |
+| 18 | A request in Italian | Com'è andato il lavoro della quarry? | report, robot #0 | report, station 'quarry' | yes | PASSED | 2432 | 4499 | 124 |
+| 19 | The seven actions: pause | Pause the job of the depot for a while. | pause, robot #1 | pause, station 'depot' | yes | NOT_NEEDED | 3497 | 4496 | 60 |
+
+Totals: right actions: 18 of 19. Failed checks: 0. Passed checks: 13. Requests without a valid action: 0. Time: 47557 ms. Tokens: 85424 in, 2219 out.
+
+**1. The seven actions: report.** How are my jobs going?
+
+```text
+The sentence of the model: Robot 0 finished its coal run to the kiln, robot 6 is paused toward the tower, and robots 1 and 4 wait for coal at their sources. Robot 2 is out of fuel, robot 5 found no inventory at the workshop, and robot 3 is recovering from a load mismatch.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 7 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 7 s ago). I last observed 'tower' 5 min ago: it had 16 then. Robot 0 finished its coal run to the kiln, robot 6 is paused toward the tower, and robots 1 and 4 wait for coal at their sources. Robot 2 is out of fuel, robot 5 found no inventory at the workshop, and robot 3 is recovering from a load mismatch.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"4 s ago"},"destinationStock":{"count":16,"age":"2 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"3 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"4 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"0 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"6 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"4 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"4 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"4 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"2 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"2 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"1 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"0 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**2. T21: a wait at the reserve.** Why does the furnace get no more coal?
+
+```text
+The sentence of the model: The depot holds 32 coal, exactly the 32 you asked me to keep there, so robot 1 waits with nothing to spare while the furnace sits at 10 and still needs 54. Add coal to the depot or lower the reserve, and the deliveries can continue.
+The answer of Uno: The depot holds 32 coal, exactly the 32 you asked me to keep there, so robot 1 waits with nothing to spare while the furnace sits at 10 and still needs 54. Add coal to the depot or lower the reserve, and the deliveries can continue.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"6 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**3. T21: a block without fuel.** What is wrong with the robot of the mine?
+
+```text
+The sentence of the model: Robot 2 ran out of fuel on the way from mine to smithy, so it is stuck with 0 fuel and has delivered nothing of its 24 coal. Give it some fuel and it can get back to work.
+The answer of Uno: Robot 2 ran out of fuel on the way from mine to smithy, so it is stuck with 0 fuel and has delivered nothing of its 24 coal. Give it some fuel and it can get back to work.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**4. T21: a job in RECOVERY.** How did the job of the warehouse go?
+
+```text
+The sentence of the model: My robot 3 is sorting things out on the warehouse to kitchen coal job: the load in the robot does not match my record, so it is in recovery. I cannot vouch for the delivered total yet, but its fuel is 999, enough for about 166 trips.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 16 s ago). You decide whether to resume or cancel. My robot 3 is sorting things out on the warehouse to kitchen coal job: the load in the robot does not match my record, so it is in recovery. I cannot vouch for the delivered total yet, but its fuel is 999, enough for about 166 trips.
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+```
+
+**5. T21: a robot that is not running.** Is the robot of the cellar still working?
+
+```text
+The sentence of the model: Robot 4 is not really working on the cellar job: it is waiting because the cellar has nothing above its reserve, with 0 of 32 coal delivered and 32 still to carry. I can't see whether it is running or loaded, so its load and fuel are unknown to me.
+The answer of Uno: Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 18 s ago). Robot 4 is not really working on the cellar job: it is waiting because the cellar has nothing above its reserve, with 0 of 32 coal delivered and 32 still to carry. I can't see whether it is running or loaded, so its load and fuel are unknown to me.
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+```
+
+**6. T21: an old observation.** How much coal is in the tower now?
+
+```text
+The sentence of the model: I can't give you the coal count in the tower: my last look at it is too old to trust, so the server shows you what it knows with its caution. What I do know is that robot 6 delivered 16 coal there before its job was paused, with 24 still to carry.
+The answer of Uno: I last observed 'tower' 5 min ago: it had 16 then. I can't give you the coal count in the tower: my last look at it is too old to trust, so the server shows you what it knows with its caution. What I do know is that robot 6 delivered 16 coal there before its job was paused, with 24 still to carry.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"14 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**7. D32: BLOCKED with a load on board.** Is the job of the workshop done?
+
+```text
+The sentence of the model: No, the job to the workshop is blocked: robot 5 found no container there, so it still has 24 coal on board and 64 still to carry. Put a chest at the workshop, or cancel the job if you prefer.
+The answer of Uno: No, the job to the workshop is blocked: robot 5 found no container there, so it still has 24 coal on board and 64 still to carry. Put a chest at the workshop, or cancel the job if you prefer.
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"20 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+```
+
+**8. A question about the diary.** What happened while I was away?
+
+```text
+The sentence of the model: Robot 0 delivered all 16 coal to the kiln, robot 6 brought 16 to the tower and was paused, while robots 1 and 4 wait at sources down to their reserve. Robot 2 ran out of fuel, robot 5 found no container at the workshop, and robot 3 has a load that differs from my record.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 26 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 25 s ago). I last observed 'tower' 5 min ago: it had 16 then. Robot 0 delivered all 16 coal to the kiln, robot 6 brought 16 to the tower and was paused, while robots 1 and 4 wait at sources down to their reserve. Robot 2 ran out of fuel, robot 5 found no container at the workshop, and robot 3 has a load that differs from my record.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"23 s ago"},"destinationStock":{"count":16,"age":"21 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"5 s ago"},"destinationStock":{"count":10,"age":"22 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+The facts of job 1 on robot #3: {"job":1,"robot":3,"module":"transport","item":"minecraft:coal","from":"warehouse","to":"kitchen","quantity":24,"reserve":0,"state":"RECOVERY","cause":"LOAD_DIFFERS","fuel":999,"tripsWithThisFuel":166,"uncertain":["The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks."]}
+The facts of job 5 on robot #4: {"job":5,"robot":4,"module":"transport","item":"minecraft:coal","from":"cellar","to":"bakery","quantity":32,"reserve":0,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"stillToCarry":32,"uncertain":["The robot is not running or not loaded. Not given: the load on board, the stocks and the fuel."]}
+The facts of job 6 on robot #5: {"job":6,"robot":5,"module":"transport","item":"minecraft:coal","from":"storage","to":"workshop","quantity":64,"reserve":0,"state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","delivered":0,"onBoard":24,"sourceStock":{"count":0,"age":"23 s ago"},"stillToCarry":64,"aboveReserve":0,"fuel":996,"tripsWithThisFuel":166,"uncertain":["No robot observed 'workshop' yet. Its stock is unknown."]}
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"19 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+A line of the diary: {"age":"25 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0}
+A line of the diary: {"age":"23 s ago","job":2,"robot":0,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":16,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":3,"robot":1,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":4,"robot":2,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":5,"robot":4,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"23 s ago","job":6,"robot":5,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":64,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":7,"robot":6,"kind":"CHANGE","state":"RUNNING","cause":"NONE","quantity":40,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":4,"robot":2,"kind":"LOW_FUEL","state":"RUNNING","cause":"NONE","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"23 s ago","job":1,"robot":3,"kind":"CHANGE","state":"RECOVERY","cause":"LOAD_DIFFERS","quantity":24,"reserve":0}
+A line of the diary: {"age":"23 s ago","job":5,"robot":4,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":32,"reserve":0,"delivered":0}
+A line of the diary: {"age":"23 s ago","job":4,"robot":2,"kind":"CHANGE","state":"BLOCKED","cause":"OUT_OF_FUEL","quantity":24,"reserve":0,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"21 s ago","job":6,"robot":5,"kind":"CHANGE","state":"BLOCKED","cause":"DESTINATION_NO_INVENTORY","quantity":64,"reserve":0,"delivered":0,"onBoard":24}
+A line of the diary: {"age":"21 s ago","job":2,"robot":0,"kind":"CHANGE","state":"DONE","cause":"NONE","quantity":16,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"20 s ago","job":3,"robot":1,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":64,"reserve":32,"delivered":0,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":7,"robot":6,"kind":"CHANGE","state":"WAITING","cause":"SOURCE_AT_RESERVE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+A line of the diary: {"age":"19 s ago","job":7,"robot":6,"kind":"CHANGE","state":"PAUSED","cause":"NONE","quantity":40,"reserve":0,"delivered":16,"onBoard":0}
+```
+
+**9. A question about the fuel.** How much fuel does the robot of the depot have left?
+
+```text
+The sentence of the model: The robot on the depot to furnace coal job has 995 fuel, which is enough for about 165 trips between those two stations. Fuel is the least of its worries, since it is waiting because the depot sits at its reserve.
+The answer of Uno: The robot on the depot to furnace coal job has 995 fuel, which is enough for about 165 trips between those two stations. Fuel is the least of its worries, since it is waiting because the depot sits at its reserve.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"25 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**10. The seven actions: start.** Carry 16 coal from the quarry to the kiln.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'. Reserve to leave in 'quarry': 0. Robot #0. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"27 s ago"},"destinationStock":{"count":16,"age":"25 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**11. The seven actions: change.** Leave only 16 coal in the depot.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: change job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'). Level to keep in 'furnace': 64, unchanged. Reserve to leave in 'depot': from 32 to 16. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"1 s ago"},"destinationStock":{"count":10,"age":"29 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**12. The seven actions: resume.** Resume the job of the harbor.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: resume job 7 on robot #6 (carry minecraft:coal from 'harbor' to 'tower'). I have done nothing yet. Confirm with /uno confirm.
+The facts of job 7 on robot #6: {"job":7,"robot":6,"module":"transport","item":"minecraft:coal","from":"harbor","to":"tower","quantity":40,"reserve":0,"state":"PAUSED","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":0,"age":"27 s ago"},"stillToCarry":24,"aboveReserve":0,"fuel":993,"tripsWithThisFuel":165,"uncertain":["The last observation of 'tower' is old. Not given: its stock."]}
+```
+
+**13. The seven actions: cancel.** Cancel the job of the mine.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 4 on robot #2 (carry minecraft:coal from 'mine' to 'smithy'). The cargo stays on board the robot. I have done nothing yet. Confirm with /uno confirm.
+The facts of job 4 on robot #2: {"job":4,"robot":2,"module":"transport","item":"minecraft:coal","from":"mine","to":"smithy","quantity":24,"reserve":0,"state":"BLOCKED","cause":"OUT_OF_FUEL","delivered":0,"onBoard":0,"stillToCarry":24,"fuel":0,"tripsWithThisFuel":0,"uncertain":["No robot observed 'mine' yet. Its stock is unknown.","No robot observed 'smithy' yet. Its stock is unknown."]}
+```
+
+**14. A change of the destination.** Bring the coal of the depot to the smelter instead of the furnace.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Proposal: cancel job 3 on robot #1 (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: keep at least 64 x minecraft:coal in 'smelter', taken from 'depot'. Reserve to leave in 'depot': 32. Robot #1. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm.
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"2 s ago"},"destinationStock":{"count":10,"age":"35 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+**15. The seven actions: none.** What will the weather be like tomorrow?
+
+```text
+The sentence of the model: I direct robots between your stations, and the sky is sadly outside my jurisdiction, so I know nothing about tomorrow's weather. Ask me about your jobs instead, and I can at least forecast some coal.
+The answer of Uno: I direct robots between your stations, and the sky is sadly outside my jurisdiction, so I know nothing about tomorrow's weather. Ask me about your jobs instead, and I can at least forecast some coal.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**16. None: a value is missing.** Carry some coal to the smithy.
+
+```text
+The sentence of the model: I would happily send coal to the smithy, but I need to know how much coal and from which station it should come. Tell me the quantity and the source, and robot 0 is free for the work.
+The answer of Uno: I would happily send coal to the smithy, but I need to know how much coal and from which station it should come. Tell me the quantity and the source, and robot 0 is free for the work.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**17. None: a question from the context.** Which of my robots are free?
+
+```text
+The sentence of the model: Only robot 0 is free: it finished carrying 16 coal from the quarry to the kiln. Robots 1 to 6 all still hold jobs, though several are waiting, blocked or paused rather than busy.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 46 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 45 s ago). I last observed 'tower' 5 min ago: it had 16 then. Only robot 0 is free: it finished carrying 16 coal from the quarry to the kiln. Robots 1 to 6 all still hold jobs, though several are waiting, blocked or paused rather than busy.
+The stations: ["bakery","cellar","depot","furnace","harbor","kiln","kitchen","mine","quarry","smelter","smithy","storage","tower","warehouse","workshop"]
+The robots: [{"id":0,"free":true},{"id":1,"free":false},{"id":2,"free":false},{"id":3,"free":false},{"id":4,"free":false},{"id":5,"free":false},{"id":6,"free":false}]
+```
+
+**18. A request in Italian.** Com'è andato il lavoro della quarry?
+
+```text
+The sentence of the model: The quarry job went fine: robot 0 carried all 16 coal to the kiln and finished, with 24 coal still left at the quarry. Robot 0 is free again if you have another errand in mind.
+The answer of Uno: Job 1 on robot #3: I cannot say how it went. Recorded reason: the robot holds 0, the record says 24. The recorded data can be wrong: 0 delivered, 24 on board and 0 in 'warehouse' (seen 48 s ago). You decide whether to resume or cancel. Robot #4 of job 5 is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of 999 (about 166 trips between the stations) and 0 in 'cellar' (seen 48 s ago). I last observed 'tower' 5 min ago: it had 16 then. The quarry job went fine: robot 0 carried all 16 coal to the kiln and finished, with 24 coal still left at the quarry. Robot 0 is free again if you have another errand in mind.
+The facts of job 2 on robot #0: {"job":2,"robot":0,"module":"transport","item":"minecraft:coal","from":"quarry","to":"kiln","quantity":16,"reserve":0,"state":"DONE","cause":"NONE","delivered":16,"onBoard":0,"sourceStock":{"count":24,"age":"45 s ago"},"destinationStock":{"count":16,"age":"43 s ago"},"stillToCarry":0,"aboveReserve":24,"fuel":996,"tripsWithThisFuel":166,"uncertain":[]}
+```
+
+**19. The seven actions: pause.** Pause the job of the depot for a while.
+
+```text
+The sentence of the model: none: the server writes the answer of this action.
+The answer of Uno: Job 3 on robot #1 is paused. The cargo stays on board.
+The facts of job 3 on robot #1: {"job":3,"robot":1,"module":"keep_stock","item":"minecraft:coal","from":"depot","to":"furnace","quantity":64,"reserve":32,"state":"WAITING","cause":"SOURCE_AT_RESERVE","delivered":0,"onBoard":0,"sourceStock":{"count":32,"age":"4 s ago"},"destinationStock":{"count":10,"age":"47 s ago"},"stillToCarry":54,"aboveReserve":0,"fuel":995,"tripsWithThisFuel":165,"uncertain":[]}
+```
+
+#### The marks of the agent for Opus 5.5 (run #27.8)
+
+The agent read each sentence of the model next to its facts (D42, point 20). A mark is a judgement of the agent, not a decision. **The project owner did not decide yet.**
+
+The actions: 18 of 19 are right. Row 17 is a report about each job, not "none": as the other two models.
+
+The checks: 13 sentences, 13 passed. The longest sentence has 271 characters.
+
+| No. | Mark | The words of the model | The record |
+| --- | --- | --- | --- |
+| 3 | Weak | "Robot 2 ran out of fuel on the way from mine to smithy" | The facts give no place of the robot. They give 0 on board, and no robot observed 'mine' yet. In the world of the measurement the robot starts without fuel |
+| 4 | Weak | "My robot 3 is sorting things out", and in row 1 "robot 3 is recovering from a load mismatch" | In `RECOVERY` the job stands still until the owner resumes it or cancels it. The fixed sentence before the voice says "You decide whether to resume or cancel." |
+| 5 | Weak | "it is waiting because the cellar has nothing above its reserve" | The robot does not run: "waiting" is the last recorded state. The sentence starts with "is not really working" |
+| 3 | An omission | "Give it some fuel and it can get back to work" | A blocked job also needs a resume. The fixed report says "Give me fuel, then resume the job." |
+| 6 | Not about the record | "the server shows you what it knows with its caution" | The voice names the server, as Haiku 5.5 in run #27.3. The system text says "the server gives it to the player" |
+
+- Rows 2, 7, 8, 9, 15, 16, 17 and 18: the agent found no words that contradict the facts.
+- Row 7, the adversarial case of D32: "No, the job to the workshop is blocked: robot 5 found no container there, so it still has 24 coal on board and 64 still to carry."
+- Row 8, the diary: the sentence names each of the seven jobs.
+- Row 9, the fuel: "has 995 fuel, which is enough for about 165 trips between those two stations".
+- Each sentence is in English, also the answer to the Italian request of row 18.
+
+#### The pass on the three models, and the rule
+
+The pass: runs #27.6, #27.7 and #27.8, with the same code and the same 19 requests. Run #27.3 used the text before the correction. The agent proposes that run #27.3 is not a part of the pass.
+
+| | Haiku 5.5, run #27.6 | Sonnet 5.5, run #27.7 | Opus 5.5, run #27.8 |
+| --- | --- | --- | --- |
+| Right actions | 18 of 19 | 18 of 19 | 18 of 19 |
+| The wrong action | Row 17: a report | Row 17: a report | Row 17: a report |
+| Failed checks | 2 of 13: the length | 0 of 13 | 0 of 13 |
+| Failed checks of the numbers | 0 | 0 | 0 |
+| Mark "can contradict the record", a sentence that the player got | 0 | 0 | 0 |
+| The same mark, a sentence that the check refused | 1: row 1 | 0 | 0 |
+| Mark "weak" | 2 | 2 | 3 |
+| Time of the 19 requests | 35712 ms | 35948 ms | 47557 ms |
+| The slowest request | 3575 ms | 3513 ms | 3497 ms |
+| Tokens | 85424 in, 3631 out | 85424 in, 2042 out | 85424 in, 2219 out |
+| Cost, calculated with the prices of D33 | 0.010 $ | 0.191 $ | 0.386 $ |
+
+The rule of D42, point 7, with the marks of the agent. **Proposed by the agent, not decided:**
+
+- A wrong action where a model with a higher price gives the right one: none in the pass. Each model gives a report for row 17.
+- A sentence that contradicts the record: the project owner decides. In this pass the agent gave the mark "can contradict the record" to no sentence that the player got.
+- The check of the numbers fails more than 1 time in 5: no model. Haiku 5.5 failed the check of the length 2 times in 13.
+- Then no model is out. The model with the lowest price is Haiku 5.5: the start value of the setting now.
+
+Row 17, "Which of my robots are free?". The harness expects "none". The three models give a report about each job. The system text names a report "a question about a job, about all the jobs, or about what occurred". Row 17 is not in the spec: the implementation added it (D42, point 7). The agent proposes that the expected action of row 17 is too strict.
+
+Against Haiku 5.5, for the judgement of the project owner:
+
+- Run #27.3, on the text before the correction: its action for row 14 was wrong. Sonnet 5.5 and Opus 5.5 give the right action. The correction did not change the text about a start. Thus its action for row 14 can change between two runs.
+- Its sentence about each job is too long in both runs: row 1, and row 8 in run #27.6. Then the player gets the fixed report of the seven jobs. **Not measured:** a world with one or two jobs.
+- Its refused sentence of row 1 says "the workshop has no room" in both runs.
+- In runs #27.2 and #27.5 one answer of four is in Italian. **Not known:** the language of Sonnet 5.5 and Opus 5.5 for that request. Only `t18_claude_live` has it, and it ran on Haiku 5.5 only.
+- Four of its sentences of run #27.6 start with "Uno here:".
+
+Observations about Uno, not about a model:
+
+- A report about each job starts with the fixed sentences of jobs 1, 5 and 7: 488 characters before the voice. Rows 1, 8, 17 and 18 of each run have them. The voice comes last (D42, point 3).
+- Row 18: the complete job of the quarry fits no open job. Thus its report is a report about each job (D42, point 16, as built).
+
+#### The decision of the project owner
+
+**Decided by the project owner on 2026-11-15:** the model of increment B is Haiku 5.5, for the moment. The reason of the project owner: a more capable model stays possible later. The model is a setting (D42, point 6).
+
+- The choice agrees with the rule of D42, point 7 and with the marks of the agent: no model is out, and Haiku 5.5 has the lowest price.
+- The start value of the setting is already `claude-haiku-5-5`. No code changed for the choice. Run #27.4 is the normal run on the code of the choice, and run #27.5 is its `-Plive` run. Run 168 of the table "Runs" is the normal run of the integration branch with that code and the retrospective.
+- Before the choice the project owner asked for the cost of a play of 5 or 6 hours. The answer of the agent is a calculation from the tokens of the runs. With 30 written requests: 1 or 2 cents on Haiku 5.5, and 20 to 30 cents on Sonnet 5.5. With 100 written requests, the limit of a session: 4 to 6 cents, and 0.60 to 1.00 $. The number of requests is an assumption.
+- The paid runs of ticket #27 cost 0.60 $ of the budget of 5 $. One pass of three ran.
+
+The project owner did not answer these points one by one. The agent reads no answer to them in the choice:
+
+1. Whether run #27.3 is a part of the pass.
+2. Whether a sentence that the check refused counts for the rule.
+3. Whether a report is a wrong action for row 17.
+4. The answer in Italian of Haiku 5.5 in runs #27.2 and #27.5. Check C2 of the play session reads the language of each answer.
+
+## Increment B — final runs and evidence (ticket #28)
+
+Ticket #28 of spec #15, on 2026-11-15. It changed only documents: the checklist [PLAY_SESSION_B.md](PLAY_SESSION_B.md), the README, the decision log and this file.
+The code of its runs is the integration branch of increment B at `8b0d3e2`, with tickets #16 to #26. No part of the runtime, no Lua module and no test changed after it. No run called the real Claude service.
+
+| Run | Type | Result |
+| --- | --- | --- |
+| 155, the normal run | In the game, automatic | 106 of 107. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `107 GAME TESTS COMPLETE`, `1 required tests failed :(`. `b_replacement_refused` failed: "the computer is not off yet". See below |
+| 156, the normal run | In the game, automatic | **107 of 107**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `107 GAME TESTS COMPLETE`, `All 107 required tests passed :)`. Uno used the fixed rules: "Uno interprets requests with the fixed rules, without a language model." |
+| `stop` | In the game, automatic | Passed. `All 1 required tests passed :)`. The status at the stop, at the game time 82: `RUNNING`, taken 24, delivered 0, on board 24, "fuel: 999, about 166 trips between the stations" |
+| `check` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart, at the game time 84: the diary `RUNNING`, and the fuel 999 of the record. At the end: `DONE`, source 40, destination 24, robot 0, and the diary `RUNNING, DONE`. The summary: "Since you last opened this screen:" and "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." |
+| `crash` | In the game, automatic | The test halted the process at the game time 422, as expected. The record said `DONE`, delivered 24, on board 0 |
+| `check-crash` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart, at the game time 85: `RECOVERY` ("the world is older than the record of this job"), the diary `RUNNING, DONE, RECOVERY WORLD_OLDER`, source 40, destination 0, robot 24. At the end: `DONE`, "1 recovery. The totals can be inexact.", and the diary `RUNNING, DONE, RECOVERY WORLD_OLDER, RUNNING, DONE`. The summary has the `RECOVERY` with its recorded reason, then the delivery |
+| 157, the normal run | In the game, automatic | **107 of 107**. The same three log lines as run 156 |
+
+The four phases ran after run 156, one at a time, on the same world. After them the data folder has `mindcraft.dat` and no temporary file.
+
+The failure of run 155:
+
+- `b_replacement_refused`, part 3: the test sends `computercraft shutdown` one time for the robot. Then it waits until the computer of the robot is off. The computer was still on at the time limit of the test: 2400 ticks.
+- Runs 156 and 157, on the same code, passed. The cause is not known. Ticket #28 changes no code: the failure is reported, not corrected.
+- Two more tests wait for a shutdown in the same way. They passed in the three runs.
+
+The evidence of increment B, by ticket. "Automatic" is a test in the game, automatic, with the fixed rules, providers written in the tests or the local stand-in of the service. Each section above gives the tests.
+
+| Ticket | What it verified | Kind of evidence | Runs | Not verified |
+| --- | --- | --- | --- | --- |
+| #16, the kinds of a diary entry and the causes of `RECOVERY` | The kinds "change" and "long wait". A record of increment A loads with the same diary and summary. `LOAD_DIFFERS` and `WORLD_OLDER` | Automatic, and the four restart phases | 89 to 91 | A real world of increment A. A long wait across a real restart |
+| #17, the adoption | A new job counts the load on board, by the command and by words. A load above the quantity. A load of a different item. The sentences of the proposal | Automatic, and the four restart phases | 85 to 88 | An adoption across a restart. The burn of an item of a different kind. The proposal in a client |
+| #18, the replacement | One proposal, and one confirmation in one tick, in each open state. The refusals. A change of the destination by words. The robot of a request that names none | Automatic, and the four restart phases | 93 to 95 | The new system text with the real service. The limit of D26. The screen of a client |
+| #19, the facts | The facts and the diary lines in the context of a provider and in the body of a request. No position. A different player gets nothing. The numbers that are not given | Automatic, and the four restart phases | 98 to 102 | A request with the facts to the real service |
+| #21, the fixed rules after a model without a valid action | The sentence first, then the answer of the fixed rules. The request counts | Automatic | 104 to 106 | A failure of the real service |
+| #20, the voice and its checks | The voice of a report and of "none". The check of the numbers and of the length. The fixed sentences before the voice. No voice for an action. The system text in the body of a request | Automatic | 108 to 112 | A sentence of the real model |
+| #23, the record of a request | The record for each result of the checks | Automatic. The log line: a code examination | 113 to 115 | A line with the real service |
+| #24, the low fuel notice | The threshold. One notice, also after a save and a load. A second notice after a refuel. The notice at the start of a job. The fuel in the report, the status, the facts and the screen | Automatic, and the four restart phases | 120 to 126 | A server where turtles need no fuel. The notice in a client |
+| #22, the setting of the model | The start value. The model of the setting in each request. The fallback only for Opus 5.5 and Sonnet 5.5. The reason of an answer 404 | Automatic | 129 to 131 | The real service with Haiku 5.5. The file on a real installation |
+| #25, the conversation part first | The order of the view | Automatic | 140 to 142 | The look and the height in a client |
+| #26, the harness of the measurement | The set of 19 requests, its world and its record | Automatic. The build script: a static check | 150 to 153 | The measurement itself |
+| #28, the final runs | Each test of the increment on the final code | Automatic, and the four restart phases. `gradlew check`: a static check | 155 to 157 | |
+
+The evidence of increment B, by kind:
+
+| Kind | What it covers |
+| --- | --- |
+| **In the game, automatic** | The 107 tests of runs 156 and 157. 24 tests are new in increment B: the tests with the prefix `b_`. Increment B also changed older tests: each section above lists them. The four restart phases after run 156 |
+| **In the game, automatic, with the real service** | None. No paid run occurred in increment B |
+| **Code examination** | The log line of a request. No Lua module changed. The way of a notice calls no provider. A trip from the docks. The read of the fuel at each contact. The order of the widgets in `UnoScreen`. The rows "Code examination" of each section above |
+| **Static check** | `gradlew check` before each commit of ticket #28. The evaluation of the build script of ticket #26 |
+| **In the game, manual** | None yet. The play session of ticket #29 uses [PLAY_SESSION_B.md](PLAY_SESSION_B.md) |
+| **Not executed** | The rows of increment B in "Not executed" below |
+
+What stays not verified for increment B:
+
+- The real model and its sentences. No sentence of the real model passed or failed a check. The facts and the fuel fields did not go to the real service.
+- The system text of `ClaudeProvider` with the real service: the `-Plive` run that CLAUDE.md asks for before the merge into `main`. Ticket #27 has it.
+- The measurement and the choice of the model (ticket #27).
+- The screen of a client: the voice, the fixed sentences before it, the proposals of an adoption and of a replacement, the line about low fuel, the order and the height of the screen, and the confirmation of "Cancel". The notices in the chat of a client.
+- The configuration file on a real installation, and the log lines with a key.
+- The play session (ticket #29).
+
+## Increment B — corrections of the code review
+
+Date: 2026-11-15. A code review of increment B, on two axes: the standards and the spec. This section has the corrections of its points. See D42, "The corrections of the code review".
+The code of the runs is the branch `b/review-fixes`, from the integration branch at `9722178`, with tickets #16 to #26 and #28. No run called the real Claude service. The schema and the system text of the Claude provider did not change.
+
+The new texts for the player, from the tests:
+
+- A robot that is not running or silent, in the fixed sentence before the voice: "Robot #9 of job 900 is not running or not loaded. The last recorded data, not the current state: 4 on board, a fuel level of 29 (about 4 trips between the stations), 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago)."
+- The same robot in the fixed report: "My last recorded fuel level is 29: about 4 trips between the stations." A robot that runs and calls keeps "My fuel level is 29: about 4 trips between the stations."
+- The proposal of a replacement for a robot that holds no item of the job: "… Robot #N. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. …"
+
+### Automatic in-game tests
+
+| Test | What it does | Result |
+| --- | --- | --- |
+| `b_fixed_sentences_of_uncertain_numbers` (changed) | Five more cases with a record that has a fuel level of 29 (4 trips). Three robots: one that runs and calls, one that is not running, and a silent one. Then `RECOVERY`, with a robot that is not running and with a robot that runs | Passed in runs 159 to 163. The robot that is not running and the silent robot get the fuel in the recorded data. `RECOVERY` gives the fuel only for a robot that is not running: the facts give it for a robot that runs |
+| `b_fuel_in_the_report` (changed) | First the fixed report of a record that the test writes, without a robot: a robot that is not running, a silent robot, and a robot that runs and calls. Then the steps of before | Passed in runs 159 to 163. "My last recorded fuel level is 29: …" for the first two. "My fuel level is 29: …" for the third |
+| `b_voice_after_uncertain_numbers` (changed) | The fixed sentence of the robot that is not running has its fuel level of the record. The shutdown repeats: see below | Passed in runs 159 to 163. The repeated shutdown since run 162 |
+| `t22_t23_proposals_and_contact_points` (changed) | The report after a save and a load says "My last recorded fuel level is" in the place of "My fuel level is". Each other word is the same | Passed in runs 160 to 163. Run 159 failed here: "the report after a save and a load is different". Cause: the last contact of a robot belongs to the server session (D24). After a load the robot has not called yet. Thus the new rule gives the recorded level. The expectation changed, not the code |
+| `b_replacement_through_the_view` (changed) | The proposal of a replacement for a robot that holds nothing | Passed in runs 160 to 163. The view has "Robot #N. The robot holds no minecraft:coal now. The load can change until the confirmation" |
+| `b_no_voice_for_an_action` (changed) | The whole text of the same kind of proposal | Passed in runs 160 to 163 |
+| `b_adoption_in_the_proposal` (unchanged) | A plain start for a robot that holds nothing | Passed. The text of increment A, without a sentence about the load |
+| `b_model_of_the_setting` (changed) | One more request: a cut answer (`max_tokens`). The refusal has 40 input and 3 output tokens. The cut answer has 50 and 4096 | Passed in runs 161 to 163. The counter grows by the tokens: 3 requests and 42/5 tokens, then 4 requests and 92/4101. The error 404 adds a request and no token: 5 requests and 92/4101. Each record has the tokens of its answer, no action, and `NO_VALID_ACTION`. The answer to the cut answer: "The model gave no valid answer (the answer of the model is incomplete), thus I read your request with the fixed rules: …" |
+| `b_voice_at_the_moment_of_the_answer` (new) | An operator and a provider of the test with a model. The provider waits inside its answer, and the test changes the job in that time. The job delivered 10 of 24 and waits. 1: a report "I delivered 10 of 24 so far.", and the job goes to `RECOVERY`. 2: after a resume, a "none" "The destination had 10 at my last look.", and the observation of the destination becomes old. 3: a report "Something here needs your eyes.", and the job goes to `RECOVERY` again | Passed in runs 162 and 163. 1: the fixed report of A, with "I cannot say how it went.", and the record `FAILED` with the unused sentence. 2: "I cannot answer that. I did nothing.", and the record `FAILED`. 3: the fixed sentence of `RECOVERY` of that moment, then the voice, and the record `PASSED` |
+| `b_replacement_refused`, `t21_report_with_old_data`, `s0_probe_hard_stop`, `b_voice_after_uncertain_numbers` and `b_measurement_with_the_stand_in` (changed) | The wait for a computer that is off repeats `computercraft shutdown` until the computer is off: the helper `MindCraftTests.shutDown`. No timeout changed | Passed in runs 162 and 163 |
+
+The lines of the server log of run 162, for the record of a request (a code examination of the line, as for ticket #23):
+
+```text
+Uno request: model claude-haiku-5-5, 40 input tokens, 3 output tokens, 2 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model claude-haiku-5-5, 50 input tokens, 4096 output tokens, 2 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model claude-haiku-9-9, 0 input tokens, 0 output tokens, 4 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model test-model, 12 input tokens, 3 output tokens, 0 ms, action report, checks FAILED, unused sentence "I delivered 10 of 24 so far.", request "x"
+Uno request: model test-model, 12 input tokens, 3 output tokens, 0 ms, action none, checks FAILED, unused sentence "The destination had 10 at my last look.", request "x"
+Uno request: model test-model, 12 input tokens, 3 output tokens, 0 ms, action report, checks PASSED, request "x"
+```
+
+### The failure of run 155
+
+- Run 155 failed one time in `b_replacement_refused`: "the computer is not off yet" at the limit of 2400 ticks. The test sent `computercraft shutdown` one time, then waited.
+- **The cause is not proven.** No run reproduced the failure. The form of the failure fits a known behaviour of CC: Tweaked: it ignores "shutdown" while a computer starts. `MindCraft.reboot` already repeats the command for that reason.
+- The correction: each test that waits for a computer that is off repeats the command, through one helper. Runs 162 and 163 passed. Two passes do not prove that the failure cannot come back.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 158, red | The new cases of `b_fixed_sentences_of_uncertain_numbers` and `b_fuel_in_the_report`, and the code of before | 105 of 107, expected. The three cases with a robot that is not running or silent had no fuel. The report of a robot that is not running said "My fuel level is 29" |
+| 159 | The fuel in the recorded data and in the report, and one function for the words of the trips. The new checks of the text of a replacement | 104 of 107. Expected: `b_replacement_through_the_view` and `b_no_voice_for_an_action`. Not expected: `t22_t23_proposals_and_contact_points`, see above |
+| 160 | The sentence about the empty robot. The changed `t22_t23_proposals_and_contact_points`. The changed `b_model_of_the_setting` | 106 of 107, expected. `b_model_of_the_setting`: "expected 3 requests, 42 input tokens and 5 output tokens, but: Usage[requests=3, inputTokens=2, outputTokens=2]" |
+| 161 | The tokens of a refusal and of a cut answer. The new test `b_voice_at_the_moment_of_the_answer` | 107 of 108, expected. The answer was the fixed sentence of `RECOVERY`, then the voice "I delivered 10 of 24 so far." |
+| 162 | Each correction: the check at the moment of the answer, the voice one time for each answer, the shared texts and loops, and the helper of the shutdown | **108 of 108**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `108 GAME TESTS COMPLETE`, `All 108 required tests passed :)` |
+| 163 | The committed code `afa3717`. Only comments differ from run 162 | **108 of 108**. The same three log lines. "Uno interprets requests with the fixed rules, without a language model." |
+| `stop`, after run 163 | In the game, automatic | Passed. `All 1 required tests passed :)`. The status at the stop, at the game time 82: `RUNNING`, taken 24, delivered 0, on board 24, "fuel: 999, about 166 trips between the stations" |
+| `check` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart, at the game time 84: "robot: not running or not loaded, last contact: none since server start", the fuel 999 of the record, and the diary `RUNNING`. At the end: `DONE`, source 40, destination 24, robot 0, and the diary `RUNNING, DONE`. The summary: "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." |
+| `crash` | In the game, automatic | The test halted the process at the game time 421, as expected. The record said `DONE`, delivered 24, on board 0 |
+| `check-crash` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart: `RECOVERY` ("the world is older than the record of this job"), and the diary `RUNNING, DONE, RECOVERY WORLD_OLDER`. At the end: `DONE`, "1 recovery. The totals can be inexact.", and the diary `RUNNING, DONE, RECOVERY WORLD_OLDER, RUNNING, DONE` |
+
+The four phases ran after run 163, one at a time, on the same world. After them the data folder has `mindcraft.dat` and no temporary file. `RobotApi` changed (point 6): thus the phases ran. No Lua module changed.
+
+### Code examination
+
+- The four places of the words of the trips call `Notices.trips`: the notice, the report, the status and the screen. The automatic tests compare their whole texts: `b_low_fuel`, `b_low_fuel_at_the_start`, `b_fuel_in_the_report` and `a_notices_call_no_provider`. They passed without a change.
+- `Uno.ask` computes the result of the checks one time. The record and the answer use the same value.
+- `Measurement` uses `Uno.sentence`. `LiveTests` uses `Uno.NO_VALID_ANSWER`, `Uno.CANNOT_PROPOSE` and `Uno.CANNOT_ANSWER`. `LiveTests` compiles. It did not run.
+- `RobotApi.others` and `RobotApi.count` share one loop. `b_adoption_in_the_proposal` counts 5 items of other kinds, as before.
+- The harness of the measurement records the tokens of a refusal and of a cut answer too. The stand-in of `b_measurement_with_the_stand_in` has no refusal: this is a code examination.
+- The Javadoc of `Uno.Provider.model()` holds for the provider of the measurement: it names a model and calls no model on the route of Uno.
+- The local flags of `JobAccount.facts` are `deliveredGiven` and `fuelGiven`.
+
+### Not changed
+
+The review marked these points as judgement calls. They stay, each with one reason:
+
+- The `instanceof` chains over the typed `Action`: D41, decision 3 chose a typed action with seven kinds. A visitor adds an interface and changes no behaviour.
+- The travelling pair of the fuel level and the trips, and the shared fields of `Facts` and `Line`: the JSON names them as separate numbers (D42, point 19). A type of its own adds a type and changes no behaviour.
+- `None(reason, sentence)`: the two fields say who wrote the answer, the fixed rules or a provider (D42, point 16). The constructor checks that exactly one is set.
+- The model IDs as text: the setting takes each text, and the service checks it (D42, point 6). A closed list would refuse a new model of the service.
+- The many tickets in `Uno.java`: the class is the one place of the conversation. A split moves code and changes no behaviour: a point for increment C.
+- `JobAccount.lines`: it reads the diary of an actor and the facts of each job, not the account of one job. Thus it is static, next to the facts.
+- The two extra `none` requests of the measurement: they test point 15 of D42, and the project owner did not object (D42, point 7).
+
+### Not covered
+
+- No run with the real service. The usage of a refusal and of a cut answer of the real service is not known from a run.
+- The `-Plive` and `-Pmeasure` runs did not run: they cost money and need the consent of the project owner.
+- The new texts on the screen of a client: the play session of B has them in steps 3 and 4.
+- That the repeated shutdown removes the failure of run 155: not proven.
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1028,6 +3280,7 @@ Date: 2026-11-14. See D39.
 | `gradlew checkRules` on the files of the repository | Static check | Passed |
 | `gradlew checkRules` with probe files made for the check, then deleted: a tracked file in `run-gametest`, a text in the form of an API key, an email address, an import of `dan200.computercraft.shared`, an assignment of `Uno.provider` in a test class, and a local path in three forms (a drive with a backslash, a drive with a slash, a home folder) | Static check | Each rule failed on its probe, as expected |
 | The workflow `.github/workflows/check.yml`, first run, on the commit `1e83bf4` | Static check, then in the game, automatic, on a GitHub runner (Ubuntu, Temurin 17) | Passed in about 7 minutes. `check` passed. The normal run: "All 81 required tests passed". The four restart phases passed |
+| `gradlew checkRules` after the retrospective of increment B, with two probe files made for the check, then deleted: a document with a sentence of 50 words and a table row of 60 words, and a test class with a `computercraft shutdown` command | Static check | Each new rule failed on its probe: "a sentence of more than 45 words" on the sentence, not on the table row, and "a computercraft shutdown outside MindCraftTests.shutDown". The files of the repository pass |
 
 ## Manual test in the game
 
@@ -1087,6 +3340,14 @@ Third manual test, on the projector and its hologram:
 | Increment A: a confirmation and the buttons of a job with a provider that counts its calls | The tests count the calls only for the notices, the summary and the "Report" button. The rest is a code examination |
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
+| Increment B: the `-Plive` run that CLAUDE.md asks for before the merge into `main`, after the change of the system text of `ClaudeProvider` (tickets #18 and #20). Thus no sentence of the real model passed or failed a check | A `-Plive` run costs money and needs the consent of the project owner. Ticket #27 has it, with the paid runs of the measurement. The automatic tests use providers written in the tests. See "Increment B — the voice of Uno and its checks (ticket #20)" |
+| Increment B: a failure of the real Claude service after ticket #21: an error, a refusal, the time limit, or an answer that Uno cannot read | No run with the real service tested it. Such a run costs money and needs the consent of the project owner. The tests use providers written in the tests. See "Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)" |
+| Increment B: the measurement of the models with the real service (ticket #26 built its harness) | Each run costs money and needs the consent of the project owner. Ticket #27 has the paid runs. See "Increment B — the harness of the measurement (ticket #26)" |
+| Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
+| Increment B: the screen with the conversation part first, in a client: the look, and the height in a small window | It needs a person at the game. The play session of increment B has a step for it. See "Increment B — the conversation part comes first on the screen (ticket #25)" |
+| Increment B: the other parts that the player sees in a client: the voice, the fixed sentences before it, the proposals of an adoption and of a replacement, the low fuel notice in the chat, the fuel line of a panel, and the confirmation of "Cancel" | It needs a person at the game. The automatic tests read the answers of Uno, the view that the server builds and the exit of the notices. [PLAY_SESSION_B.md](PLAY_SESSION_B.md) has a step for each |
+| Increment B: the configuration file on a real installation, and the log lines of the provider and of a request with a key | The game test server never uses Claude. Steps S2, S3 and C7 of [PLAY_SESSION_B.md](PLAY_SESSION_B.md) read them in the development client. The installed jar is deferred (D27) |
+| Increment B: the play session (ticket #29) | It needs the project owner at the game. It comes after the measurement (ticket #27). The checklist is [PLAY_SESSION_B.md](PLAY_SESSION_B.md) |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
 
 ## Known limits

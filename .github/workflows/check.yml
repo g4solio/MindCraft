@@ -1,9 +1,11 @@
-# The guardrail of the repository: at each push and pull request, the rules of CLAUDE.md, the normal in-game run
+# The guardrail of the repository: at each push to main and at each pull request, the rules of CLAUDE.md, the normal in-game run
 # and the four phases of the server restart test. The test with the real Claude service never runs here: it needs a key.
 name: Check
 
+# A pull request gets one run: the run of the pull request. A push to a branch of a pull request does not start a second run.
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:

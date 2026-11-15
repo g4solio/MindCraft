@@ -4,7 +4,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
+import io.github.g4solio.mindcraft.MindRuntime.Cause;
+import io.github.g4solio.mindcraft.MindRuntime.Entry;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
 import io.github.g4solio.mindcraft.MindRuntime.Refusal;
@@ -14,6 +17,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,6 +30,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -30,7 +38,8 @@ import java.util.regex.Pattern;
 /**
  * Uno, the central intelligence. In this increment Uno does three things.
  * It changes a written request into one action. A pause and a report run immediately. Each other action becomes a proposal.
- * It sends the request of a proposal to the runtime only when the player confirms. It reports on jobs with data from the runtime only.
+ * It sends the request of a proposal to the runtime only when the player confirms. It reports on jobs with data from the runtime.
+ * When Uno reads, the sentence of a provider can be the answer, after the checks of the server (D42, point 1).
  * <p>
  * Uno has no authority of its own. Each order goes through the ordinary validation of the runtime.
  * Uno speaks English to the player.
@@ -43,6 +52,8 @@ public final class Uno {
      * A provider that reads JSON from a model uses parse(): the one reader of the JSON of an action.
      * The answer also has the input tokens and the output tokens of the model. A provider without a model reports zero.
      * Each exception is a failure of the provider. Only the action "none" says that the request gives no action.
+     * A report and a "none" also have one sentence for the player: the voice. The fixed rules give no sentence (D42, point 1).
+     * After a failure of a provider with a model, the fixed rules read the request (D42, point 17).
      */
     public interface Provider {
         Answer answer(String request, Context context) throws Exception;
@@ -61,6 +72,15 @@ public final class Uno {
         }
 
         /**
+         * The model that the provider asks, for the record of each request (D41, decision 3), or null if it asks none.
+         * It does not say whether the operator rule and the limit of the session apply: callsModel() says that. A provider of the
+         * measurement names the model of the run and says that it calls no model (Measurement.Measured).
+         */
+        default String model() {
+            return null;
+        }
+
+        /**
          * The line of the screen that says where the written requests of the player go on this route, or null for no line.
          * A provider that sends the text out of the server must say so here (D33).
          */
@@ -73,12 +93,55 @@ public final class Uno {
     public record Answer(Action action, long inputTokens, long outputTokens) {
     }
 
-    /** What a provider knows: the names of the stations of the player, and the robots of the player, each with a "free" flag (D21). */
-    public record Context(List<String> stations, List<Robot> robots) {
+    /**
+     * A failure of a provider after the model answered: a refusal, or an answer that the model did not end (D42, point 17).
+     * The service billed the tokens of that answer. Thus they count in the counter of the session and in the record of the request.
+     * The message is the reason that the player reads.
+     */
+    public static final class UnusableAnswer extends Exception {
+        final long inputTokens, outputTokens;
+
+        public UnusableAnswer(String reason, long inputTokens, long outputTokens) {
+            super(reason);
+            this.inputTokens = inputTokens;
+            this.outputTokens = outputTokens;
+        }
+    }
+
+    /**
+     * What a provider knows: only the data of the player. The names of the stations, and the robots, each with a "free" flag (D21).
+     * The facts of each job of the player, and the newest lines of the diary of the player (D42, point 2).
+     * Never a coordinate, the name of a player or the free text of a reason: a recorded reason can hold a position.
+     */
+    public record Context(List<String> stations, List<Robot> robots, List<Facts> jobs, List<Line> diary) {
         public record Robot(int id, boolean free) {
         }
 
-        /** The context as JSON, for a model. Its shape is the shape of S2. */
+        /**
+         * The facts of one job: the part of its account that goes to the model. JobAccount builds them (D42, point 2).
+         * The model does not get an uncertain number (D32). Such a number is null, and a sentence of "uncertain" says which value
+         * is not given, and why (D42, point 3). "Still to carry" and "above the reserve" are derived numbers: the model does not
+         * calculate (D42, point 4). The age of an observation is in words. The fuel level and the trips that it gives between
+         * the two docks are the values of the last contact of the robot with an active job (D42, point 19). The trips are a derived number too.
+         */
+        public record Facts(int job, int robot, String module, String item, String from, String to, int quantity, int reserve,
+                            State state, Cause cause, Integer delivered, Integer onBoard, Stock source, Stock destination,
+                            Integer stillToCarry, Integer aboveReserve, Integer fuel, Integer trips, List<String> uncertain) {
+        }
+
+        /** An observed stock: the count, and the age of the observation in words, for example "12 min ago". */
+        public record Stock(int count, String age) {
+        }
+
+        /**
+         * One line of the diary (D31), as data: the age in words, the job, the robot, the kind, the state, the cause, and the quantities
+         * of the job at that moment. A number that the facts of its job do not give is null here too.
+         */
+        public record Line(String age, int job, int robot, Entry.Kind kind, State state, Cause cause, int quantity, int reserve,
+                           Integer delivered, Integer onBoard) {
+        }
+
+        /** The context as JSON, for a model. The stations and the robots have the shape of S2. A value that is null is not in the JSON. */
         String toJson() {
             JsonArray names = new JsonArray();
             stations.forEach(names::add);
@@ -89,32 +152,110 @@ public final class Uno {
                 item.addProperty("free", robot.free());
                 list.add(item);
             }
+            JsonArray facts = new JsonArray();
+            for (Facts job : jobs) {
+                JsonObject item = new JsonObject();
+                item.addProperty("job", job.job());
+                item.addProperty("robot", job.robot());
+                item.addProperty("module", job.module());
+                item.addProperty("item", job.item());
+                item.addProperty("from", job.from());
+                item.addProperty("to", job.to());
+                item.addProperty("quantity", job.quantity());
+                item.addProperty("reserve", job.reserve());
+                item.addProperty("state", job.state().name());
+                item.addProperty("cause", job.cause().name());
+                put(item, "delivered", job.delivered());
+                put(item, "onBoard", job.onBoard());
+                put(item, "sourceStock", job.source());
+                put(item, "destinationStock", job.destination());
+                put(item, "stillToCarry", job.stillToCarry());
+                put(item, "aboveReserve", job.aboveReserve());
+                put(item, "fuel", job.fuel());
+                // The name says what the number counts. With "fuelForTrips" the real model read it as a part of the fuel (run #27.3 of TEST_RESULTS.md).
+                put(item, "tripsWithThisFuel", job.trips());
+                JsonArray uncertain = new JsonArray();
+                job.uncertain().forEach(uncertain::add);
+                item.add("uncertain", uncertain);
+                facts.add(item);
+            }
+            JsonArray lines = new JsonArray();
+            for (Line line : diary) {
+                JsonObject item = new JsonObject();
+                item.addProperty("age", line.age());
+                item.addProperty("job", line.job());
+                item.addProperty("robot", line.robot());
+                item.addProperty("kind", line.kind().name());
+                item.addProperty("state", line.state().name());
+                item.addProperty("cause", line.cause().name());
+                item.addProperty("quantity", line.quantity());
+                item.addProperty("reserve", line.reserve());
+                put(item, "delivered", line.delivered());
+                put(item, "onBoard", line.onBoard());
+                lines.add(item);
+            }
             JsonObject context = new JsonObject();
             context.add("stations", names);
             context.add("robots", list);
+            context.add("jobs", facts);
+            context.add("diary", lines);
             return context.toString();
+        }
+
+        /** A number that is not null. An uncertain number is not in the JSON: the model cannot repeat it. */
+        private static void put(JsonObject json, String name, Integer value) {
+            if (value != null) json.addProperty(name, value);
+        }
+
+        /** A stock that is not null: its count and its age. */
+        private static void put(JsonObject json, String name, Stock stock) {
+            if (stock == null) return;
+            JsonObject item = new JsonObject();
+            item.addProperty("count", stock.count());
+            item.addProperty("age", stock.age());
+            json.add(name, item);
         }
     }
 
     /**
      * One action of the closed list (D29), with typed values. Uno still checks each value against the world: a provider can give anything.
      * An answer that Uno cannot read is an action too: Unreadable. Its sentence says that the answer was not valid.
+     * From a provider with a model, the fixed rules read the request instead (D42, point 17).
      */
     public sealed interface Action {
         /** A new job, with its order. */
         record Start(Order order) implements Action {
         }
 
-        /** An action about one job: change, pause, resume, cancel or report. A change has the new values: null keeps a value. */
-        record OnJob(Kind kind, Target target, Integer quantity, Integer reserve) implements Action {
+        /**
+         * An action about one job: change, pause, resume, cancel or report. A change has the new values: null keeps a value.
+         * A report of a provider also has one sentence for the player: the voice (D42, point 1). Null without a sentence.
+         * Uno does not use a sentence for the other kinds: the server writes the answer when Uno acts.
+         */
+        record OnJob(Kind kind, Target target, Integer quantity, Integer reserve, String sentence) implements Action {
+            /** An action without a sentence. The fixed rules give no sentence. */
+            public OnJob(Kind kind, Target target, Integer quantity, Integer reserve) {
+                this(kind, target, quantity, reserve, null);
+            }
         }
 
-        /** No action of the list, with one short reason for the player. The reason is not empty, and is cut at MAX_REASON_LENGTH. */
-        record None(String reason) implements Action {
+        /**
+         * No action of the list. A provider gives one sentence for the player: the voice (D42, point 15). It takes the place of the
+         * reason of increment A. The fixed rules give no sentence: they give one short reason, which is not empty.
+         * Exactly one of the two is not null.
+         */
+        record None(String reason, String sentence) implements Action {
             public None {
-                reason = reason.trim();
-                if (reason.isEmpty()) throw new IllegalArgumentException("the reason of \"none\" is empty");
-                reason = reason.substring(0, Math.min(reason.length(), MAX_REASON_LENGTH));
+                if ((reason == null) == (sentence == null)) throw new IllegalArgumentException("\"none\" has a reason or a sentence");
+                if (reason != null) {
+                    reason = reason.trim();
+                    if (reason.isEmpty()) throw new IllegalArgumentException("the reason of \"none\" is empty");
+                }
+            }
+
+            /** The answer of the fixed rules: a reason, and no sentence. */
+            public None(String reason) {
+                this(reason, null);
             }
         }
 
@@ -147,18 +288,63 @@ public final class Uno {
     /** The kinds of action of the closed list (D29). */
     enum Kind { START, CHANGE, PAUSE, RESUME, CANCEL, REPORT, NONE }
 
+    /** The result of the checks of the sentence of a provider (D42, points 4 and 5). The record of a request holds it: see ModelRequest. */
+    enum Voice {
+        /** The sentence of a report or of "none" passed the checks: Uno says it. */
+        PASSED,
+        /**
+         * The sentence failed a check: Uno uses the fixed template. An empty sentence fails too, and a sentence with a number that is
+         * uncertain at the moment of the answer (see uncertainNow).
+         */
+        FAILED,
+        /** The answer needs no sentence: the server writes the text of an action. The fixed rules give no sentence either. */
+        NOT_NEEDED,
+        /** The model gave no valid action: the fixed rules read the request (D42, point 17). See noValidAction. */
+        NO_VALID_ACTION
+    }
+
+    /**
+     * The record of one written request to a provider with a model (D33, and D42): the model that the provider names, the input tokens
+     * and the output tokens of the answer, the time of the answer in milliseconds, the action of the model and the result of the checks.
+     * The action is null when the provider gave no answer: a failure or the time limit. Then the tokens are those of an UnusableAnswer,
+     * or zero, as in the counter.
+     * Uno keeps the record of the newest request of each actor in the server session, and nothing more (D24).
+     */
+    record ModelRequest(String model, long inputTokens, long outputTokens, long millis, Action action, Voice voice) {
+        /** The sentence that Uno did not use: the sentence of the model after a failed check. Null in each other case. */
+        String unused() {
+            return voice == Voice.FAILED ? sentence(action) : null;
+        }
+    }
+
     /** The provider of the /uno command and of the screen. A different provider can replace it. See MindCraft.chooseProvider. */
     static volatile Provider provider = new RuleProvider();
     static final long TIMEOUT_MS = 20_000;
     /** The limit of the requests to a model for each actor in one server session (D33). An initial value, fixed in the code. */
     static final int MODEL_REQUESTS = 100;
-    /** The fixed rules. They read the request of an actor who cannot use the model now. They have no limit. */
-    private static final Provider RULES = new RuleProvider();
+    /**
+     * The fixed rules. They read the request of an actor who cannot use the model now, and a request for which the model gave no
+     * valid action. They have no limit.
+     */
+    private static final RuleProvider RULES = new RuleProvider();
     private static final String LIMIT_REACHED = "You reached the limit of " + MODEL_REQUESTS + " model requests in this server session. "
         + "Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. ";
-    /** The limit of the reason of a "none" action. A provider writes the reason, and the screen has little room. */
-    private static final int MAX_REASON_LENGTH = 200;
+    /** The start of the sentence before the answer of the fixed rules when the model gave no valid action (D42, point 17). */
+    static final String NO_VALID_ANSWER = "The model gave no valid answer";
+    /** The whole sentence before the answer of the fixed rules when the model gave no valid action (D42, point 17). %s is the reason. */
+    private static final String NO_VALID_ACTION = NO_VALID_ANSWER + " (%s), "
+        + "thus I read your request with the fixed rules: they understand only simple sentences. ";
     private static final String INVALID = "I did not get a valid configuration. I created no proposal.";
+    /** The start of the answer to the "none" of the fixed rules, before their reason: the template of increment A. */
+    static final String CANNOT_PROPOSE = "I cannot propose a job: ";
+    /** The answer to "none" when its sentence fails a check (D42, point 15). */
+    static final String CANNOT_ANSWER = "I cannot answer that. I did nothing.";
+    /** The limits of a sentence of a provider (D42, point 5). Initial values. A cut can remove a caution: a longer sentence fails. */
+    static final int MAX_SENTENCES = 2, MAX_SENTENCE_LENGTH = 300;
+    /** A run of digits, in each script: a number as a sentence writes it. */
+    private static final Pattern DIGITS = Pattern.compile("\\p{Nd}+");
+    /** The end of a sentence: a full stop, a question mark or an exclamation mark, a closing quote or bracket, and a space. */
+    private static final Pattern SENTENCE_END = Pattern.compile("[.!?]+['\"’”)]*\\s+");
     /** The sentence of Uno before its first answer in a session. */
     private static final String GREETING = "Tell me what you need.";
 
@@ -173,7 +359,7 @@ public final class Uno {
      * What a confirmation asks the runtime: its ordinary request, with the values of the proposal. The runtime validates again.
      * A request about a job names the robot and the job ID. Thus a confirmation never reaches a different job.
      */
-    sealed interface Request permits Start, Change, Control {
+    sealed interface Request permits Start, Replace, Change, Control {
         /** Sends the request. A refusal of the runtime is a Refusal. The answer is the sentence of Uno. */
         String send(MindRuntime runtime, Actor actor);
 
@@ -185,12 +371,30 @@ public final class Uno {
     record Start(Order order) implements Request {
         @Override
         public String send(MindRuntime runtime, Actor actor) {
-            return "Job " + runtime.start(actor, order).id + " started on robot #" + order.robot() + ".";
+            return started(runtime.start(actor, order));
         }
 
         @Override
         public String what() {
             return "start the job";
+        }
+    }
+
+    /**
+     * A new job in the place of the open job of the robot (D42, point 10). The request names the job that it replaces.
+     * The answer gives the load that the new job adopted: it can differ from the load in the text of the proposal.
+     */
+    record Replace(int job, Order order) implements Request {
+        @Override
+        public String send(MindRuntime runtime, Actor actor) {
+            Job next = runtime.replace(actor, job, order);
+            return Notices.capital(Notices.job(job, order.robot())) + " is cancelled. " + started(next)
+                + (next.carried > 0 ? "" : " The robot holds no " + MindRuntime.itemName(next.item) + ": the new job starts without a load.");
+        }
+
+        @Override
+        public String what() {
+            return "replace the job";
         }
     }
 
@@ -251,6 +455,8 @@ public final class Uno {
         final Map<UUID, Usage> usage = new ConcurrentHashMap<>();
         /** The actors that Uno told that they reached the limit. Uno says it one time in a session. */
         final Set<UUID> toldLimit = ConcurrentHashMap.newKeySet();
+        /** The record of the newest written request of each actor to a model. */
+        final Map<UUID, ModelRequest> requests = new ConcurrentHashMap<>();
         int proposalCount;
     }
 
@@ -305,6 +511,14 @@ public final class Uno {
         return session.usage.getOrDefault(actor.id(), Usage.NONE);
     }
 
+    /**
+     * The record of the newest written request of the actor to a model in this server session, or null. Uno writes it before the
+     * answer: thus the consumer of the answer of a request reads the record of that request. A test reads it.
+     */
+    static ModelRequest modelRequest(Actor actor) {
+        return session.requests.get(actor.id());
+    }
+
     /** Where a written request of this actor to this provider goes now. */
     static Route route(Actor actor, Provider provider) {
         return route(session, actor, provider);
@@ -329,10 +543,13 @@ public final class Uno {
      * <p>
      * A provider with a model serves only an operator, and only below the limit of the session (D33).
      * In each other case the fixed rules read the request.
+     * If the model gives no valid action, the fixed rules read the same request, and Uno says so first (D42, point 17).
+     * A provider without a model keeps the failure sentence.
+     * The context of the provider has the facts of the moment of the request. The answer uses the record of the moment of the answer.
      */
     public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
         Session mine = session;
-        Context context = context(MindRuntime.get(server), actor);
+        Context context = context(MindRuntime.get(server), actor, server.overworld().getGameTime());
         if (!mine.pending.add(actor.id())) {
             reply.accept("I am still working on your previous request.");
             return;
@@ -340,10 +557,11 @@ public final class Uno {
         mine.proposals.remove(actor.id());
         Route route = route(mine, actor, provider);
         Provider chosen = route == Route.MODEL || route == Route.NO_MODEL ? provider : RULES;
-        // A request counts when Uno sends it. A failure and the time limit add no tokens.
+        // A request counts when Uno sends it. Its tokens count with its answer: see billed.
         if (route == Route.MODEL) mine.usage.merge(actor.id(), new Usage(1, 0, 0), Usage::plus);
         // Uno says one time that the limit is reached. The screen tells a player who is not an operator why the fixed rules answer.
         String limit = route == Route.AT_LIMIT && mine.toldLimit.add(actor.id()) ? LIMIT_REACHED : "";
+        long sent = System.nanoTime();
         CompletableFuture
             .supplyAsync(() -> {
                 try {
@@ -353,20 +571,75 @@ public final class Uno {
                 }
             })
             .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .whenComplete((answer, error) -> server.execute(() -> {
-                // The answer belongs to the session of its request. An answer for an earlier session changes nothing.
-                // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
-                if (server.isStopped() || mine != session) return;
-                mine.pending.remove(actor.id());
-                if (error == null && route == Route.MODEL) {
-                    mine.usage.merge(actor.id(), new Usage(0, answer.inputTokens(), answer.outputTokens()), Usage::plus);
-                }
-                reply.accept(limit + (error == null ? act(mine, MindRuntime.get(server), actor, answer, server.overworld().getGameTime()) : failure(error)));
-            }));
+            .whenComplete((answer, error) -> {
+                // The time of the answer of the provider, or of the time limit. The wait for the server thread does not count.
+                long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent);
+                server.execute(() -> {
+                    // The answer belongs to the session of its request. An answer for an earlier session changes nothing.
+                    // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
+                    if (server.isStopped() || mine != session) return;
+                    mine.pending.remove(actor.id());
+                    Usage billed = billed(answer, error);
+                    if (route == Route.MODEL) mine.usage.merge(actor.id(), billed, Usage::plus);
+                    MindRuntime runtime = MindRuntime.get(server);
+                    long now = server.overworld().getGameTime();
+                    // A model that gives no valid action (D42, point 17): the request still counts, and the fixed rules read it with the same context.
+                    String why = route == Route.MODEL ? noValidAction(answer, error) : null;
+                    // The result of the checks, one time for each answer. The fixed sentences and the voice come from the moment of the
+                    // answer: a number of the sentence that is uncertain now fails the check, as a number that the server did not send.
+                    Voice voice = error == null ? voice(answer.action(), request, context) : null;
+                    if (voice == Voice.PASSED && uncertainNow(sentence(answer.action()), context, context(runtime, actor, now))) voice = Voice.FAILED;
+                    // The record of a request to a model, and its line in the server log (D33, D42). It comes before the answer.
+                    if (route == Route.MODEL) {
+                        ModelRequest record = new ModelRequest(provider.model(), billed.inputTokens(), billed.outputTokens(), millis,
+                            error == null ? answer.action() : null, why != null ? Voice.NO_VALID_ACTION : voice);
+                        mine.requests.put(actor.id(), record);
+                        MindCraft.LOGGER.info("{}", line(record, request));
+                    }
+                    // The fixed rules give no sentence: their answer needs none.
+                    String said = why != null ? NO_VALID_ACTION.formatted(why) + act(mine, runtime, actor, RULES.answer(request, context), Voice.NOT_NEEDED, now)
+                        : error == null ? act(mine, runtime, actor, answer, voice, now) : failure(error);
+                    reply.accept(limit + said);
+                });
+            });
     }
 
-    /** Only the data that the actor owns. A provider must not see the stations or robots of other players. */
-    static Context context(MindRuntime runtime, Actor actor) {
+    /**
+     * The line of the server log for a written request to a model (D42, choices of the implementation): the record, and the text of
+     * the request of the player. After a failed check, also the sentence that Uno did not use. Each text is in JSON quotes: a line break
+     * in a text does not start a new line of the log. The line has no key: only the client of the provider holds it. It has no
+     * coordinate: the context of the request is not in the line, and the model gets no coordinate. The request is the text of the player.
+     */
+    private static String line(ModelRequest record, String request) {
+        String unused = record.unused();
+        return "Uno request: model " + record.model() + ", " + record.inputTokens() + " input tokens, " + record.outputTokens()
+            + " output tokens, " + record.millis() + " ms, action " + kind(record.action()) + ", checks " + record.voice()
+            + (unused == null ? "" : ", unused sentence " + new JsonPrimitive(unused)) + ", request " + new JsonPrimitive(request);
+    }
+
+    /** The action of a record in the server log: its kind, "unreadable", or "no answer" after a failure or the time limit. */
+    private static String kind(Action action) {
+        if (action instanceof Action.Start) return "start";
+        if (action instanceof Action.OnJob job) return job.kind().name().toLowerCase(Locale.ROOT);
+        if (action instanceof Action.None) return "none";
+        return action == null ? "no answer" : "unreadable";
+    }
+
+    /**
+     * Why a model gave no valid action, or null if it gave one (D42, point 17): a failure of the service, the time limit of Uno,
+     * a refusal, or an answer that Uno cannot read. The Claude provider gives a refusal and a cut answer as an UnusableAnswer.
+     */
+    private static String noValidAction(Answer answer, Throwable error) {
+        if (error instanceof TimeoutException) return "the request reached the time limit";
+        if (error != null) return reason(error);
+        return answer.action() instanceof Action.Unreadable ? "I cannot read its answer" : null;
+    }
+
+    /**
+     * Only the data that the actor owns. A provider must not see the stations, the robots, the jobs or the diary of other players.
+     * "Now" is the game time of the request: the ages and the doubts of the facts come from it. A test gives a later moment.
+     */
+    static Context context(MindRuntime runtime, Actor actor, long now) {
         List<String> stations = new ArrayList<>();
         runtime.stations.forEach((name, station) -> {
             if (actor.owns(station.owner())) stations.add(name);
@@ -377,7 +650,8 @@ public final class Uno {
             Job job = runtime.jobs.get(id);
             robots.add(new Context.Robot(id, job == null || !job.state.open()));
         });
-        return new Context(List.copyOf(stations), List.copyOf(robots));
+        List<Context.Facts> jobs = runtime.jobs(actor).stream().map(job -> JobAccount.of(job, now).facts()).toList();
+        return new Context(List.copyOf(stations), List.copyOf(robots), jobs, JobAccount.lines(runtime.diary(actor), jobs, now));
     }
 
     /**
@@ -386,11 +660,12 @@ public final class Uno {
      * <li>start, with the order: {"action": "start", "module": "keep_stock" or "transport", "robot": 0, "from": "...", "to": "...",
      * "item": "minecraft:coal", "quantity": 64, "reserve": 32}. A reserve that is null or absent is 0.</li>
      * <li>change, pause, resume, cancel, report, with the target: a robot number, a station name, or nothing.
-     * {"action": "pause", "robot": 3, "station": null}. A change also has "quantity", "reserve" or both. Null is a value that does not change.</li>
-     * <li>none, with one short reason for the player: {"action": "none", "reason": "the quantity is missing"}.</li>
+     * {"action": "pause", "robot": 3, "station": null}. A change also has "quantity", "reserve" or both. Null is a value that does not change.
+     * A report also has its sentence for the player in "reason" (D42, point 1).</li>
+     * <li>none, with its sentence for the player: {"action": "none", "reason": "You did not give the quantity."}.</li>
      * </ul>
      * A field that the action does not use is ignored. A model does not guarantee the case of a value of its schema.
-     * Text that is not such an action, a value of a wrong type, and a "none" without a reason give Unreadable.
+     * Text that is not such an action, a value of a wrong type, and a "none" without the field "reason" give Unreadable.
      */
     static Action parse(String json) {
         try {
@@ -402,11 +677,14 @@ public final class Uno {
                     o.get("to").getAsString(), ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(o.get("item").getAsString())),
                     o.get("quantity").getAsInt(), reserve == null || reserve.isJsonNull() ? 0 : reserve.getAsInt()));
             }
-            if (kind == Kind.NONE) return new Action.None(o.get("reason").getAsString());
+            // The field "reason" carries the sentence of "none" (D42, point 15). An empty sentence fails the check of the length.
+            if (kind == Kind.NONE) return new Action.None(null, o.get("reason").getAsString());
             Target target = Target.of(o);
             if (target == null) return new Action.Unreadable();
             boolean change = kind == Kind.CHANGE;
-            return new Action.OnJob(kind, target, change ? integer(o, "quantity") : null, change ? integer(o, "reserve") : null);
+            // The field "reason" carries the sentence of a report. A sentence for an action of the server is not read (D42, point 1).
+            return new Action.OnJob(kind, target, change ? integer(o, "quantity") : null, change ? integer(o, "reserve") : null,
+                kind == Kind.REPORT ? text(o, "reason") : null);
         } catch (RuntimeException e) {
             return new Action.Unreadable();
         }
@@ -414,22 +692,111 @@ public final class Uno {
 
     /**
      * The sentence of Uno for the answer of a provider. Uno reads the answer and does not trust it: a provider can give anything.
-     * "Pause" and "report" run immediately (D29). "Start", "change", "resume" and "cancel" become a proposal. "None" gives its reason.
+     * "Pause" and "report" run immediately (D29). "Start", "change", "resume" and "cancel" become a proposal.
+     * "None" gives its sentence, or the reason of the fixed rules.
+     * The voice is the result of the checks of the sentence of the action (D42, points 4 and 5).
      */
-    private static String act(Session mine, MindRuntime runtime, Actor actor, Answer answer, long now) {
+    private static String act(Session mine, MindRuntime runtime, Actor actor, Answer answer, Voice voice, long now) {
         Action action = answer.action();
         if (action instanceof Action.Start start) return start(mine, runtime, actor, start.order());
-        if (action instanceof Action.None none) return "I cannot propose a job: " + none.reason() + (none.reason().endsWith(".") ? "" : ".");
+        if (action instanceof Action.None none) return none(none, voice);
         // An Unreadable answer, or no action at all.
         if (!(action instanceof Action.OnJob job) || job.target() == null) return INVALID;
         return switch (job.kind()) {
             case PAUSE -> pause(runtime, actor, job.target());
-            case REPORT -> report(runtime, actor, job.target(), now);
+            // A report with a sentence that passes the checks gets the voice. Each other report gets the fixed report of A (D42, point 16).
+            case REPORT -> voice == Voice.PASSED ? voiced(runtime, actor, job, now) : report(runtime, actor, job.target(), now);
             case CHANGE -> change(mine, runtime, actor, job);
             case RESUME, CANCEL -> control(mine, runtime, actor, job.target(), job.kind());
             // A start and a "none" have actions of their own.
             case START, NONE -> INVALID;
         };
+    }
+
+    /**
+     * The result of the checks for the action of a provider (D42, points 4 and 5). Only a report and a "none" have a sentence.
+     * The fixed rules give no sentence: their answer needs none. A model without a valid action is NO_VALID_ACTION: see noValidAction.
+     */
+    static Voice voice(Action action, String request, Context context) {
+        String sentence = sentence(action);
+        if (sentence == null) return Voice.NOT_NEEDED;
+        return passes(sentence, request, context) ? Voice.PASSED : Voice.FAILED;
+    }
+
+    /** The sentence of the action of a provider, or null: only a report and a "none" have one. */
+    static String sentence(Action action) {
+        return action instanceof Action.None none ? none.sentence()
+            : action instanceof Action.OnJob job && job.kind() == Kind.REPORT ? job.sentence() : null;
+    }
+
+    /**
+     * The checks of a sentence of a provider. The length (D42, point 5): two sentences and 300 characters at most, and not empty.
+     * The numbers (D42, point 4): each run of digits of the sentence is a run of digits of the context that the server sent,
+     * or of the request of the player. Thus the model cannot invent a number. A number in words passes: a known limit (D32).
+     */
+    static boolean passes(String sentence, String request, Context context) {
+        String text = sentence.strip();
+        if (text.isEmpty() || text.length() > MAX_SENTENCE_LENGTH || SENTENCE_END.split(text).length > MAX_SENTENCES) return false;
+        Set<String> sent = runs(context.toJson());
+        sent.addAll(runs(request));
+        return sent.containsAll(runs(text));
+    }
+
+    /** The runs of digits of a text. */
+    private static Set<String> runs(String text) {
+        Set<String> runs = new HashSet<>();
+        Matcher digits = DIGITS.matcher(text);
+        while (digits.find()) runs.add(digits.group());
+        return runs;
+    }
+
+    /**
+     * Whether the sentence gives a number that is uncertain at the moment of the answer. The facts go with the request. The fixed
+     * sentences and the voice come with the answer, up to the time limit later. In that time a job can enter RECOVERY, its robot can
+     * stop, or an observation can become old (D42, point 3). Thus Uno builds the facts again for the moment of the answer: "later".
+     * A number is uncertain now when the facts of the request give it and the facts of the answer do not give it for the same job.
+     * A job that is not in the facts of the answer gives none of its numbers. The sentence fails when one of its runs of digits is such a
+     * number, as it fails for a number that the server did not send (D42, point 4). A sentence without that number keeps the voice.
+     */
+    static boolean uncertainNow(String sentence, Context sent, Context later) {
+        Map<Integer, Context.Facts> now = new HashMap<>();
+        for (Context.Facts facts : later.jobs()) now.put(facts.job(), facts);
+        Set<String> lost = new HashSet<>();
+        for (Context.Facts facts : sent.jobs()) {
+            List<Integer> before = numbers(facts), after = now.containsKey(facts.job()) ? numbers(now.get(facts.job())) : null;
+            for (int i = 0; i < before.size(); i++) {
+                if (before.get(i) != null && (after == null || after.get(i) == null)) lost.add(before.get(i).toString());
+            }
+        }
+        return !Collections.disjoint(runs(sentence), lost);
+    }
+
+    /** The numbers of the facts of a job that can be uncertain, in a fixed order. Null for a number that the facts do not give. */
+    private static List<Integer> numbers(Context.Facts facts) {
+        return Arrays.asList(facts.delivered(), facts.onBoard(), facts.source() == null ? null : facts.source().count(),
+            facts.destination() == null ? null : facts.destination().count(), facts.stillToCarry(), facts.aboveReserve(), facts.fuel(), facts.trips());
+    }
+
+    /**
+     * The answer to "none". The voice of a provider stands alone: the sentence, or one fixed sentence if it fails a check (D42, point 15).
+     * The fixed rules give a reason: their answer is the template of increment A.
+     */
+    private static String none(Action.None none, Voice voice) {
+        if (none.sentence() == null) return CANNOT_PROPOSE + none.reason() + (none.reason().endsWith(".") ? "" : ".");
+        return voice == Voice.PASSED ? none.sentence().strip() : CANNOT_ANSWER;
+    }
+
+    /**
+     * The voice of a report that passed the checks (D42, point 16). First the fixed sentences about the uncertain numbers, then the voice.
+     * The fixed sentences are about the job that the target names. With no target, or with a target that does not fit exactly one job,
+     * they are about each job of the actor: the model had the facts of each job. They read the record now, as the fixed report does.
+     */
+    private static String voiced(MindRuntime runtime, Actor actor, Action.OnJob report, long now) {
+        Job named = report.target().none() ? null : find(runtime, actor, report.target()).job();
+        List<String> said = new ArrayList<>();
+        for (Job job : named != null ? List.of(named) : runtime.jobs(actor)) said.addAll(JobAccount.of(job, now).cautions());
+        said.add(report.sentence().strip());
+        return String.join(" ", said);
     }
 
     /**
@@ -588,6 +955,12 @@ public final class Uno {
         return value == null || value.isJsonNull() ? null : value.getAsInt();
     }
 
+    /** A text of an answer, or null if the answer does not give it. A value of a wrong type is a RuntimeException. */
+    private static String text(JsonObject json, String field) {
+        JsonElement value = json.get(field);
+        return value == null || value.isJsonNull() ? null : value.getAsString();
+    }
+
     /** A job in a proposal: its ID, its robot and what it does. */
     private static String name(Job job) {
         String item = MindRuntime.itemName(job.item), from = "'" + job.from + "'", to = "'" + job.to + "'";
@@ -609,14 +982,51 @@ public final class Uno {
         return name + ": " + (before == after ? before + ", unchanged" : "from " + before + " to " + after);
     }
 
-    /** A start becomes a proposal, after the ordinary validation of the order. */
+    /**
+     * A start becomes a proposal, after the ordinary validation of the order. The proposal says what the robot holds.
+     * A start for a robot with an open job of the actor is the proposal of a replacement (D42, point 10). The new order must be
+     * valid as for a free robot. The text names the job that it replaces. The robot can work until the confirmation.
+     */
     private static String start(Session mine, MindRuntime runtime, Actor actor, Order order) {
+        Job open = runtime.jobs.get(order.robot());
+        boolean replace = open != null && open.state.open() && actor.owns(open.owner);
+        RobotApi robot;
         try {
-            runtime.check(actor, order);
+            robot = replace ? runtime.checkReplace(actor, open.id, order) : runtime.check(actor, order);
         } catch (Refusal refusal) {
             return "I cannot propose this job: " + refusal.getMessage();
         }
-        return propose(mine, actor, describe(order), new Start(order));
+        String text = describe(order) + adoption(order, robot);
+        if (!replace) return propose(mine, actor, text, new Start(order));
+        // The text of a replacement gives the load at the moment of the proposal, also when it is zero (D42, point 10).
+        String empty = robot.held(order.item()) > 0 ? "" : ". The robot holds no " + MindRuntime.itemName(order.item()) + " now";
+        return propose(mine, actor, "cancel " + name(open) + ", and start in its place: " + text + empty
+            + ". The load can change until the confirmation: the new job counts the load that the robot holds then", new Replace(open.id, order));
+    }
+
+    /**
+     * What a new job does with the load of the robot, in the words of a proposal (D42, point 9). Empty for a robot that holds nothing.
+     * The items of the job are its first load. A load above the quantity follows D16.1. The items of other kinds stay on board.
+     * Each sentence starts with ". ", as the other parts of the text of a proposal. The proposal of a replacement repeats these sentences.
+     */
+    static String adoption(Order order, RobotApi robot) {
+        String item = MindRuntime.itemName(order.item()), text = "";
+        int held = robot.held(order.item()), others = robot.others(order.item());
+        if (held > 0) {
+            text += ". The robot holds " + held + " x " + item + ": the job counts them as its first load";
+            // A job that ends stops with the rest on board. A job that does not end keeps the rest for its next need.
+            if (held > order.quantity()) {
+                text += MindRuntime.Behaviour.of(order.module()).ends
+                    ? ". That is more than the quantity: the job delivers at most " + order.quantity() + ", then it stops with the rest on board for your decision"
+                    : ". That is more than the level: the rest stays on board for the next need";
+            }
+        }
+        // The Lua module burns each item that is not the item of the job when the fuel ends (D12). The runtime does not know which items burn.
+        if (others > 0) {
+            text += ". " + others + " items that are not " + item + " stay on board: the job does not count them"
+                + ". When its fuel ends, the robot burns those that can burn";
+        }
+        return text;
     }
 
     /** The proposal of the actor: one for each player, the newest (D23). The server writes its text. The screen shows the same text. */
@@ -632,6 +1042,15 @@ public final class Uno {
             ? "keep at least " + order.quantity() + " x " + item + " in '" + order.to() + "', taken from '" + order.from() + "'"
             : "carry " + order.quantity() + " x " + item + " from '" + order.from() + "' to '" + order.to() + "'";
         return what + ". Reserve to leave in '" + order.from() + "': " + order.reserve() + ". Robot #" + order.robot();
+    }
+
+    /**
+     * The answer to a start that the runtime accepted, for each source of orders: a confirmation, a replacement and the start command.
+     * It gives the load that the job adopted at the start (D42, point 9). That load can differ from the load at the proposal.
+     */
+    static String started(Job job) {
+        return "Job " + job.id + " started on robot #" + job.robot + "."
+            + (job.carried > 0 ? " It counts the " + job.carried + " x " + MindRuntime.itemName(job.item) + " on board as its first load." : "");
     }
 
     /** The /uno confirm command: starts the proposal that the player has now. */
@@ -669,11 +1088,32 @@ public final class Uno {
         return lines.isEmpty() ? "I have no record of a job of yours." : String.join("\n", lines);
     }
 
-    /** A failure of the provider: an exception or the time limit. It is not an answer, thus each exception gets this sentence. */
+    /**
+     * A failure of a provider without a model: an exception or the time limit. It is not an answer, thus each exception gets this sentence.
+     * For a provider with a model the fixed rules read the request instead (D42, point 17).
+     */
     private static String failure(Throwable error) {
-        Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
-        String reason = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        return "I cannot interpret the request now (" + reason + "). The jobs in progress continue.";
+        return "I cannot interpret the request now (" + reason(error) + "). The jobs in progress continue.";
+    }
+
+    /** The reason of a failure of a provider: the message of the exception, or its name. */
+    private static String reason(Throwable error) {
+        Throwable cause = cause(error);
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+    }
+
+    /**
+     * The tokens that the service billed for the answer to a request: those of the answer, or those of an UnusableAnswer (D42, point 17).
+     * None after another failure or the time limit: no usage is known. The number of requests is zero: a request counts when Uno sends it.
+     */
+    static Usage billed(Answer answer, Throwable error) {
+        if (error == null) return new Usage(0, answer.inputTokens(), answer.outputTokens());
+        return cause(error) instanceof UnusableAnswer unusable ? new Usage(0, unusable.inputTokens, unusable.outputTokens) : Usage.NONE;
+    }
+
+    /** The exception of the provider inside the exception of the thread of the provider. */
+    private static Throwable cause(Throwable error) {
+        return error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
     }
 
     /**
@@ -791,10 +1231,16 @@ public final class Uno {
             }
             if (item == null) throw new IllegalArgumentException("I do not know the item");
 
+            // No robot named: the only free robot. With no free robot and one robot, that robot: Uno proposes to replace its job (D42, point 10).
             if (robot == null) {
                 List<Integer> free = known.robots().stream().filter(Context.Robot::free).map(Context.Robot::id).toList();
-                if (free.size() != 1) throw new IllegalArgumentException("you have " + free.size() + " free robots: write 'robot N'");
-                robot = free.get(0);
+                if (free.isEmpty() && known.robots().size() == 1) {
+                    robot = known.robots().get(0).id();
+                } else if (free.size() == 1) {
+                    robot = free.get(0);
+                } else {
+                    throw new IllegalArgumentException("you have " + free.size() + " free robots: write 'robot N'");
+                }
             }
 
             String module = text.matches("(?s).*\\b(mantieni|mantenere|almeno|keep)\\b.*") ? MindRuntime.KEEP_STOCK : MindRuntime.TRANSPORT;

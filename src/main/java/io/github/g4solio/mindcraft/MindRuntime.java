@@ -1,12 +1,14 @@
 package io.github.g4solio.mindcraft;
 
 import com.mojang.authlib.GameProfile;
+import io.github.g4solio.mindcraft.MindRuntime.Entry.Kind;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -55,13 +57,13 @@ public class MindRuntime extends SavedData {
     }
 
     /**
-     * Why a job waits or is blocked. The runtime records the cause together with the state, from what it observed in that tick.
+     * Why a job waits, is blocked or needs a check. The runtime records the cause together with the state, from what it observed in that tick.
      * Uno reads this value. It does not guess the cause from the load or from the text of the reason.
      * D34: a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
      */
     public enum Cause {
         /**
-         * No recorded cause: the job does not wait and is not blocked, an older version of the mod wrote the record,
+         * No recorded cause: the job does not wait, is not blocked and does not need a check, an older version of the mod wrote the record,
          * or a module reported an impediment of an unknown kind. Then the recorded reason is all that Uno knows.
          */
         NONE,
@@ -85,8 +87,17 @@ public class MindRuntime extends SavedData {
         OUT_OF_FUEL,
         /** The robot is at the dock, but the station has no inventory at its position. */
         SOURCE_NO_INVENTORY, DESTINATION_NO_INVENTORY,
-        /** A transport reached its quantity with a load on board: the owner lowered the quantity after the pickup. */
-        LOAD_ABOVE_QUANTITY
+        /**
+         * A transport reached its quantity with a load on board: the owner lowered the quantity after the pickup,
+         * or the job adopted a load above its quantity at the start.
+         */
+        LOAD_ABOVE_QUANTITY,
+
+        // Causes of RECOVERY (D42, point 2). The runtime cannot say how the job went. The owner decides.
+        /** The robot holds a different quantity of the item of the job than the record expects. */
+        LOAD_DIFFERS,
+        /** The world is older than the record of the job: a crash or a restored backup (D08.1). The world can miss the last transfers. */
+        WORLD_OLDER
     }
 
     /**
@@ -209,7 +220,7 @@ public class MindRuntime extends SavedData {
         public int revision;
         public State state = State.RUNNING;
         public String reason = "";
-        /** The cause of a WAITING state. NONE in each other state. */
+        /** The cause of a WAITING, BLOCKED or RECOVERY state. NONE in each other state. */
         public Cause cause = Cause.NONE;
         /** Totals of the transfers that the runtime did itself. */
         public int taken, delivered;
@@ -228,11 +239,22 @@ public class MindRuntime extends SavedData {
         public long lastContact = UNKNOWN;
         /** Game time of the start of the current wait. UNKNOWN when the job does not wait. A change of the cause keeps it (D30). */
         public long waitingSince = UNKNOWN;
-        /** The current wait has its long-wait entry in the diary. One for each uninterrupted wait (D30). */
-        public boolean longWait;
+        /** The one-time warnings that the job gave while their condition holds. The long wait is one: one for each uninterrupted wait (D30). */
+        final Warnings warnings = new Warnings();
+        /**
+         * The fuel level of the robot at its last contact with an active job, and the trips between the two docks that it gives (D42, point 11).
+         * UNKNOWN before that contact, for a turtle that needs no fuel, for two docks at the same place, and in a record of an older version.
+         * The record saves them: the report after a load is the same (T22). The next contact reads the level again. See checkFuel.
+         */
+        public int fuel = UNKNOWN, trips = UNKNOWN;
 
         public boolean keepStock() {
             return behaviour == Behaviour.KEEP_STOCK;
+        }
+
+        /** The fuel of the robot is low: it gives fewer than LOW_FUEL_TRIPS trips between the docks (D42, point 11). */
+        boolean lowFuel() {
+            return trips != UNKNOWN && trips < LOW_FUEL_TRIPS;
         }
 
         /** See Behaviour.need. */
@@ -275,22 +297,36 @@ public class MindRuntime extends SavedData {
     }
 
     /**
-     * One line of the diary: a change of the state of a job, or of the cause of a wait or of a block (D31).
+     * One line of the diary: a change of the state of a job, or of the cause of a wait or of a block (D31), or a one-time warning.
      * The number gives the order of the entries of all owners. It grows at each entry, also when the game time goes back after a crash
      * (D08.1). Thus the summary finds the entries after an opening by the number, not by the time (D30).
      * The entry carries what its sentence needs, because the record of the job can be gone: a new job replaces it on the robot.
-     * The quantities are the values of the job at that moment.
+     * The quantities, the fuel level and the trips are the values of the job at that moment. The fuel and the trips are UNKNOWN when the
+     * job has no recorded fuel, and in a record of an older version.
      * "Requested" says that the owner of the job asked for the change: a start, a pause, a resume or a cancellation.
      * The other changes come from what the runtime observed, or from a request of an operator for the job of a different player.
-     * "Long wait" marks the other kind of entry: the job is WAITING for LONG_WAIT ticks without an interruption (D30).
-     * Its state is WAITING, and its cause is the cause at that moment.
      */
     public record Entry(long number, long time, UUID owner, int job, int robot, String from, String to, Item item, State state, Cause cause,
-                        String reason, boolean requested, int quantity, int reserve, int delivered, int carried, boolean longWait) {
+                        String reason, boolean requested, int quantity, int reserve, int delivered, int carried, int fuel, int trips, Kind kind) {
+        /** The kind of an entry (D41, decision 5). Each kind other than a change is a one-time warning: see Warnings. */
+        public enum Kind {
+            /** A change of the state of a job, or of its cause. */
+            CHANGE,
+            /** The job is WAITING for LONG_WAIT ticks without an interruption (D30). The state is WAITING, and the cause is the cause at that moment. */
+            LONG_WAIT,
+            /**
+             * The fuel of the robot is below the fuel of LOW_FUEL_TRIPS trips (D42, points 11 and 12). The entry has the fuel level and the trips.
+             * The state and the cause are the values of the job at that moment: the warning does not change them.
+             */
+            LOW_FUEL
+        }
     }
 
     /** The ticks of game time in WAITING, without an interruption, that make a long wait (D30): 5 minutes. An initial value. */
     static final int LONG_WAIT = 6000;
+
+    /** The fuel of a robot is low below the fuel of this number of trips between the docks of its job (D42, point 11). An initial value. */
+    static final int LOW_FUEL_TRIPS = 5;
 
     /**
      * What the runtime removed from a diary: the number of entries, and the game time and the number of the newest of them.
@@ -336,7 +372,7 @@ public class MindRuntime extends SavedData {
                 if (job.lastOpAt > now && job.state != State.CANCELLED) {
                     job.fromSeen = UNKNOWN;
                     job.toSeen = UNKNOWN;
-                    runtime.set(job, State.RECOVERY, "the world is older than the record of this job");
+                    runtime.recovery(job, Cause.WORLD_OLDER, "the world is older than the record of this job");
                 }
             }
         }
@@ -406,11 +442,19 @@ public class MindRuntime extends SavedData {
 
     /** The ordinary validation of an order. Each source of orders goes through it: a command, a test or Uno. */
     public RobotApi check(Actor actor, Order order) {
+        return check(actor, order, UNKNOWN);
+    }
+
+    /**
+     * The ordinary validation of an order. "Replaced" is the ID of the open job that the new job replaces, or UNKNOWN.
+     * Thus a replacement is valid as an order for a free robot: only the open job that it names does not refuse it.
+     */
+    private RobotApi check(Actor actor, Order order, int replaced) {
         int robotId = order.robot();
         if (Behaviour.of(order.module()) == null) throw new Refusal("Unknown module '" + order.module() + "'.");
         requireRobot(actor, robotId);
         Job current = jobs.get(robotId);
-        if (current != null && current.state.open()) {
+        if (current != null && current.state.open() && current.id != replaced) {
             throw new Refusal("Robot #" + robotId + " already has job " + current.id + " (" + current.state + ").");
         }
         RobotApi robot = RobotApi.live(robotId);
@@ -426,11 +470,14 @@ public class MindRuntime extends SavedData {
         }
         if (order.item() == null || order.item() == Items.AIR) throw new Refusal("Unknown item.");
         requireQuantities(order.quantity(), order.reserve());
-        int held = robot.held(order.item());
-        if (held > 0) throw new Refusal("Robot #" + robotId + " already holds " + held + " of this item. Empty it first.");
         return robot;
     }
 
+    /**
+     * Starts the job of a valid order. The items of the job that the robot holds are the first load of the job (D42, point 9).
+     * The robot delivers them first, and the need already counts them. A load above the quantity follows D16.1.
+     * The items of other kinds stay on board. The job does not count them.
+     */
     public Job start(Actor actor, Order order) {
         RobotApi robot = check(actor, order);
         Job job = new Job();
@@ -443,12 +490,33 @@ public class MindRuntime extends SavedData {
         job.item = order.item();
         job.quantity = order.quantity();
         job.reserve = order.reserve();
+        // The same count as the check of the load at each step of the robot. Thus the first step finds no difference.
+        job.carried = robot.held(order.item());
         jobs.put(order.robot(), job);
         // The first entry of the job: it is RUNNING from now on.
-        write(job, true, false, now());
+        write(job, true, Kind.CHANGE, now());
         setDirty();
         robot.wake();
         return job;
+    }
+
+    /**
+     * Cancels the open job of the robot of the order, and starts the job of the order, in the same tick (D42, point 10).
+     * The request names the job that it replaces: a request about an earlier job of the robot is refused.
+     * The new order must be valid as for a free robot. A refusal changes nothing: the open job stays.
+     * The cancellation is the cancellation of control(). The new job adopts the load of the robot, as in start().
+     */
+    public Job replace(Actor actor, int jobId, Order order) {
+        checkReplace(actor, jobId, order);
+        // After the check nothing refuses: the cancellation frees the robot, and start() checks the same order again.
+        control(actor, order.robot(), jobId, "cancel");
+        return start(actor, order);
+    }
+
+    /** The validation of replace(), without the change. Uno checks a replacement with it before the proposal. replace() checks again. */
+    RobotApi checkReplace(Actor actor, int jobId, Order order) {
+        openJob(actor, order.robot(), jobId);
+        return check(actor, order, jobId);
     }
 
     /**
@@ -557,6 +625,14 @@ public class MindRuntime extends SavedData {
         if (robot != null) robot.wake();
     }
 
+    /**
+     * The jobs that the actor owns: the current or the last job of each robot. Only the owner and an operator read a job.
+     * The context of a model reads the jobs through this one question (D41, decision 6). The map of the jobs becomes private in increment C.
+     */
+    public List<Job> jobs(Actor actor) {
+        return jobs.values().stream().filter(job -> actor.owns(job.owner)).toList();
+    }
+
     /** The diary entries that the actor owns, the oldest first. Only the owner and an operator read an entry, as for a job. */
     public List<Entry> diary(Actor actor) {
         return diary.stream().filter(entry -> actor.owns(entry.owner())).toList();
@@ -629,20 +705,21 @@ public class MindRuntime extends SavedData {
     /**
      * As above. "Requested": a request of the owner makes the change, not an observation of the runtime. Such a change gives no notice.
      * A wait starts when the job goes to WAITING from a different state. A change of the cause does not start it again. Each other state ends it.
+     * The end of a wait ends the condition of its long wait: the next wait can give a long wait again.
      */
     private void set(Job job, State state, Cause cause, String reason, boolean requested) {
         boolean changed = job.state != state || job.cause != cause;
         if (state != State.WAITING) {
             job.waitingSince = UNKNOWN;
-            job.longWait = false;
+            job.warnings.ended(Kind.LONG_WAIT);
         } else if (job.state != State.WAITING) {
             job.waitingSince = now();
-            job.longWait = false;
+            job.warnings.ended(Kind.LONG_WAIT);
         }
         job.state = state;
         job.reason = reason;
         job.cause = cause;
-        if (changed) write(job, requested, false, now());
+        if (changed) write(job, requested, Kind.CHANGE, now());
         setDirty();
     }
 
@@ -655,12 +732,22 @@ public class MindRuntime extends SavedData {
      * Writes the job as it is now in the diary, at the given game time. Above the limit, the oldest entries of the same owner go.
      * Then the attention rule reads the entry: it can give a notice (D30). A copy that load() made outside the server gives none.
      */
-    private void write(Job job, boolean requested, boolean longWait, long time) {
+    private void write(Job job, boolean requested, Kind kind, long time) {
         Entry entry = new Entry(nextEntry++, time, job.owner, job.id, job.robot, job.from, job.to, job.item, job.state, job.cause, job.reason,
-            requested, job.quantity, job.reserve, job.delivered, job.carried, longWait);
+            requested, job.quantity, job.reserve, job.delivered, job.carried, job.fuel, job.trips, kind);
         diary.add(entry);
         forget(job.owner);
         if (server != null) Notices.warn(server, entry);
+    }
+
+    /**
+     * The condition of a one-time warning holds at the game time "now" (see Warnings). The first time while it holds,
+     * the job gets one entry of that kind in the diary, at that time. Thus it gets one notice (D30). Until the condition ends, a call writes nothing.
+     */
+    void warn(Job job, Kind kind, long now) {
+        if (!job.warnings.give(kind)) return;
+        write(job, false, kind, now);
+        setDirty();
     }
 
     /**
@@ -669,7 +756,7 @@ public class MindRuntime extends SavedData {
      * "now" is the game time of the check. The server tick gives the current game time. A test gives a later moment.
      */
     void checkWait(Job job, long now) {
-        if (job.state != State.WAITING || job.longWait) return;
+        if (job.state != State.WAITING || job.warnings.given(Kind.LONG_WAIT)) return;
         if (job.waitingSince == UNKNOWN || job.waitingSince > now) {
             // A record of an older version has no start of the wait. In a world older than the record the start is in the future.
             // In both cases the time of the wait starts now.
@@ -677,15 +764,34 @@ public class MindRuntime extends SavedData {
             setDirty();
             return;
         }
-        if (now - job.waitingSince < LONG_WAIT) return;
-        job.longWait = true;
-        write(job, false, true, now);
-        setDirty();
+        if (now - job.waitingSince >= LONG_WAIT) warn(job, Kind.LONG_WAIT, now);
     }
 
     /** The check of a long wait for each job. The server tick calls it with the current game time. */
     void checkWaits(long now) {
         for (Job job : jobs.values()) checkWait(job, now);
+    }
+
+    /**
+     * The check of the fuel (D42, points 11 and 12). The robot makes a contact with an active job: the runtime records the fuel level
+     * of the turtle, and the trips that the level gives. A trip is the way from one dock of the job to the other and back:
+     * 2 times the distance along the axes. Only the level counts: the fuel items on board do not.
+     * Below LOW_FUEL_TRIPS trips the job gets one "low fuel" entry: thus one notice (D30). A level at or above them arms the warning again.
+     * A turtle that needs no fuel, and two docks at the same place, give no level and no entry.
+     * "Level" and "needed" come from the turtle at the contact. A test can give them: it cannot change the setting of CC: Tweaked.
+     */
+    void checkFuel(Job job, int level, boolean needed) {
+        int trip = 2 * stations.get(job.from).dock().distManhattan(stations.get(job.to).dock());
+        boolean known = needed && trip > 0;
+        job.fuel = known ? level : UNKNOWN;
+        job.trips = known ? level / trip : UNKNOWN;
+        // The record saves the level and the given warnings. The next save of the world writes them.
+        setDirty();
+        if (job.lowFuel()) {
+            warn(job, Kind.LOW_FUEL, now());
+        } else {
+            job.warnings.ended(Kind.LOW_FUEL);
+        }
     }
 
     /** Removes the oldest entries of the owner above the limit, and records what it removed. The entries of other owners stay. */
@@ -703,7 +809,7 @@ public class MindRuntime extends SavedData {
 
     /**
      * Sets the state from the record, after a transfer or an observation that nothing refused.
-     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup.
+     * A load can be on board when the quantity is reached: the owner lowered the quantity after the pickup, or the job adopted more.
      * A job that does not end keeps that load for the next need. A job that ends cannot use it: it stops and the owner decides.
      */
     void settle(Job job) {
@@ -728,6 +834,11 @@ public class MindRuntime extends SavedData {
     /** The job needs the hands of the owner. It continues only after a resume. */
     void blocked(Job job, Cause cause, String reason) {
         set(job, State.BLOCKED, cause, reason);
+    }
+
+    /** The runtime cannot say how the job went. The cause is what it found. The owner decides: a resume accepts the observed load. */
+    void recovery(Job job, Cause cause, String reason) {
+        set(job, State.RECOVERY, cause, reason);
     }
 
     /**
@@ -844,7 +955,11 @@ public class MindRuntime extends SavedData {
             t.putLong("lastOpAt", j.lastOpAt);
             t.putInt("recoveries", j.recoveries);
             t.putLong("waitingSince", j.waitingSince);
-            t.putBoolean("longWait", j.longWait);
+            t.putInt("fuel", j.fuel);
+            t.putInt("trips", j.trips);
+            ListTag warnings = new ListTag();
+            for (Kind kind : j.warnings.given()) warnings.add(StringTag.valueOf(kind.name()));
+            t.put("warnings", warnings);
             jobTags.put(robotId.toString(), t);
         });
         root.put("jobs", jobTags);
@@ -868,7 +983,9 @@ public class MindRuntime extends SavedData {
             t.putInt("reserve", e.reserve());
             t.putInt("delivered", e.delivered());
             t.putInt("carried", e.carried());
-            t.putBoolean("longWait", e.longWait());
+            t.putInt("fuel", e.fuel());
+            t.putInt("trips", e.trips());
+            t.putString("kind", e.kind().name());
             diaryTags.add(t);
         }
         root.put("diary", diaryTags);
@@ -937,12 +1054,22 @@ public class MindRuntime extends SavedData {
             j.recoveries = t.getInt("recoveries");
             // A record of an older version has no start of the wait. The first check starts the time (see checkWait).
             j.waitingSince = t.contains("waitingSince") ? t.getLong("waitingSince") : UNKNOWN;
-            j.longWait = t.getBoolean("longWait");
+            // A record before ticket #24 has no fuel. The next contact of the robot with an active job reads it.
+            j.fuel = t.contains("fuel") ? t.getInt("fuel") : UNKNOWN;
+            j.trips = t.contains("trips") ? t.getInt("trips") : UNKNOWN;
+            // A record of increment A has the flag "longWait" in place of the list of the given warnings.
+            if (t.contains("warnings")) {
+                for (Tag kind : t.getList("warnings", Tag.TAG_STRING)) j.warnings.give(Kind.valueOf(kind.getAsString()));
+            } else if (t.getBoolean("longWait")) {
+                j.warnings.give(Kind.LONG_WAIT);
+            }
             j.robot = Integer.parseInt(robotId);
             rt.jobs.put(j.robot, j);
         }
         // A record of an older version has no diary: it loads with an empty one.
         // A diary of the format before the numbers: each entry gets the next number, in the order of the diary.
+        // A diary of increment A has the flag "longWait" in place of the kind: the flag gives a long wait, and each other entry is a change.
+        // A diary before ticket #24 has no fuel: its entries have none.
         rt.nextEntry = root.getLong("nextEntry");
         for (Tag tag : root.getList("diary", Tag.TAG_COMPOUND)) {
             CompoundTag t = (CompoundTag) tag;
@@ -950,7 +1077,9 @@ public class MindRuntime extends SavedData {
                 t.getInt("job"), t.getInt("robot"), t.getString("from"), t.getString("to"),
                 ForgeRegistries.ITEMS.getValue(ResourceLocation.tryParse(t.getString("item"))),
                 State.valueOf(t.getString("state")), Cause.valueOf(t.getString("cause")), t.getString("reason"), t.getBoolean("requested"),
-                t.getInt("quantity"), t.getInt("reserve"), t.getInt("delivered"), t.getInt("carried"), t.getBoolean("longWait")));
+                t.getInt("quantity"), t.getInt("reserve"), t.getInt("delivered"), t.getInt("carried"),
+                t.contains("fuel") ? t.getInt("fuel") : UNKNOWN, t.contains("trips") ? t.getInt("trips") : UNKNOWN,
+                t.contains("kind") ? Kind.valueOf(t.getString("kind")) : t.getBoolean("longWait") ? Kind.LONG_WAIT : Kind.CHANGE));
         }
         CompoundTag forgottenTags = root.getCompound("forgotten");
         for (String owner : forgottenTags.getAllKeys()) {

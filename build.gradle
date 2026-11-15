@@ -22,6 +22,9 @@ jarJar.enable()
 def restartPhase = findProperty('restartPhase') ?: ''
 // Read here, not inside a run configuration: there hasProperty asks the configuration, not the project.
 def live = project.hasProperty('live')
+def measure = project.hasProperty('measure')
+// The project has a property "model" of its own: findProperty('model') gives the project. Thus the value comes from the command line.
+def liveModel = gradle.startParameter.projectProperties['model'] ?: ''
 
 minecraft {
     mappings channel: mapping_channel, version: mapping_version
@@ -58,6 +61,10 @@ minecraft {
             }
             // -Plive: the check of the Claude provider with the real service. See LiveTests.java.
             if (live) property 'forge.enabledGameTestNamespaces', "${mod_id}_live"
+            // -Pmeasure: the measurement of the models with the real service (D42, point 7). It takes the place of -Plive.
+            if (measure) property 'forge.enabledGameTestNamespaces', "${mod_id}_measure"
+            // -Pmodel=claude-sonnet-5-5: the model of a run with the real service. Without it, the run uses the setting.
+            if (liveModel && (live || measure)) property 'mindcraft.model', liveModel
         }
     }
 }
@@ -150,7 +157,23 @@ tasks.register('checkRules') {
             if ((text =~ /[\w.+-]+@[\w-]+\.[\w.-]+/).findAll().any { !(it ==~ /.*@users\.noreply\.github\.com|noreply@anthropic\.com/) }) {
                 problems << "$path: an email address"
             }
+            // Short sentences. A sentence of prose has 45 words at most. A table, a heading, a quote and code are not prose.
+            // The documents of the project only: docs/agents holds the files of a skill.
+            if (path ==~ /(docs\/)?[^\/]+\.md/) {
+                def code = false
+                text.readLines().eachWithIndex { line, i ->
+                    if (line.trim().startsWith('```')) code = !code
+                    else if (!code && !(line.trim() ==~ /[|#>].*/)) {
+                        line.trim().split(/(?<=[.!?])["')\]]?\s+/).findAll { it.split(/\s+/).size() > 45 }
+                            .each { problems << "$path:${i + 1}: a sentence of more than 45 words" }
+                    }
+                }
+            }
             if (!path.endsWith('.java')) return
+            // CC: Tweaked ignores a "shutdown" while a computer starts. Thus a test turns a computer off only through MindCraftTests.shutDown.
+            if ((text =~ /"computercraft shutdown #/).count > (path.endsWith('MindCraftTests.java') ? 1 : 0)) {
+                problems << "$path: a computercraft shutdown outside MindCraftTests.shutDown"
+            }
             if (text =~ /\bdan200\.computercraft\.(?!api\.)\w/) problems << "$path: a class of CC: Tweaked outside dan200.computercraft.api"
             // A test that sets the provider of the server must put it back, also after a failed check. Only withServerProvider does it.
             def outside = text.replaceAll(/(?s)withServerProvider\([^)]*\)\s*\{.*?\n    \}/, '')

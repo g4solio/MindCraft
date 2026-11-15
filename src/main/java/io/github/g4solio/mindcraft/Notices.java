@@ -1,6 +1,7 @@
 package io.github.g4solio.mindcraft;
 
 import io.github.g4solio.mindcraft.MindRuntime.Entry;
+import io.github.g4solio.mindcraft.MindRuntime.Entry.Kind;
 import io.github.g4solio.mindcraft.MindRuntime.Forgotten;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.Util;
@@ -41,18 +42,29 @@ public final class Notices {
     }
 
     /**
-     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and a long wait.
+     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and each one-time warning: a long wait
+     * and low fuel.
+     * The rule reads the kind of the entry (D41, decision 5).
      * A change that a request made is not selected: a pause, a resume or a cancellation does not come back to the owner as a notice.
      * The other changes to WAITING are not selected: the ordinary cycle of a stock job is silent.
      */
     static boolean selected(Entry entry) {
-        return !entry.requested()
-            && (entry.longWait() || entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
+        return !entry.requested() && (entry.kind() != Kind.CHANGE
+            || entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
     }
 
     /** How Uno names a job in a sentence: "job 3 on robot #7". */
     static String job(int id, int robot) {
         return "job " + id + " on robot #" + robot;
+    }
+
+    /**
+     * The trips that a fuel level gives, in words: "about 4 trips between the stations" (D42, point 12). The one place of these words:
+     * the notice, the report, the recorded data, the status and the screen use it. "Whose" names the stations: "its" after the name
+     * of a job, "the" in each other sentence.
+     */
+    static String trips(int trips, String whose) {
+        return "about " + trips + (trips == 1 ? " trip" : " trips") + " between " + whose + " stations";
     }
 
     /** The text with a capital first letter, for the start of a sentence. */
@@ -64,7 +76,9 @@ public final class Notices {
     static String sentence(Entry entry) {
         String subject = capital(job(entry.job(), entry.robot())) + " (" + MindRuntime.itemName(entry.item())
             + " from '" + entry.from() + "' to '" + entry.to() + "')";
-        if (entry.longWait()) return subject + longWait(entry);
+        if (entry.kind() == Kind.LONG_WAIT) return subject + longWait(entry);
+        // The fuel level and the trips of the entry. No remedy (D42, point 12).
+        if (entry.kind() == Kind.LOW_FUEL) return subject + " has little fuel: " + entry.fuel() + ", " + trips(entry.trips(), "its") + ".";
         return switch (entry.state()) {
             case BLOCKED -> subject + switch (entry.cause()) {
                 case OUT_OF_FUEL -> " is blocked: the robot has no fuel.";

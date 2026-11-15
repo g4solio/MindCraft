@@ -27,12 +27,14 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.registries.DeferredRegister;
@@ -71,7 +73,24 @@ public class MindCraft {
         }
     });
 
+    /**
+     * The settings of the mod: one file, config/mindcraft-common.toml, common to the installation (D42, point 6).
+     * The model of the Claude provider. A provider reads it when it is built, and the server builds it at its start.
+     */
+    static final ForgeConfigSpec.ConfigValue<String> MODEL;
+    private static final ForgeConfigSpec SETTINGS;
+
+    static {
+        ForgeConfigSpec.Builder settings = new ForgeConfigSpec.Builder();
+        MODEL = settings.comment("The model of Claude for the written requests of the operators. Uno uses Claude only with an API key in the environment.",
+                "The start value is claude-haiku-5-5. The other values: claude-sonnet-5-5 and claude-opus-5-5. The server reads it at its start.",
+                "A model that the model service does not know gives a failure of the service: then the fixed rules read each request.")
+            .define("model", "claude-haiku-5-5");
+        SETTINGS = settings.build();
+    }
+
     public MindCraft(FMLJavaModLoadingContext context) {
+        context.registerConfig(ModConfig.Type.COMMON, SETTINGS);
         BLOCKS.register(context.getModEventBus());
         ITEMS.register(context.getModEventBus());
         Net.register();
@@ -94,6 +113,7 @@ public class MindCraft {
      * <p>
      * Uno asks Claude only if the server has an API key in its environment. Without a key Uno uses the fixed rules.
      * Also with a key, only an operator uses Claude, with a limit of requests in each server session (D33).
+     * The model of Claude is the setting {@link #MODEL}: the provider reads it here, and the log line names it (D42, point 6).
      * A game test server always uses the fixed rules. Thus the checks give the same result on each computer and cost nothing.
      */
     static void aboutToStart(ServerAboutToStartEvent event) {
@@ -211,7 +231,7 @@ public class MindCraft {
         Job job = runtime.start(actor, new Order(module, robotId(context), StringArgumentType.getString(context, "from"),
             StringArgumentType.getString(context, "to"), ItemArgument.getItem(context, "item").getItem(),
             IntegerArgumentType.getInteger(context, "quantity"), reserve));
-        return "Job " + job.id + " started on robot #" + robotId(context) + ".";
+        return Uno.started(job);
     }
 
     /** The arguments of an order: robot, from, to, item, quantity and an optional reserve. */

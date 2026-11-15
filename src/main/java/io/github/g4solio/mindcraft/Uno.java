@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
 import io.github.g4solio.mindcraft.MindRuntime.Cause;
 import io.github.g4solio.mindcraft.MindRuntime.Entry;
@@ -65,6 +66,11 @@ public final class Uno {
         /** How the server log names the provider: "Uno interprets requests with (name)". */
         default String name() {
             return "the fixed rules, without a language model";
+        }
+
+        /** The model that a provider with a model asks, for the record of each request (D41, decision 3). Null without a model. */
+        default String model() {
+            return null;
         }
 
         /**
@@ -259,7 +265,7 @@ public final class Uno {
     /** The kinds of action of the closed list (D29). */
     enum Kind { START, CHANGE, PAUSE, RESUME, CANCEL, REPORT, NONE }
 
-    /** The result of the checks of the sentence of a provider (D42, points 4 and 5). The record of a request (ticket #23) reads it. */
+    /** The result of the checks of the sentence of a provider (D42, points 4 and 5). The record of a request holds it: see ModelRequest. */
     enum Voice {
         /** The sentence of a report or of "none" passed the checks: Uno says it. */
         PASSED,
@@ -269,6 +275,19 @@ public final class Uno {
         NOT_NEEDED,
         /** The model gave no valid action: the fixed rules read the request (D42, point 17). See noValidAction. */
         NO_VALID_ACTION
+    }
+
+    /**
+     * The record of one written request to a provider with a model (D33, and D42): the model that the provider names, the input tokens
+     * and the output tokens of the answer, the time of the answer in milliseconds, the action of the model and the result of the checks.
+     * The action is null when the provider gave no answer: a failure or the time limit. Then the tokens are zero, as in the counter.
+     * Uno keeps the record of the newest request of each actor in the server session, and nothing more (D24).
+     */
+    record ModelRequest(String model, long inputTokens, long outputTokens, long millis, Action action, Voice voice) {
+        /** The sentence that Uno did not use: the sentence of the model after a failed check. Null in each other case. */
+        String unused() {
+            return voice == Voice.FAILED ? sentence(action) : null;
+        }
     }
 
     /** The provider of the /uno command and of the screen. A different provider can replace it. See MindCraft.chooseProvider. */
@@ -405,6 +424,8 @@ public final class Uno {
         final Map<UUID, Usage> usage = new ConcurrentHashMap<>();
         /** The actors that Uno told that they reached the limit. Uno says it one time in a session. */
         final Set<UUID> toldLimit = ConcurrentHashMap.newKeySet();
+        /** The record of the newest written request of each actor to a model. */
+        final Map<UUID, ModelRequest> requests = new ConcurrentHashMap<>();
         int proposalCount;
     }
 
@@ -459,6 +480,14 @@ public final class Uno {
         return session.usage.getOrDefault(actor.id(), Usage.NONE);
     }
 
+    /**
+     * The record of the newest written request of the actor to a model in this server session, or null. Uno writes it before the
+     * answer: thus the consumer of the answer of a request reads the record of that request. A test reads it.
+     */
+    static ModelRequest modelRequest(Actor actor) {
+        return session.requests.get(actor.id());
+    }
+
     /** Where a written request of this actor to this provider goes now. */
     static Route route(Actor actor, Provider provider) {
         return route(session, actor, provider);
@@ -500,6 +529,7 @@ public final class Uno {
         if (route == Route.MODEL) mine.usage.merge(actor.id(), new Usage(1, 0, 0), Usage::plus);
         // Uno says one time that the limit is reached. The screen tells a player who is not an operator why the fixed rules answer.
         String limit = route == Route.AT_LIMIT && mine.toldLimit.add(actor.id()) ? LIMIT_REACHED : "";
+        long sent = System.nanoTime();
         CompletableFuture
             .supplyAsync(() -> {
                 try {
@@ -509,22 +539,55 @@ public final class Uno {
                 }
             })
             .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .whenComplete((answer, error) -> server.execute(() -> {
-                // The answer belongs to the session of its request. An answer for an earlier session changes nothing.
-                // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
-                if (server.isStopped() || mine != session) return;
-                mine.pending.remove(actor.id());
-                if (error == null && route == Route.MODEL) {
-                    mine.usage.merge(actor.id(), new Usage(0, answer.inputTokens(), answer.outputTokens()), Usage::plus);
-                }
-                MindRuntime runtime = MindRuntime.get(server);
-                long now = server.overworld().getGameTime();
-                // A model that gives no valid action (D42, point 17): the request still counts, and the fixed rules read it with the same context.
-                String why = route == Route.MODEL ? noValidAction(answer, error) : null;
-                String said = why != null ? NO_VALID_ACTION.formatted(why) + act(mine, runtime, actor, request, context, RULES.answer(request, context), now)
-                    : error == null ? act(mine, runtime, actor, request, context, answer, now) : failure(error);
-                reply.accept(limit + said);
-            }));
+            .whenComplete((answer, error) -> {
+                // The time of the answer of the provider, or of the time limit. The wait for the server thread does not count.
+                long millis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent);
+                server.execute(() -> {
+                    // The answer belongs to the session of its request. An answer for an earlier session changes nothing.
+                    // After a server stop, execute() runs this immediately on the thread of the provider. Then it must touch nothing.
+                    if (server.isStopped() || mine != session) return;
+                    mine.pending.remove(actor.id());
+                    if (error == null && route == Route.MODEL) {
+                        mine.usage.merge(actor.id(), new Usage(0, answer.inputTokens(), answer.outputTokens()), Usage::plus);
+                    }
+                    MindRuntime runtime = MindRuntime.get(server);
+                    long now = server.overworld().getGameTime();
+                    // A model that gives no valid action (D42, point 17): the request still counts, and the fixed rules read it with the same context.
+                    String why = route == Route.MODEL ? noValidAction(answer, error) : null;
+                    // The record of a request to a model, and its line in the server log (D33, D42). It comes before the answer.
+                    if (route == Route.MODEL) {
+                        ModelRequest record = new ModelRequest(provider.model(), error == null ? answer.inputTokens() : 0,
+                            error == null ? answer.outputTokens() : 0, millis, error == null ? answer.action() : null,
+                            why != null ? Voice.NO_VALID_ACTION : voice(answer.action(), request, context));
+                        mine.requests.put(actor.id(), record);
+                        MindCraft.LOGGER.info("{}", line(record, request));
+                    }
+                    String said = why != null ? NO_VALID_ACTION.formatted(why) + act(mine, runtime, actor, request, context, RULES.answer(request, context), now)
+                        : error == null ? act(mine, runtime, actor, request, context, answer, now) : failure(error);
+                    reply.accept(limit + said);
+                });
+            });
+    }
+
+    /**
+     * The line of the server log for a written request to a model (D42, choices of the implementation): the record, and the text of
+     * the request of the player. After a failed check, also the sentence that Uno did not use. Each text is in JSON quotes: a line break
+     * in a text does not start a new line of the log. The line has no key: only the client of the provider holds it. It has no
+     * coordinate: the context of the request is not in the line, and the model gets no coordinate. The request is the text of the player.
+     */
+    private static String line(ModelRequest record, String request) {
+        String unused = record.unused();
+        return "Uno request: model " + record.model() + ", " + record.inputTokens() + " input tokens, " + record.outputTokens()
+            + " output tokens, " + record.millis() + " ms, action " + kind(record.action()) + ", checks " + record.voice()
+            + (unused == null ? "" : ", unused sentence " + new JsonPrimitive(unused)) + ", request " + new JsonPrimitive(request);
+    }
+
+    /** The action of a record in the server log: its kind, "unreadable", or "no answer" after a failure or the time limit. */
+    private static String kind(Action action) {
+        if (action instanceof Action.Start) return "start";
+        if (action instanceof Action.OnJob job) return job.kind().name().toLowerCase(Locale.ROOT);
+        if (action instanceof Action.None) return "none";
+        return action == null ? "no answer" : "unreadable";
     }
 
     /**
@@ -620,10 +683,15 @@ public final class Uno {
      * The fixed rules give no sentence: their answer needs none. A model without a valid action is NO_VALID_ACTION: see noValidAction.
      */
     static Voice voice(Action action, String request, Context context) {
-        String sentence = action instanceof Action.None none ? none.sentence()
-            : action instanceof Action.OnJob job && job.kind() == Kind.REPORT ? job.sentence() : null;
+        String sentence = sentence(action);
         if (sentence == null) return Voice.NOT_NEEDED;
         return passes(sentence, request, context) ? Voice.PASSED : Voice.FAILED;
+    }
+
+    /** The sentence of the action of a provider, or null: only a report and a "none" have one. */
+    private static String sentence(Action action) {
+        return action instanceof Action.None none ? none.sentence()
+            : action instanceof Action.OnJob job && job.kind() == Kind.REPORT ? job.sentence() : null;
     }
 
     /**

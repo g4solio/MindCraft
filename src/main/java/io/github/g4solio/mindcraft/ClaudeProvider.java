@@ -118,6 +118,12 @@ final class ClaudeProvider implements Uno.Provider {
         return "Claude (" + MODEL + ")";
     }
 
+    /** The model of each request. The record of a request and its line in the server log name it (D42). */
+    @Override
+    public String model() {
+        return MODEL;
+    }
+
     /**
      * The text of a written request leaves the server only on the route of the model. The player must know which route is used,
      * and which data go with the request: the facts of the jobs and the newest lines of the diary, without a position (D42, point 18).

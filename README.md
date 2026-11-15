@@ -356,6 +356,14 @@ Uno › The model gave no valid answer (the model service is not reachable), thu
 - Uno asks Claude to follow the rule above for a request that names no robot. A new job from Claude for a robot with an open job becomes the proposal of a replacement, as with the fixed rules.
 - Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
+- The server log gets one line for each written request to Claude: the model, the input tokens, the output tokens, the time of the answer, the action, the result of the checks, and the text of your request. After a failed check of the voice, the line also has the sentence of Claude that Uno did not use. For example:
+
+```
+Uno request: model claude-opus-5-5, 1234 input tokens, 56 output tokens, 812 ms, action report, checks FAILED, unused sentence "I delivered 987654 items.", request "How is the furnace?"
+```
+
+- The result of the checks is `PASSED`: Uno said the sentence of Claude. `FAILED`: Uno used the fixed template. `NOT_NEEDED`: the action needs no sentence. `NO_VALID_ACTION`: Claude gave no valid action, and the fixed rules read the request.
+- Thus the server log holds the text of each written request to Claude. Each person who reads the log of the server reads it. The line has no key and no position. A request that the fixed rules read gets no line.
 
 Details and limits: D21, D33.1 and D42 in [docs/DECISIONS.md](docs/DECISIONS.md).
 

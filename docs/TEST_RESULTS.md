@@ -162,6 +162,9 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 130 | 104 of 104 | None. Ticket #22: the model is a setting. Server line: `All 104 required tests passed :)` |
 | 131 | 104 of 104 | None. Ticket #22, the committed code `260efdc`. Server line: `All 104 required tests passed :)` |
 | 132 | 105 of 105 | None. The integration branch after the merge of ticket #22. The merge joined the two accessors of the model of `ClaudeProvider` of tickets #22 and #23 into one. Server line: `All 105 required tests passed :)` |
+| 140 | 104 of 105, expected | Ticket #25, red run: the new test `b_conversation_first`, with the old order of the view |
+| 141 | 105 of 105 | None. Ticket #25: the conversation part comes first on the screen. Server line: `All 105 required tests passed :)` |
+| 142 | 105 of 105 | None. Ticket #25, the committed code `a2b66fd`. Server line: `All 105 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -183,6 +186,7 @@ Run 127 is the run of the integration branch after the merge of ticket #24.
 Run 128 is the run of the integration branch after the merge of ticket #23.
 Runs 129 to 131 are the runs of ticket #22, on the integration branch at `c63d75c`.
 Run 132 is the run of the integration branch after the merge of ticket #22.
+Runs 140 to 142 are the runs of ticket #25, on the integration branch at `c075de7`.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -1676,6 +1680,43 @@ The restart test does not check the fuel. The fuel lines above are observations 
 - The fuel in a request to the real service. No `-Plive` run sent it.
 - A robot that burns the fuel items on board at the level 0. `transport.lua` does it (code examination, D12).
 
+## Increment B — the conversation part comes first on the screen (ticket #25)
+
+Date: 2026-11-15. The view that the server builds puts the conversation part first: the sentence of Uno, the proposal, the text field and the row of buttons. The lines about the provider follow them. The list of the jobs comes last. See D42, point 13, D40 and D19.
+The code is the branch of increment B at `c075de7`, with tickets #16 to #21, #23 and #24, and the change of this ticket. Only `UnoView.build` changed. The client `UnoScreen` did not change. No part of the runtime and no Lua module changed: thus the four restart phases did not run. The schema and the system text of the Claude provider did not change. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. No test opens a client screen. Each test reads the view as data, and calls the functions that the network messages call. `b_conversation_first` has a real turtle and real chests.
+
+| Test | What it does | Result in run 141 |
+| --- | --- | --- |
+| `b_conversation_first` (new) | A player and a transport of 24 from an empty source: the job waits, and its state does not change by itself. A provider of the test gives one line about the provider, only to build a view. The test is in the batch of `a_screen_model_lines`. It reads the position of the first widget with each text or kind. First a view with no job. Then the job, the button "Cancel" of its panel, and the view with the proposal. Then the button "Confirm #N" of that view | Passed. With no job: the sentence of Uno at 0, the text field at 1, the row with "Send" at 2, the line about the provider at 3, and "I have no record of a job of yours." at 4. With the job and the proposal: the sentence of Uno at 0, "Waiting for your confirmation: cancel job N" at 1, the text field at 2, the row with "Send" at 3, the line about the provider at 4, and the heading of the job at 5. "Confirm #N" cancelled the job |
+| `s2_tablet_view`, `a_change_through_the_view`, `a_cancel_button_asks_a_confirmation`, `t16_actions_of_an_old_view`, `b_replacement_through_the_view` and `t22_confirm_only_the_shown_proposal` (unchanged) | As before: send, confirm, report, apply, pause, resume and cancel through the view. Each test finds a button by its action, not by its place | Passed without a change |
+| `a_screen_model_lines`, `b_fuel_in_the_report` and `s2_projector` (unchanged) | As before: the lines about the provider, the line about low fuel and the line about the places of the base, each by its text | Passed without a change |
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 140, red | The new test `b_conversation_first`, with the old order of the view | 104 of 105, expected. `b_conversation_first` failed with no job: "I have no record of a job of yours." was the first widget, and the sentence of Uno the second |
+| 141, green | The new order in `UnoView.build` | **105 of 105**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `105 GAME TESTS COMPLETE`, `All 105 required tests passed :)` |
+| 142 | The commit `a2b66fd`: the code of run 141 | **105 of 105**. The same three log lines |
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `UnoScreen` draws the widgets from the top down, in the order of the view. The whole column scrolls together. The class did not change | `UnoScreen.layout`, and the `git diff` of the ticket | That a small window shows the conversation part without a scroll |
+| The widgets of the view, the identifiers of the fields and the actions of the buttons did not change. Only their order changed | `UnoView.build`, and the `git diff` of the ticket | |
+| The counter of an operator and the line of the route are written in one place, one after the other: `UnoView.providerLines`. The new test has only the line of the route | `UnoView.java` | No test reads the position of the counter |
+| The line about the places of the base with a projector stays after the jobs, as before | `UnoView.build` | No test reads its position |
+
+### Not covered
+
+- The look of the screen in a client. No automatic test opens a client screen. The play session of increment B has the step "Open the screen in a small window".
+- The height in a window of about 850 × 510 pixels (D40). A long sentence of Uno can make the conversation part as tall as the window (D42, point 13).
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1748,6 +1789,7 @@ Third manual test, on the projector and its hologram:
 | Increment B: the new system text of the Claude provider after ticket #20 (the voice), with the real service. Thus no sentence of the real model passed or failed a check | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B. The tests use providers written in the tests. See "Increment B — the voice of Uno and its checks (ticket #20)" |
 | Increment B: a failure of the real Claude service after ticket #21: an error, a refusal, the time limit, or an answer that Uno cannot read | No run with the real service tested it. Such a run costs money and needs the consent of the project owner. The tests use providers written in the tests. See "Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)" |
 | Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
+| Increment B: the screen with the conversation part first, in a client: the look, and the height in a small window | It needs a person at the game. The play session of increment B has a step for it. See "Increment B — the conversation part comes first on the screen (ticket #25)" |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
 
 ## Known limits

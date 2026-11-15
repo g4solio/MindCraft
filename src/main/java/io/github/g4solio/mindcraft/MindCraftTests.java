@@ -1928,7 +1928,7 @@ public class MindCraftTests {
     }
 
     /** Runs the action with this value of the setting "model", then puts the value of before back, also after a failed check. */
-    private static <T> T withModel(String model, Supplier<T> action) {
+    static <T> T withModel(String model, Supplier<T> action) {
         String before = MindCraft.MODEL.get();
         MindCraft.MODEL.set(model);
         try {
@@ -5341,6 +5341,189 @@ public class MindCraftTests {
                 check(notices(operator).isEmpty(), "the operator got a notice: " + notices(operator));
             })
             .thenSucceed();
+    }
+
+    // --- Increment B: the harness of the measurement -----------------------------------------------------------------
+
+    /** An expected action of the set as a model writes it: the output schema of the Claude provider, with this sentence for a report and a "none". */
+    private static String asModel(Uno.Action action, String sentence) {
+        if (action instanceof Uno.Action.Start start) {
+            Order order = start.order();
+            return modelAction("start", "", "robot", order.robot(), "module", order.module(), "from", order.from(), "to", order.to(),
+                "item", MindRuntime.itemName(order.item()), "quantity", order.quantity(), "reserve", order.reserve());
+        }
+        if (!(action instanceof Uno.Action.OnJob job)) return modelAction("none", sentence);
+        List<Object> fields = new ArrayList<>();
+        if (job.target().robot() != null) fields.addAll(List.of("robot", job.target().robot()));
+        if (job.quantity() != null) fields.addAll(List.of("quantity", job.quantity()));
+        if (job.reserve() != null) fields.addAll(List.of("reserve", job.reserve()));
+        return modelAction(job.kind().name().toLowerCase(java.util.Locale.ROOT), job.kind() == Uno.Kind.REPORT ? sentence : "", fields.toArray());
+    }
+
+    /** The part of a text from the first text to the second one. A check fails if one of the two is missing. */
+    private static String part(String text, String from, String to) {
+        int start = text.indexOf(from), end = start < 0 ? -1 : text.indexOf(to, start);
+        check(start >= 0 && end > start, "no part from " + from + " to " + to + " in:\n" + text);
+        return text.substring(start, end);
+    }
+
+    /** The kind of an action of the closed list. */
+    private static Uno.Kind kindOf(Uno.Action action) {
+        return action instanceof Uno.Action.Start ? Uno.Kind.START : action instanceof Uno.Action.OnJob job ? job.kind() : Uno.Kind.NONE;
+    }
+
+    /**
+     * Ticket #26, D42 points 7 and 20: the harness of the measurement, with the Claude provider against a local stand-in of the service.
+     * It is the harness of LiveTests.b_measurement: the same set of 19 requests, the same world and the same record. No request reaches
+     * the real service. The stand-in reads the request in the body of each call, and gives the answer that this test writes for it:
+     * the expected action, with the sentence "I read the facts of this request." for a report and a "none". Five answers differ:
+     * <ul>
+     * <li>BLOCKED with a load on board: a report with "All done: I delivered 64." The check passes: 64 is the quantity (the limit of D32).</li>
+     * <li>The fuel: a report with "I have 987654 fuel left." The check of the numbers fails.</li>
+     * <li>A change of the destination: a change of the reserve, not a start. A wrong action.</li>
+     * <li>The weather: text that is not JSON. No valid action.</li>
+     * <li>The free robots: the answer 500 of the service. No valid action and no tokens.</li>
+     * </ul>
+     * Each answer with a status 200 has 2000 input tokens and 100 output tokens.
+     * The test reads the record: the actions, the checks, the totals, the facts that the provider got in each case, and the file.
+     * It has its own batch: its world has eight rows, far beyond the template, in the place of the tests of the next rows.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = 4800, batch = "b_measurement")
+    public static void b_measurement_with_the_stand_in(GameTestHelper helper) throws IOException {
+        AtomicReference<Measurement.World> world = new AtomicReference<>();
+        List<String> sent = new CopyOnWriteArrayList<>();
+        String read = "I read the facts of this request.", error = "{\"type\":\"error\",\"error\":{\"type\":\"api_error\",\"message\":\"test\"}}";
+        HttpServer api = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        api.createContext("/", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            sent.add(body);
+            String content = JsonParser.parseString(body).getAsJsonObject().getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString();
+            String request = content.substring(content.lastIndexOf("\nRequest: ") + "\nRequest: ".length());
+            Measurement.World w = world.get();
+            Measurement.Case test = Measurement.SET.stream().filter(c -> c.request().equals(request)).findFirst().orElseThrow();
+            int status = test.name().equals("None: a question from the context") ? 500 : 200;
+            String answer = switch (test.name()) {
+                case "D32: BLOCKED with a load on board" -> modelAction("report", "All done: I delivered 64.", "robot", w.storage.robot());
+                case "A question about the fuel" -> modelAction("report", "I have 987654 fuel left.", "robot", w.depot.robot());
+                case "A change of the destination" -> modelAction("change", "", "robot", w.depot.robot(), "reserve", 0);
+                case "The seven actions: none" -> "this is not JSON";
+                default -> asModel(test.expected().apply(w), read);
+            };
+            byte[] bytes = (status == 200 ? claudeMessage("end_turn", answer, 2000, 100) : error).getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("content-type", "application/json");
+            exchange.sendResponseHeaders(status, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        api.start();
+        Uno.Provider claude = new ClaudeProvider(AnthropicOkHttpClient.builder().apiKey("not-a-key")
+            .baseUrl("http://127.0.0.1:" + api.getAddress().getPort()).maxRetries(0).build());
+        String file = "measurement-stand-in.md";
+        Measurement.run(helper, w -> {
+            world.set(w);
+            return claude;
+        }, "The harness with the stand-in of the service", "Type: in the game, automatic, with the Claude provider against the local stand-in "
+            + "of the service. No request reached the real service.", file, report -> {
+            api.stop(0);
+            Measurement.World w = world.get();
+            List<Measurement.Result> results = report.results();
+            // The set: 19 requests, the seven actions among the expected actions, and one request for each call of the stand-in.
+            check(results.size() == 19 && sent.size() == 19, results.size() + " results, " + sent.size() + " calls of the stand-in");
+            check(results.stream().map(result -> kindOf(result.expected())).collect(java.util.stream.Collectors.toSet()).equals(Set.of(Uno.Kind.values())),
+                "the set misses an action");
+            check(sent.stream().allMatch(body -> JsonParser.parseString(body).getAsJsonObject().get("model").getAsString().equals(MindCraft.MODEL.get())),
+                "a request with a model that is not the model of the setting");
+            Map<String, Measurement.Result> byCase = new LinkedHashMap<>();
+            results.forEach(result -> byCase.put(result.test().name(), result));
+            Function<String, Measurement.Result> at = name -> {
+                check(byCase.get(name) != null, "no record of the case " + name);
+                return byCase.get(name);
+            };
+            // The actions and the checks of the record.
+            Set<String> wrong = Set.of("A change of the destination", "The seven actions: none", "None: a question from the context");
+            List<String> judged = results.stream().filter(result -> result.right() == wrong.contains(result.test().name()))
+                .map(result -> result.test().name() + ": " + Measurement.describe(result.record().action())).toList();
+            check(judged.isEmpty(), "a wrong judgement of the action: " + judged);
+            Map<String, Uno.Voice> voices = new LinkedHashMap<>();
+            results.forEach(result -> voices.put(result.test().name(), result.record().voice()));
+            check(voices.values().stream().filter(voice -> voice == Uno.Voice.PASSED).count() == 10
+                && voices.values().stream().filter(voice -> voice == Uno.Voice.NOT_NEEDED).count() == 6
+                && voices.get("A question about the fuel") == Uno.Voice.FAILED && voices.get("The seven actions: none") == Uno.Voice.NO_VALID_ACTION
+                && voices.get("None: a question from the context") == Uno.Voice.NO_VALID_ACTION, voices.toString());
+            Measurement.Result fuel = at.apply("A question about the fuel"), failure = at.apply("None: a question from the context");
+            check("I have 987654 fuel left.".equals(fuel.record().unused()) && failure.record().equals(new Uno.ModelRequest(MindCraft.MODEL.get(),
+                0, 0, failure.record().millis(), null, Uno.Voice.NO_VALID_ACTION)), fuel.record() + "\n" + failure.record());
+            // The answers of Uno: the voice of the D32 case passes, the fuel gets the fixed report, and the other answers as Uno gives them.
+            Map<String, String> answers = Map.of("D32: BLOCKED with a load on board", "All done: I delivered 64.",
+                "A question about the fuel", "Job " + w.depot.job().id + ", robot #" + w.depot.robot() + ":",
+                "A change of the destination", "Proposal: change job " + w.depot.job().id + " on robot #" + w.depot.robot(),
+                "The seven actions: start", "Proposal: carry 16 x minecraft:coal from 'quarry' to 'kiln'",
+                "The seven actions: none", "I did not get a valid configuration. I created no proposal.",
+                "None: a question from the context", "I cannot interpret the request now (the model service answered with error 500).");
+            answers.forEach((name, start) -> check(at.apply(name).answer().startsWith(start) && !at.apply(name).answer().contains("987654"),
+                name + ": " + at.apply(name).answer()));
+            // The world: each request finds its state in the facts that the provider got. The context holds only the world of the measurement.
+            for (Measurement.Result result : results) {
+                Uno.Context context = result.context();
+                check(context != null && context.stations().size() == 15 && context.robots().size() == 7 && context.jobs().size() == 7,
+                    result.test().name() + ": " + context);
+            }
+            Function<String, Uno.Context.Facts> facts = name -> {
+                Measurement.Result result = at.apply(name);
+                Integer robot = ((Uno.Action.OnJob) result.expected()).target().robot();
+                Uno.Context.Facts job = result.context().jobs().stream().filter(item -> robot != null && item.robot() == robot).findFirst().orElse(null);
+                check(job != null, name + ": no facts of robot #" + robot);
+                return job;
+            };
+            Uno.Context.Facts depot = facts.apply("T21: a wait at the reserve"), mine = facts.apply("T21: a block without fuel"),
+                warehouse = facts.apply("T21: a job in RECOVERY"), cellar = facts.apply("T21: a robot that is not running"),
+                harbor = facts.apply("T21: an old observation"), storage = facts.apply("D32: BLOCKED with a load on board"),
+                depotFuel = facts.apply("A question about the fuel"), quarry = facts.apply("A request in Italian");
+            check(depot.state() == State.WAITING && depot.cause() == Cause.SOURCE_AT_RESERVE && Integer.valueOf(0).equals(depot.aboveReserve())
+                && Integer.valueOf(54).equals(depot.stillToCarry()), depot.toString());
+            check(mine.state() == State.BLOCKED && mine.cause() == Cause.OUT_OF_FUEL && Integer.valueOf(0).equals(mine.fuel()), mine.toString());
+            check(warehouse.state() == State.RECOVERY && warehouse.cause() == Cause.LOAD_DIFFERS && warehouse.delivered() == null
+                && warehouse.onBoard() == null, warehouse.toString());
+            check(cellar.onBoard() == null && cellar.uncertain().equals(List.of("The robot is not running or not loaded. "
+                + "Not given: the load on board, the stocks and the fuel.")), cellar.toString());
+            check(harbor.state() == State.PAUSED && Integer.valueOf(16).equals(harbor.delivered()) && harbor.destination() == null
+                && harbor.uncertain().equals(List.of("The last observation of 'tower' is old. Not given: its stock.")), harbor.toString());
+            check(storage.state() == State.BLOCKED && storage.cause() == Cause.DESTINATION_NO_INVENTORY && Integer.valueOf(24).equals(storage.onBoard())
+                && storage.quantity() == 64 && Integer.valueOf(0).equals(storage.delivered()), storage.toString());
+            check(depotFuel.fuel() != null && depotFuel.trips() != null, depotFuel.toString());
+            check(quarry.state() == State.DONE && Integer.valueOf(16).equals(quarry.delivered()), quarry.toString());
+            List<Uno.Context.Robot> free = at.apply("The seven actions: start").context().robots().stream().filter(Uno.Context.Robot::free).toList();
+            check(free.equals(List.of(new Uno.Context.Robot(w.quarry.robot(), true))), free.toString());
+            List<Uno.Context.Line> diary = at.apply("A question about the diary").context().diary();
+            check(diary.stream().map(Uno.Context.Line::job).distinct().count() == 7, diary.toString());
+            // The pause is the last request, and the only one that changes the world.
+            check(w.depot.job().state == State.PAUSED && !Uno.hasProposal(Measurement.PLAYER), w.depot.rig().describe());
+            // The record: a table row for each request, the totals, and each sentence next to its facts. The file holds the same text.
+            String markdown = report.markdown();
+            check(markdown.startsWith("#### The harness with the stand-in of the service\n\n") && markdown.contains("| No. | Case | Request | "
+                + "Expected action | Action of the model | Right | Checks | Time, ms | Input tokens | Output tokens |"), markdown);
+            check(markdown.lines().filter(line -> line.matches("\\| \\d+ \\| .*")).count() == 19, markdown);
+            check(markdown.contains("| D32: BLOCKED with a load on board | Is the job of the workshop done? | report, robot #" + w.storage.robot()
+                + " | report, robot #" + w.storage.robot() + " | yes | PASSED |"), markdown);
+            check(markdown.contains("| The seven actions: none | What will the weather be like tomorrow? | none | an answer that Uno cannot read "
+                + "| no | NO_VALID_ACTION |"), markdown);
+            check(markdown.matches("(?s).*\nTotals: right actions: 16 of 19\\. Failed checks: 1\\. Passed checks: 10\\. "
+                + "Requests without a valid action: 2\\. Time: \\d+ ms\\. Tokens: 36000 in, 1800 out\\.\n.*"), markdown);
+            String d32 = part(markdown, "**7. D32: BLOCKED with a load on board.**", "**8. ");
+            check(d32.contains("The sentence of the model: All done: I delivered 64.\n") && d32.contains("\"state\":\"BLOCKED\"")
+                && d32.contains("\"onBoard\":24") && d32.contains("\"quantity\":64"), d32);
+            String lines = part(markdown, "**8. A question about the diary.**", "**9. ");
+            check(lines.lines().filter(line -> line.startsWith("The facts of job ")).count() == 7 && lines.contains("A line of the diary: {"), lines);
+            String none = part(markdown, "**15. The seven actions: none.**", "**16. ");
+            check(none.contains("The sentence of the model: none: Uno cannot read the answer of the provider.\n") && none.contains("The stations: [")
+                && none.contains("The robots: [") && !none.contains("The facts of job"), none);
+            try {
+                check(Files.readString(helper.getLevel().getServer().getServerDirectory().toPath().resolve(file), StandardCharsets.UTF_8).equals(markdown),
+                    "the file differs from the record");
+            } catch (IOException e) {
+                throw new GameTestAssertException("cannot read " + file + ": " + e);
+            }
+        }).thenSucceed();
     }
 
     // --- S0: probes of the Lua execution model -----------------------------------------------------------------------

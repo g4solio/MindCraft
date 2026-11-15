@@ -136,6 +136,10 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 100 | 87 of 89, expected | Ticket #19, green run 2 and red run 3: `t18_claude_provider` and `a_screen_model_lines`, with the old JSON and the old line |
 | 101 | 89 of 89 | None. Ticket #19: the facts of the jobs go to the model. Server line: `All 89 required tests passed :)` |
 | 102 | 89 of 89 | None. Ticket #19, the code of the commit: the same, with one more null check in `b_facts_in_the_context`. Server line: `All 89 required tests passed :)` |
+| 103 | 95 of 95 | None. The integration branch after the merge of ticket #19. Server line: `All 95 required tests passed :)` |
+| 104 | 91 of 93, expected | Ticket #21, red run: two changed tests, with the old code of Uno. Runs 96 and 97 are runs of the integration branch |
+| 105 | 93 of 93 | None. Ticket #21: the fixed rules read a request when the model gives no valid action. Server line: `All 93 required tests passed :)` |
+| 106 | 93 of 93 | None. Ticket #21, the committed code: one comment changed after run 105. Server line: `All 93 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -148,6 +152,7 @@ Run 92 is the run of the integration branch of increment B after the merge of ti
 Runs 93 to 95 are the runs of ticket #18 of increment B.
 Runs 96 and 97 are the runs of the integration branch after the merge of ticket #18.
 Runs 98 to 102 are the runs of ticket #19 of increment B, on the branch with tickets #16 and #17. See "Increment B — the facts of the jobs go to the model". No run of ticket #19 called the real Claude service.
+Run 103 is the run of the integration branch after the merge of ticket #19.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -1298,6 +1303,52 @@ After the four phases the data folder has no temporary file.
 - A job that the owner cancelled in `RECOVERY`: its facts give its delivered total. See D42, point 3.
 - A diary entry of an older job whose `RECOVERY` the diary limit removed: its later lines give their delivered total.
 
+## Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)
+
+Date: 2026-11-15. A provider with a model gives no valid action: a failure of the service, the time limit, a refusal, or an answer that Uno cannot read. Then the fixed rules read the same request, and Uno says so first, with the reason. See D42, point 17, D29.1 and D33.1.
+The code is the branch of increment B at `a807f3a`, with the change of `b_replacement_in_recovery` of the integration branch (`5e3439a`), and the changes of the ticket. No part of the runtime and no Lua module changed. The schema and the system text of the Claude provider did not change. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests. Each one uses providers written in the test. A provider of the test with the model flag (`CountingModel`) calls no model and costs nothing. Its requester is an operator: only an operator uses a provider with a model (D33.1).
+
+| Test | What it does | Result in run 105 |
+| --- | --- | --- |
+| `t18_provider_failures`, changed | An operator has a transport of 24 in progress. Five requests go to providers of the test with the model flag. 1: an exception "model offline", for the request "x". 2: a provider that sleeps 3 s, with a time limit of 300 ms, for "How is robot N?". 3: the exception that the Claude provider gives for a refusal, "the model declined the request", for "Carry 8 coal from … to … with robot N". 4: an answer that Uno cannot read, with 7 input tokens and 3 output tokens. 5: an `IllegalArgumentException`. Then two requests go to providers of the test without a model: an exception "provider offline", and an answer that Uno cannot read. At the end the fixed rules get "carry coal" | Passed. Each of the five answers starts with "The model gave no valid answer (…), thus I read your request with the fixed rules: they understand only simple sentences." The reasons, in order: "model offline", "the request reached the time limit", "the model declined the request", "I cannot read its answer", "a defect of the provider". Then the answer of the fixed rules to the same request: "I cannot propose a job: the quantity is missing." for "x", the report of the job for the question, and the proposal of a replacement for the start. The counter: 5 requests, 7 input tokens, 3 output tokens. The providers without a model give the sentences of increment A: "I cannot interpret the request now (provider offline). The jobs in progress continue." and "I did not get a valid configuration. I created no proposal." The counter does not change for them. At the end no proposal stays. The job ends `DONE`: source 40, destination 24, robot 0 |
+| `a_model_requests_count`, changed | As before. An operator sends a request to a provider with the model flag that throws "model offline", then one to a provider that answers after the time limit of 300 ms | Passed. The two answers are "The model gave no valid answer (model offline), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing." and the same with "the request reached the time limit". The counter is 3 requests after the exception and 4 after the time limit, with the same tokens as before. The late answer of the provider changes nothing |
+
+The texts of `t18_provider_failures`, from the log of run 105. The test compares the start of the second and of the third answer, and the whole text of the others.
+
+- The question about the robot: "The model gave no valid answer (the request reached the time limit), thus I read your request with the fixed rules: they understand only simple sentences. Job 71, robot #42: carry 24 items from 't18_source' to 't18_destination', reserve 0. I delivered 0 items. I am working. …"
+- The start: "The model gave no valid answer (the model declined the request), thus I read your request with the fixed rules: they understand only simple sentences. Proposal: cancel job 71 on robot #42 (carry minecraft:coal from 't18_source' to 't18_destination'), and start in its place: carry 8 x minecraft:coal from 't18_source' to 't18_destination'. … I have done nothing yet. Confirm with /uno confirm."
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 104, red | The two changed tests, with the old code of Uno | 91 of 93, expected. `a_model_requests_count`: "I cannot interpret the request now (model offline). The jobs in progress continue." `t18_provider_failures`: "the proposal of the fixed rules is missing", after three answers with the failure sentence of increment A. `b_replacement_in_recovery` passed with the change of `5e3439a` |
+| 105, green | The code of the ticket | **93 of 93**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `93 GAME TESTS COMPLETE`, `All 93 required tests passed :)` |
+| 106 | The commit `edb70a3`: the code of run 105, with one comment changed | **93 of 93**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `93 GAME TESTS COMPLETE`, `All 93 required tests passed :)` |
+
+The two branches of the code came in one step: an exception or the time limit, and an answer that Uno cannot read. Thus run 104 is the red run of both. Its first failed check stopped `t18_provider_failures` before the case of an answer that Uno cannot read.
+
+This ticket changed no part of the runtime and no Lua module. Thus the four restart phases did not run for it.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| The sentence comes only on the route of the model. A provider without a model, a request after the limit of the session, and a player who is not an operator do not get it | `Uno.ask`, `Uno.route` | |
+| The fixed rules run on the server thread, after the answer of the provider. They call no model and no network. They read the context of the request: the context that the model got | `Uno.ask`, `Uno.RuleProvider` | Their cost on the server thread. No measurement |
+| The Claude provider gives a refusal, a cut answer, an error of the service and a service that is not reachable as an exception with a reason. It gives an answer that is not the JSON of an action as `Unreadable` | `ClaudeProvider.answer`, `Uno.parse` | `t18_claude_provider` sends these answers to Uno with a provider without the model flag: thus they get the sentences of increment A. No test sends them to Uno with the model flag |
+| After the time limit the thread of the provider continues. Uno does not read its late answer | `Uno.ask` | The tokens that the real service bills for it (D33.1) |
+
+### Not covered
+
+- A failure of the real Claude service. No run with the real service tested a failure: an error, a refusal, the time limit, or an answer that Uno cannot read.
+- The Claude provider with its model flag against the false server of the API, with a failure. See the code examination above.
+- The sentence on the screen of a client. The play session of increment B.
+
 ## Guardrail — the rules of CLAUDE.md and the CI
 
 Date: 2026-11-14. See D39.
@@ -1367,6 +1418,7 @@ Third manual test, on the projector and its hologram:
 | The production jar `mindcraft-<version>-all.jar` loaded on an installed Forge | Only built and examined: 25 nested libraries. In the development game the libraries arrive in a different way |
 | S2: the `/uno` commands in the game | Tested only through the functions that the commands call |
 | Increment B: the system text of the Claude provider after ticket #18, with the real service | A `-Plive` run costs money and needs the consent of the project owner. CLAUDE.md asks for one before the merge into `main`. Ticket #27 has the paid runs of increment B |
+| Increment B: a failure of the real Claude service after ticket #21: an error, a refusal, the time limit, or an answer that Uno cannot read | No run with the real service tested it. Such a run costs money and needs the consent of the project owner. The tests use providers written in the tests. See "Increment B — the fixed rules read a request when the model gives no valid action (ticket #21)" |
 | Increment B: a call of an old Lua run for the new job after a replacement (the limit of D26) | It needs a confirmation in the tick between a reading and a transfer of the module. No test builds that moment. See "Increment B — a job replaces a job (ticket #18)" |
 | T17 and the rest of T15 and T16 | They belong to S3. T15 has one minimum test: `t15_next_job_with_another_module` |
 

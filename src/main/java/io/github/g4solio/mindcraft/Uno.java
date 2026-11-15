@@ -25,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -45,6 +46,7 @@ public final class Uno {
      * A provider that reads JSON from a model uses parse(): the one reader of the JSON of an action.
      * The answer also has the input tokens and the output tokens of the model. A provider without a model reports zero.
      * Each exception is a failure of the provider. Only the action "none" says that the request gives no action.
+     * After a failure of a provider with a model, the fixed rules read the request (D42, point 17).
      */
     public interface Provider {
         Answer answer(String request, Context context) throws Exception;
@@ -183,6 +185,7 @@ public final class Uno {
     /**
      * One action of the closed list (D29), with typed values. Uno still checks each value against the world: a provider can give anything.
      * An answer that Uno cannot read is an action too: Unreadable. Its sentence says that the answer was not valid.
+     * From a provider with a model, the fixed rules read the request instead (D42, point 17).
      */
     public sealed interface Action {
         /** A new job, with its order. */
@@ -236,10 +239,16 @@ public final class Uno {
     static final long TIMEOUT_MS = 20_000;
     /** The limit of the requests to a model for each actor in one server session (D33). An initial value, fixed in the code. */
     static final int MODEL_REQUESTS = 100;
-    /** The fixed rules. They read the request of an actor who cannot use the model now. They have no limit. */
-    private static final Provider RULES = new RuleProvider();
+    /**
+     * The fixed rules. They read the request of an actor who cannot use the model now, and a request for which the model gave no
+     * valid action. They have no limit.
+     */
+    private static final RuleProvider RULES = new RuleProvider();
     private static final String LIMIT_REACHED = "You reached the limit of " + MODEL_REQUESTS + " model requests in this server session. "
         + "Until the server restarts, I read your requests with the fixed rules: they understand only simple sentences. ";
+    /** The sentence before the answer of the fixed rules when the model gave no valid action (D42, point 17). %s is the reason. */
+    private static final String NO_VALID_ACTION = "The model gave no valid answer (%s), "
+        + "thus I read your request with the fixed rules: they understand only simple sentences. ";
     /** The limit of the reason of a "none" action. A provider writes the reason, and the screen has little room. */
     private static final int MAX_REASON_LENGTH = 200;
     private static final String INVALID = "I did not get a valid configuration. I created no proposal.";
@@ -431,6 +440,8 @@ public final class Uno {
      * <p>
      * A provider with a model serves only an operator, and only below the limit of the session (D33).
      * In each other case the fixed rules read the request.
+     * If the model gives no valid action, the fixed rules read the same request, and Uno says so first (D42, point 17).
+     * A provider without a model keeps the failure sentence.
      */
     public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
         Session mine = session;
@@ -463,8 +474,24 @@ public final class Uno {
                 if (error == null && route == Route.MODEL) {
                     mine.usage.merge(actor.id(), new Usage(0, answer.inputTokens(), answer.outputTokens()), Usage::plus);
                 }
-                reply.accept(limit + (error == null ? act(mine, MindRuntime.get(server), actor, answer, server.overworld().getGameTime()) : failure(error)));
+                MindRuntime runtime = MindRuntime.get(server);
+                long now = server.overworld().getGameTime();
+                // A model that gives no valid action (D42, point 17): the request still counts, and the fixed rules read it with the same context.
+                String why = route == Route.MODEL ? noValidAction(answer, error) : null;
+                String said = why != null ? NO_VALID_ACTION.formatted(why) + act(mine, runtime, actor, RULES.answer(request, context), now)
+                    : error == null ? act(mine, runtime, actor, answer, now) : failure(error);
+                reply.accept(limit + said);
             }));
+    }
+
+    /**
+     * Why a model gave no valid action, or null if it gave one (D42, point 17): a failure of the service, the time limit of Uno,
+     * a refusal, or an answer that Uno cannot read. The Claude provider gives a refusal as an exception with its reason.
+     */
+    private static String noValidAction(Answer answer, Throwable error) {
+        if (error instanceof TimeoutException) return "the request reached the time limit";
+        if (error != null) return reason(error);
+        return answer.action() instanceof Action.Unreadable ? "I cannot read its answer" : null;
     }
 
     /**
@@ -819,11 +846,18 @@ public final class Uno {
         return lines.isEmpty() ? "I have no record of a job of yours." : String.join("\n", lines);
     }
 
-    /** A failure of the provider: an exception or the time limit. It is not an answer, thus each exception gets this sentence. */
+    /**
+     * A failure of a provider without a model: an exception or the time limit. It is not an answer, thus each exception gets this sentence.
+     * For a provider with a model the fixed rules read the request instead (D42, point 17).
+     */
     private static String failure(Throwable error) {
+        return "I cannot interpret the request now (" + reason(error) + "). The jobs in progress continue.";
+    }
+
+    /** The reason of a failure of a provider: the message of the exception, or its name. */
+    private static String reason(Throwable error) {
         Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
-        String reason = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
-        return "I cannot interpret the request now (" + reason + "). The jobs in progress continue.";
+        return cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
     }
 
     /**

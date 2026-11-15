@@ -58,9 +58,13 @@ public final class Notices {
         return "job " + id + " on robot #" + robot;
     }
 
-    /** The trips that a fuel level gives, in words: "about 4 trips". */
-    static String trips(int trips) {
-        return "about " + trips + (trips == 1 ? " trip" : " trips");
+    /**
+     * The trips that a fuel level gives, in words: "about 4 trips between the stations" (D42, point 12). The one place of these words:
+     * the notice, the report, the recorded data, the status and the screen use it. "Whose" names the stations: "its" after the name
+     * of a job, "the" in each other sentence.
+     */
+    static String trips(int trips, String whose) {
+        return "about " + trips + (trips == 1 ? " trip" : " trips") + " between " + whose + " stations";
     }
 
     /** The text with a capital first letter, for the start of a sentence. */
@@ -74,7 +78,7 @@ public final class Notices {
             + " from '" + entry.from() + "' to '" + entry.to() + "')";
         if (entry.kind() == Kind.LONG_WAIT) return subject + longWait(entry);
         // The fuel level and the trips of the entry. No remedy (D42, point 12).
-        if (entry.kind() == Kind.LOW_FUEL) return subject + " has little fuel: " + entry.fuel() + ", " + trips(entry.trips()) + " between its stations.";
+        if (entry.kind() == Kind.LOW_FUEL) return subject + " has little fuel: " + entry.fuel() + ", " + trips(entry.trips(), "its") + ".";
         return switch (entry.state()) {
             case BLOCKED -> subject + switch (entry.cause()) {
                 case OUT_OF_FUEL -> " is blocked: the robot has no fuel.";

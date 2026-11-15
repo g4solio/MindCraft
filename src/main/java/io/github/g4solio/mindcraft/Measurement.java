@@ -148,15 +148,16 @@ final class Measurement {
                     check(storage.job().carried == 24 && harbor.job().delivered == 16, storage.rig().describe() + "\n" + harbor.rig().describe());
                 })
                 .thenExecute(() -> {
-                    MindCraft.command(server, "computercraft shutdown #" + cellar.robot());
                     try {
                         runtime.control(PLAYER, harbor.robot(), "pause");
                     } catch (Refusal refusal) {
                         throw new GameTestAssertException("the runtime refused the pause of the harbor: " + refusal.getMessage());
                     }
                 })
-                .thenWaitUntil(() -> check(RobotApi.live(cellar.robot()) == null && harbor.job().state == State.PAUSED,
-                    "the shutdown or the pause is not complete: " + cellar.rig().describe() + "\n" + harbor.rig().describe()))
+                .thenWaitUntil(() -> {
+                    MindCraftTests.shutDown(server, cellar.robot());
+                    check(harbor.job().state == State.PAUSED, "the pause is not complete: " + harbor.rig().describe());
+                })
                 .thenExecute(() -> {
                     long now = helper.getLevel().getGameTime();
                     harbor.job().toSeenAt = now - JobAccount.OLD_TICKS - 1;
@@ -306,7 +307,7 @@ final class Measurement {
      * The provider of one request: it gives the request to the provider of the run, and keeps the context and the record of the request.
      * It says that it calls no model: the player of the measurement is not an operator (see PLAYER). The record has the values that Uno
      * writes on the route of the model (D42, choices of the implementation): the result of the checks is Uno.voice, and a failure or an
-     * answer that Uno cannot read has no valid action. The time is the time of the answer of the provider.
+     * answer that Uno cannot read has no valid action. The tokens of a failure are Uno.billed. The time is the time of the answer of the provider.
      */
     private static final class Measured implements Uno.Provider {
         private final Uno.Provider provider;
@@ -331,11 +332,15 @@ final class Measurement {
             } catch (Exception e) {
                 // The failure first: a reader that finds the record finds its failure too.
                 failure = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                record = new Uno.ModelRequest(provider.model(), 0, 0, since(sent), null, Uno.Voice.NO_VALID_ACTION);
+                // A refusal and a cut answer have the tokens that the service billed. Each other failure has none.
+                Uno.Usage billed = Uno.billed(null, e);
+                record = new Uno.ModelRequest(provider.model(), billed.inputTokens(), billed.outputTokens(), since(sent), null,
+                    Uno.Voice.NO_VALID_ACTION);
                 throw e;
             }
         }
 
+        /** The model of the run, for the record. callsModel() stays false: the route of an operator does not apply (see PLAYER). */
         @Override
         public String model() {
             return provider.model();
@@ -347,7 +352,7 @@ final class Measurement {
             String note = done == null ? "the request reached the time limit" : failure != null ? "the provider failed: " + failure
                 : done.action() instanceof Uno.Action.Unreadable ? "Uno cannot read the answer of the provider" : null;
             if (done == null) done = new Uno.ModelRequest(provider.model(), 0, 0, Uno.TIMEOUT_MS, null, Uno.Voice.NO_VALID_ACTION);
-            return new Result(test, expected, done, right(expected, done.action(), runtime), sentence(done.action()), answer, context, note);
+            return new Result(test, expected, done, right(expected, done.action(), runtime), Uno.sentence(done.action()), answer, context, note);
         }
 
         private static long since(long sent) {
@@ -376,12 +381,6 @@ final class Measurement {
         return Uno.find(runtime, PLAYER, on.target()).job() == named
             && Objects.requireNonNullElse(on.quantity(), named.quantity).equals(Objects.requireNonNullElse(job.quantity(), named.quantity))
             && Objects.requireNonNullElse(on.reserve(), named.reserve).equals(Objects.requireNonNullElse(job.reserve(), named.reserve));
-    }
-
-    /** The sentence of an action of the model: only a report and a "none" have one. */
-    private static String sentence(Uno.Action action) {
-        if (action instanceof Uno.Action.None none) return none.sentence();
-        return action instanceof Uno.Action.OnJob job && job.kind() == Uno.Kind.REPORT ? job.sentence() : null;
     }
 
     /** An action in words, for the record. */

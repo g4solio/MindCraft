@@ -19,7 +19,7 @@ The session is not played yet. The project owner fills in the results. The resul
 | B2 | Ticket #27 ran `gradlew runGameTestServer -Plive` one time, with the consent of the project owner. CLAUDE.md asks for this run after a change of the system text of `ClaudeProvider` (tickets #18 and #20). Write down its run number | Run: |
 | B3 | Write down the commit of the code of the session | |
 | B4 | The key is in the environment of the process that starts the client, as `ANTHROPIC_API_KEY`. It is in no file, in no visible command and in no message. Do not write it in the chat of the game or in a request to Uno | |
-| B5 | Each written request of this session is a paid call. The steps have about 15 requests. **Estimate, not a measurement:** with 2400 input tokens and 250 output tokens for each request (D42, point 8), this is about 0.01 $ with Haiku 5.5, 0.11 $ with Sonnet 5.5 and 0.22 $ with Opus 5.5. The session is part of the budget of 5 $ for all paid runs of increment B. The counter on the screen shows the real tokens | |
+| B5 | Each written request of this session is a paid call. The steps have about 15 requests. **Estimate, not a measurement:** each request has 2400 input tokens and 250 output tokens (D42, point 8). Then the session costs about 0.01 $ with Haiku 5.5, 0.11 $ with Sonnet 5.5 and 0.22 $ with Opus 5.5. The session is part of the budget of 5 $ for all paid runs of increment B. The counter on the screen shows the real tokens | |
 
 ## Setup — the only part with commands
 
@@ -122,8 +122,9 @@ Do:
 Expected:
 
 - Point 2: the panel has "The robot is not running. These data are not the current state." The job is still "stock at level".
-- Point 3: the answer starts with the fixed sentence: "Robot #R of job J is not running or not loaded. The last recorded data, not the current state: 0 on board, 48 in 'depot' (seen … ago) and 32 in 'furnace' (seen … ago)." Then the voice follows. The voice does not give the stocks or the load as the current state: the model did not get them.
-- If the voice fails a check, the answer is the fixed report of the job. It ends with "The robot is not running or not loaded. These are the last recorded data, not the current state." Record it.
+- Point 3: the answer starts with a fixed sentence. The sentence: "Robot #R of job J is not running or not loaded. The last recorded data, not the current state: 0 on board, a fuel level of … (about … trips between the stations), 48 in 'depot' (seen … ago) and 32 in 'furnace' (seen … ago)."
+- Then the voice follows. The voice does not give the stocks, the load or the fuel as the current state: the model did not get them.
+- If the voice fails a check, the answer is the fixed report of the job. Its fuel sentence starts with "My last recorded fuel level is". It ends with "The robot is not running or not loaded. These are the last recorded data, not the current state." Record it.
 - Point 4: the right mouse button turns the turtle on. Its terminal shows "MindCraft: this turtle works for Uno." The line of the panel about the robot goes away. The job stays "stock at level".
 - No line in the chat.
 
@@ -135,7 +136,7 @@ Do: write "Carry 16 coal from the depot to the smelter." Read the proposal. Look
 
 Expected:
 
-- The robot has an open job. Thus the request is the proposal of a replacement: "Proposal: cancel job J on robot #R (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: carry 16 x minecraft:coal from 'depot' to 'smelter'. Reserve to leave in 'depot': 0. Robot #R. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm."
+- The robot has an open job. Thus the request is the proposal of a replacement. The proposal: "Proposal: cancel job J on robot #R (keep minecraft:coal in 'furnace', taken from 'depot'), and start in its place: carry 16 x minecraft:coal from 'depot' to 'smelter'. Reserve to leave in 'depot': 0. Robot #R. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. I have done nothing yet. Confirm with /uno confirm."
 - You named no robot. You have one robot, and it is busy: Uno uses that robot.
 - Above the field: "Waiting for your confirmation: cancel job J on robot #R …", with the same text.
 - Before the button: job J stays "stock at level", and the robot stays at the dock of the furnace.
@@ -206,7 +207,7 @@ Expected:
 - Job N is "complete". Its panel has "Little fuel: 36, about 4 trips between the stations." The furnace has 40, the depot 0.
 - Point 3: an answer in the words of Uno, from the diary. It can name the low fuel and the delivery of job N. It invents no event.
 - Point 4: an answer in the words of Uno with the level 36 and about 4 trips.
-- If more than 5 minutes of game time passed since the robot last saw a station, the answer of a report starts with a fixed sentence, for example "I last observed 'depot' 6 min ago: it had 0 then." Record it.
+- More than 5 minutes of game time can pass after the robot last saw a station. Then the answer of a report starts with a fixed sentence, for example "I last observed 'depot' 6 min ago: it had 0 then." Record it.
 
 Result:
 
@@ -225,7 +226,8 @@ Expected:
 - The panels of the jobs come below these lines.
 - Point 3: when you scroll down to a panel, the field leaves the view. This is the known cost of D42, point 13.
 - If a part of the conversation is out of view without a scroll, record which part. Then the fixed conversation part of D42, point 13 opens again.
-- Point 4: "Job P started on robot #R." One line in the chat at once: "Uno › Job P on robot #R (minecraft:coal from 'depot' to 'furnace') has little fuel: 36, about 4 trips between its stations." This is the notice at the start of a job with little fuel.
+- Point 4: the answer is "Job P started on robot #R."
+- At once the chat has one line: "Uno › Job P on robot #R (minecraft:coal from 'depot' to 'furnace') has little fuel: 36, about 4 trips between its stations." This is the notice at the start of a job with little fuel.
 - The furnace has 40: the job is "stock at level" without a trip. Its panel has the line "Little fuel: 36, …". The hologram does not turn amber: a warning is not a state.
 
 Result:

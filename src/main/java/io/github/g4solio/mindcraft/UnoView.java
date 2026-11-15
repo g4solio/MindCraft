@@ -97,7 +97,7 @@ final class UnoView {
             widgets.add(text("Recorded reason: " + job.reason, "muted"));
         }
         // One line about the fuel, only when it is low (D42, point 19): the screen does not grow at each contact.
-        if (job.lowFuel()) widgets.add(text("Little fuel: " + job.fuel + ", " + Notices.trips(job.trips) + " between the stations.", "normal"));
+        if (job.lowFuel()) widgets.add(text("Little fuel: " + job.fuel + ", " + Notices.trips(job.trips, "the") + ".", "normal"));
         if (job.state.open()) {
             widgets.add(number("quantity:" + robotId, job.keepStock() ? "Level to keep" : "Quantity to carry", job.quantity));
             widgets.add(number("reserve:" + robotId, "Reserve in the source", job.reserve));

@@ -283,6 +283,16 @@ public class MindCraftTests {
         }
     }
 
+    /**
+     * A wait step that ends when the computer is off. While the computer runs, each try sends "computercraft shutdown" again.
+     * CC: Tweaked ignores "shutdown" while a computer starts: MindCraft.reboot repeats the command for the same reason.
+     */
+    static void shutDown(MinecraftServer server, int computerId) {
+        if (RobotApi.live(computerId) == null) return;
+        MindCraft.command(server, "computercraft shutdown #" + computerId);
+        check(RobotApi.live(computerId) == null, "the computer is not off yet");
+    }
+
     /** Places a turtle that is on. A computer ID of -1 lets CC: Tweaked assign the ID. */
     static void placeTurtle(GameTestHelper helper, BlockPos relative, int computerId, int fuel, UUID owner) {
         helper.setBlock(relative, ForgeRegistries.BLOCKS.getValue(ResourceLocation.tryParse("computercraft:turtle_normal")));
@@ -1333,11 +1343,8 @@ public class MindCraftTests {
                 check(rig.job() == job[1] && job[1].state.open() && job[1].quantity == 16, "the proposal ended a different job: " + rig.describe());
             });
         sequence = ask(sequence, server, player, "x", gives(() -> startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, 8)), 5000, answers)
-            .thenExecute(() -> {
-                check(last.get().startsWith("Proposal: cancel job " + job[1].id + " on robot #" + rig.id + " "), last.get());
-                MindCraft.command(server, "computercraft shutdown #" + rig.id);
-            })
-            .thenWaitUntil(() -> check(RobotApi.live(rig.id) == null, "the computer is not off yet"))
+            .thenExecute(() -> check(last.get().startsWith("Proposal: cancel job " + job[1].id + " on robot #" + rig.id + " "), last.get()))
+            .thenWaitUntil(() -> shutDown(server, rig.id))
             .thenExecute(() -> {
                 String confirmed = Uno.confirm(server, player);
                 check(confirmed.equals("I cannot replace the job: Robot #" + rig.id + " is not running. Load its area and turn it on."), confirmed);
@@ -1349,8 +1356,8 @@ public class MindCraftTests {
 
     /**
      * D42, point 10, D23 and T19: a replacement through the screen, with the fixed rules of the server. The request names no robot:
-     * the player has one robot, and it is busy. The proposal is in words above the button "Confirm #N".
-     * A different player sees no proposal and confirms nothing, with the button of the owner or with the command.
+     * the player has one robot, and it is busy. The proposal is in words above the button "Confirm #N". The robot holds nothing:
+     * the proposal says so. A different player sees no proposal and confirms nothing, with the button of the owner or with the command.
      * A start of the other player for the robot of the owner is refused. Then the owner presses the button. Nothing is on board:
      * the answer says that the new job has no first load.
      */
@@ -1377,6 +1384,9 @@ public class MindCraftTests {
                     view.get());
                 check(view.get().contains("Waiting for your confirmation: cancel job " + old[0].id + " on robot #" + rig.id + " (carry minecraft:coal from '"
                     + rig.from + "' to '" + rig.to + "'), and start in its place: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'."),
+                    view.get());
+                // The text of a replacement gives the load at the moment of the proposal, also when it is zero (D42, point 10).
+                check(view.get().contains("Robot #" + rig.id + ". The robot holds no minecraft:coal now. The load can change until the confirmation"),
                     view.get());
                 check(action(otherView.get(), "confirm") == null && !otherView.get().contains(rig.from), otherView.get());
                 UnoView.act(server, other, button[0], "{}");
@@ -1647,7 +1657,7 @@ public class MindCraftTests {
                 return answer("{}");
             }), 300, noAction::add))
             .thenWaitUntil(() -> check(noAction.size() == 2, "Uno did not answer yet"))
-            // The Claude provider gives a refusal of the model as this exception.
+            // The reason of a refusal of the Claude provider. The provider gives it with its tokens: see b_model_of_the_setting.
             .thenExecute(() -> Uno.ask(server, player, "Carry 8 coal from " + rig.from + " to " + rig.to + " with robot " + rig.id,
                 new CountingModel((r, c) -> {
                     throw new IllegalStateException("the model declined the request");
@@ -1942,8 +1952,10 @@ public class MindCraftTests {
      * D42, point 6: the model of the Claude provider is the setting "model" of config/mindcraft-common.toml. The start is Haiku 5.5.
      * A provider reads the setting when it is built: the server builds it at its start. The request names the model of the setting.
      * Only a model with a server-side fallback for a refusal gets the fallback parameter: Sonnet 5.5 has one, Haiku 5.5 has none (D33).
-     * A refusal without a fallback, and a model that the service does not know, are failures of the model: the fixed rules read
-     * the request (D42, point 17). A local stand-in is in the place of the API: no request reaches the real service.
+     * A refusal without a fallback, a cut answer, and a model that the service does not know, are failures of the model: the fixed
+     * rules read the request (D42, point 17). The service billed the tokens of a refusal and of a cut answer: they count in the counter
+     * of the session and in the record of the request. An error of the service has no usage: zero tokens.
+     * A local stand-in is in the place of the API: no request reaches the real service.
      * It has its own batch, because it changes a value of the whole server. It changes the setting only while it builds a provider,
      * and puts the value of before back at once, also when a check fails.
      */
@@ -1978,15 +1990,33 @@ public class MindCraftTests {
         String none = "You did not give the source.", rules = ", thus I read your request with the fixed rules: they understand only simple sentences. ";
         String notFound = "{\"type\":\"error\",\"error\":{\"type\":\"not_found_error\",\"message\":\"model: " + unknown + "\"}}";
         List<String> answers = new CopyOnWriteArrayList<>();
+        // The record of the newest request of the operator: the model of the setting, these tokens, no action and no valid action.
+        BiConsumer<Long, Long> noAction = (input, output) -> {
+            Uno.ModelRequest record = Uno.modelRequest(operator);
+            check(record != null && record.equals(new Uno.ModelRequest("claude-haiku-5-5", input, output, record.millis(), null,
+                Uno.Voice.NO_VALID_ACTION)), "the record of the request: " + record);
+        };
         GameTestSequence sequence = helper.startSequence().thenExecute(() -> {
             status.set(200);
             body.set(claudeMessage("end_turn", modelAction("none", none)));
         });
         sequence = ask(sequence, server, operator, "x", sonnet, 15_000, answers);
         sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
-            .thenExecute(() -> body.set(claudeMessage("refusal", null)));
+            .thenExecute(() -> {
+                usage(operator, 2, 2, 2);
+                body.set(claudeMessage("refusal", null, 40, 3));
+            });
+        // A refusal and a cut answer: the service billed their tokens. They count in the counter and in the record.
         sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
             .thenExecute(() -> {
+                usage(operator, 3, 42, 5);
+                noAction.accept(40L, 3L);
+                body.set(claudeMessage("max_tokens", "{\"action\":", 50, 4096));
+            });
+        sequence = ask(sequence, server, operator, "x", haiku, 15_000, answers)
+            .thenExecute(() -> {
+                usage(operator, 4, 92, 4101);
+                noAction.accept(50L, 4096L);
                 status.set(404);
                 body.set(notFound);
             });
@@ -1994,25 +2024,31 @@ public class MindCraftTests {
             .thenExecute(() -> {
                 api.stop(0);
                 MindCraft.LOGGER.info("b_model_of_the_setting answers: {}", answers);
-                check(answers.size() == 4 && sent.size() == 4 && betas.size() == 4, answers + "\n" + sent);
+                check(answers.size() == 5 && sent.size() == 5 && betas.size() == 5, answers + "\n" + sent);
+                // An error of the service gives no usage: the request counts with zero tokens.
+                usage(operator, 5, 92, 4101);
+                Uno.ModelRequest record = Uno.modelRequest(operator);
+                check(record != null && record.equals(new Uno.ModelRequest(unknown, 0, 0, record.millis(), null, Uno.Voice.NO_VALID_ACTION)),
+                    "the record of the request: " + record);
                 // Each request names the model of the setting of its provider. The effort stays low.
                 List<JsonObject> messages = sent.stream().map(text -> JsonParser.parseString(text).getAsJsonObject()).toList();
                 List<String> models = messages.stream().map(message -> message.get("model").getAsString()).toList();
-                check(models.equals(List.of("claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-5-5", unknown)), models.toString());
+                check(models.equals(List.of("claude-sonnet-5-5", "claude-haiku-5-5", "claude-haiku-5-5", "claude-haiku-5-5", unknown)), models.toString());
                 check(messages.stream().allMatch(message -> message.getAsJsonObject("output_config").get("effort").getAsString().equals("low")), sent.toString());
                 // Only Sonnet 5.5 has the server-side fallback for a refusal, with its beta header.
                 check(messages.get(0).has("fallbacks") && messages.get(0).get("fallbacks").getAsString().equals("default")
                     && betas.get(0).contains("server-side-fallback-2026-07-01"), messages.get(0) + "\n" + betas.get(0));
-                for (int i = 1; i < 4; i++) {
+                for (int i = 1; i < 5; i++) {
                     check(!messages.get(i).has("fallbacks") && !betas.get(i).contains("server-side-fallback"), "a fallback for " + models.get(i)
                         + ": " + messages.get(i) + "\n" + betas.get(i));
                 }
-                // The sentence of the model with a model of each kind. A refusal without a fallback, and a model that the service
-                // does not know: the fixed rules read the request, and the answer gives the reason first.
+                // The sentence of the model with a model of each kind. A refusal without a fallback, a cut answer, and a model that
+                // the service does not know: the fixed rules read the request, and the answer gives the reason first.
                 check(answers.get(0).equals(none) && answers.get(1).equals(none), answers.subList(0, 2).toString());
                 check(answers.get(2).equals("The model gave no valid answer (the model declined the request)" + rules + RULES_X), answers.get(2));
-                check(answers.get(3).equals("The model gave no valid answer (the model service does not know the model '" + unknown + "')"
-                    + rules + RULES_X), answers.get(3));
+                check(answers.get(3).equals("The model gave no valid answer (the answer of the model is incomplete)" + rules + RULES_X), answers.get(3));
+                check(answers.get(4).equals("The model gave no valid answer (the model service does not know the model '" + unknown + "')"
+                    + rules + RULES_X), answers.get(4));
                 check(MindCraft.MODEL.get().equals(before), "the setting is not back: " + MindCraft.MODEL.get());
             })
             .thenSucceed();
@@ -2582,6 +2618,7 @@ public class MindCraftTests {
      * Increment B, D42 point 3: the fixed sentences about the uncertain numbers. They give the numbers that the facts do not give,
      * with their caution. The cases and the limits are the cases of b_facts_of_uncertain_numbers: the same record that the test writes,
      * the flag of the robot and a game time, without a robot. A stock that no robot observed has no number: it gets no sentence.
+     * Since the review of increment B: the fuel level of a robot that is not running or silent is in the recorded data, also in RECOVERY.
      */
     @GameTest(template = EMPTY)
     public static void b_fixed_sentences_of_uncertain_numbers(GameTestHelper helper) {
@@ -2619,6 +2656,30 @@ public class MindCraftTests {
             job.toSeen = MindRuntime.UNKNOWN;
         }), false, List.of(recovered, stopped + " The last recorded data, not the current state: 4 on board and 50 in 'depot' (seen 5 min ago).")));
         cases.put("a stock never observed", new Case(record(900, now, job -> job.toSeen = MindRuntime.UNKNOWN), true, List.of()));
+        // The fuel of the last contact: 29, thus 4 trips. The facts do not give it for a robot that is not running or silent:
+        // then the recorded data have it (D42, point 3). The facts give it for a robot that runs and calls, also in RECOVERY.
+        Consumer<Job> fuel = job -> {
+            job.fuel = 29;
+            job.trips = 4;
+        };
+        String fuelData = " The last recorded data, not the current state: 4 on board, a fuel level of 29 (about 4 trips between the stations),"
+            + " 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago).";
+        cases.put("certain, with a fuel level", new Case(record(900, now, fuel), true, List.of()));
+        cases.put("a robot that is not running, with a fuel level", new Case(record(900, now, fuel), false, List.of(stopped + fuelData)));
+        cases.put("a silent robot, with a fuel level", new Case(record(900, now, fuel.andThen(job -> job.lastContact--)), true,
+            List.of("Robot #9 of job 900 has not contacted me for a while: I do not know if it is working." + fuelData)));
+        Consumer<Job> recovery = job -> {
+            job.state = State.RECOVERY;
+            job.cause = Cause.LOAD_DIFFERS;
+            job.reason = "the robot holds 0, the record says 4";
+        };
+        String recoveryStart = "Job 900 on robot #9: I cannot say how it went. Recorded reason: the robot holds 0, the record says 4."
+            + " The recorded data can be wrong: 6 delivered, 4 on board, ";
+        String recoveryEnd = "50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago). You decide whether to resume or cancel.";
+        cases.put("RECOVERY of a robot that is not running, with a fuel level", new Case(record(900, now, fuel.andThen(recovery)), false,
+            List.of(recoveryStart + "a fuel level of 29 (about 4 trips between the stations), " + recoveryEnd)));
+        cases.put("RECOVERY of a robot that runs, with a fuel level", new Case(record(900, now, fuel.andThen(recovery)), true,
+            List.of(recoveryStart + recoveryEnd)));
         List<String> wrong = new ArrayList<>();
         cases.forEach((name, test) -> {
             List<String> said = new JobAccount(test.job(), test.running(), now).cautions();
@@ -2752,7 +2813,9 @@ public class MindCraftTests {
                     && !answer.contains("987654") && !answer.contains("The recorded data can be wrong")));
         List<Said> second = List.of(new Said("x", () -> modelAction("report", voice), fixedThenVoice(voice, List.of(
             () -> "After a recovery of job " + a.job().id + " on robot #" + a.id + " the totals can be inexact: the record says 0 delivered.",
-            () -> "Robot #" + b.id + " of job " + b.job().id + " is not running or not loaded. The last recorded data, not the current state: 0 on board, 56 in '"
+            // The robot of job B is not running: the recorded data have the fuel level of its last contact too.
+            () -> "Robot #" + b.id + " of job " + b.job().id + " is not running or not loaded. The last recorded data, not the current state: 0 on board, "
+                + "a fuel level of " + b.job().fuel + " (about " + b.job().trips + " trips between the stations), 56 in '"
                 + b.from + "' (seen N s ago) and 8 in '" + b.to + "' (seen 5 min ago)."))));
         Runnable noProposal = () -> check(!Uno.hasProposal(player), "Uno created a proposal");
         GameTestSequence sequence = helper.startSequence()
@@ -2771,15 +2834,86 @@ public class MindCraftTests {
                 b.job().toSeenAt = b.level.getGameTime() - JobAccount.OLD_TICKS - 1;
             });
         sequence = said(sequence, server, player, first, noProposal)
-            .thenExecute(() -> {
-                a.runtime.control(player, a.id, "resume");
-                MindCraft.command(server, "computercraft shutdown #" + b.id);
-            })
-            .thenWaitUntil(() -> check(a.job().state == State.WAITING && a.job().recoveries == 1 && RobotApi.live(b.id) == null,
-                "the resume or the shutdown is not complete: " + a.describe() + "\n" + b.describe()));
+            .thenExecute(() -> a.runtime.control(player, a.id, "resume"))
+            .thenWaitUntil(() -> {
+                shutDown(server, b.id);
+                check(a.job().state == State.WAITING && a.job().recoveries == 1, "the resume is not complete: " + a.describe());
+            });
         said(sequence, server, player, second, noProposal)
             .thenExecute(() -> a.runtime.control(player, a.id, "cancel"))
             .thenSucceed();
+    }
+
+    /**
+     * Sends one request "x" to a provider of the test with a model. The provider waits inside its answer until the test ran "during"
+     * on the server thread. Then it gives the action of the JSON, with 12 input tokens and 3 output tokens.
+     */
+    private static GameTestSequence askDuring(GameTestSequence sequence, MinecraftServer server, Actor actor, Supplier<String> json,
+                                              Runnable during, List<String> answers) {
+        CountDownLatch held = new CountDownLatch(1);
+        int[] before = new int[1];
+        return sequence
+            .thenExecute(() -> {
+                before[0] = answers.size();
+                String action = json.get();
+                Uno.ask(server, actor, "x", new CountingModel((request, context) -> {
+                    held.await(10, TimeUnit.SECONDS);
+                    return new Uno.Answer(Uno.parse(action), 12, 3);
+                }), 15_000, answers::add);
+            })
+            .thenExecute(() -> {
+                during.run();
+                held.countDown();
+            })
+            .thenWaitUntil(() -> check(answers.size() > before[0], "Uno did not answer yet"));
+    }
+
+    /**
+     * Review of increment B: the facts go with the request, and the fixed sentences and the voice come with the answer, up to the time
+     * limit later. At the answer Uno builds the facts again, for the moment of the fixed sentences. A run of digits of the sentence that
+     * is a number of the facts of the request, and that the facts of the answer do not give for the same job, fails the check. Then a
+     * report gets the fixed report of A, "none" gets the fixed sentence, and the record has FAILED and the unused sentence.
+     * A provider of the test waits inside its answer, and the test changes the job in that time. The job delivers 10 of 24, then it waits.
+     * 1. A report says "10". Then the job goes to RECOVERY: the delivered total is not given any more.
+     * 2. The owner resumes. A "none" says "10", the stock of the destination. Then that observation becomes old.
+     * 3. A report without a number. Then the job goes to RECOVERY again: the voice stays, after the fixed sentence of that moment.
+     * The player is an operator: the request is on the route of the model, with its record. An operator owns each job of the server.
+     * Thus the sentence that keeps the voice has no digit: a job of a different test can change at the same time.
+     */
+    @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
+    public static void b_voice_at_the_moment_of_the_answer(GameTestHelper helper) {
+        Actor operator = operator("b_moment");
+        Rig rig = new Rig(helper, "b_moment", 10, 1000, operator);
+        MinecraftServer server = rig.level.getServer();
+        List<String> answers = new CopyOnWriteArrayList<>();
+        Supplier<String> last = () -> answers.get(answers.size() - 1);
+        String delivered = "I delivered 10 of 24 so far.", stock = "The destination had 10 at my last look.", voice = "Something here needs your eyes.";
+        Runnable recovery = () -> rig.runtime.recovery(rig.job(), Cause.LOAD_DIFFERS, "the test changed the record");
+        GameTestSequence sequence = rig.begin()
+            .thenExecute(() -> rig.startJob(24, 0))
+            .thenWaitUntil(() -> check(rig.job() != null && rig.job().state == State.WAITING && rig.job().delivered == 10, rig.describe()));
+        sequence = askDuring(sequence, server, operator, () -> modelAction("report", delivered, "robot", rig.id), recovery, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Job " + rig.job().id + ", robot #" + rig.id + ": carry 24 items") && last.get().contains("I cannot say how it went.")
+                    && !last.get().contains(delivered), last.get());
+                recorded(operator, Uno.parse(modelAction("report", delivered, "robot", rig.id)), 12, 3, Uno.Voice.FAILED, delivered, 0);
+                rig.runtime.control(operator, rig.id, "resume");
+            })
+            .thenWaitUntil(() -> check(rig.job().state == State.WAITING && rig.job().recoveries == 1, rig.describe()));
+        sequence = askDuring(sequence, server, operator, () -> modelAction("none", stock),
+            () -> rig.job().toSeenAt = rig.level.getGameTime() - JobAccount.OLD_TICKS - 1, answers)
+            .thenExecute(() -> {
+                check(last.get().equals("I cannot answer that. I did nothing."), last.get());
+                recorded(operator, Uno.parse(modelAction("none", stock)), 12, 3, Uno.Voice.FAILED, stock, 0);
+            });
+        sequence = askDuring(sequence, server, operator, () -> modelAction("report", voice, "robot", rig.id), recovery, answers)
+            .thenExecute(() -> {
+                check(last.get().startsWith("Job " + rig.job().id + " on robot #" + rig.id + ": I cannot say how it went.")
+                    && last.get().endsWith(". " + voice), last.get());
+                recorded(operator, Uno.parse(modelAction("report", voice, "robot", rig.id)), 12, 3, Uno.Voice.PASSED, null, 0);
+                rig.runtime.control(operator, rig.id, "cancel");
+            });
+        sequence.thenSucceed();
     }
 
     /**
@@ -2826,7 +2960,8 @@ public class MindCraftTests {
             new Said("x", () -> modelAction("start", sentence, "robot", rig.id, "module", MindRuntime.TRANSPORT, "from", rig.from, "to", rig.to,
                 "item", "minecraft:coal", "quantity", 8, "reserve", 0), answer -> answer.equals("Proposal: cancel " + job.get()
                 + ", and start in its place: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'. Reserve to leave in '" + rig.from
-                + "': 0. Robot #" + rig.id + ". The load can change until the confirmation: the new job counts the load that the robot holds then" + confirm)));
+                + "': 0. Robot #" + rig.id + ". The robot holds no minecraft:coal now."
+                + " The load can change until the confirmation: the new job counts the load that the robot holds then" + confirm)));
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> rig.state(State.WAITING));
@@ -3189,11 +3324,8 @@ public class MindCraftTests {
         rig.begin()
             .thenExecute(() -> rig.runtime.start(player, rig.order(MindRuntime.KEEP_STOCK, 24, 0)))
             .thenWaitUntil(() -> rig.state(State.SATISFIED))
-            .thenExecute(() -> {
-                check(!Uno.report(server, player).contains("is not running"), Uno.report(server, player));
-                MindCraft.command(server, "computercraft shutdown #" + rig.id);
-            })
-            .thenWaitUntil(() -> check(RobotApi.live(rig.id) == null, "the computer is not off yet"))
+            .thenExecute(() -> check(!Uno.report(server, player).contains("is not running"), Uno.report(server, player)))
+            .thenWaitUntil(() -> shutDown(server, rig.id))
             .thenExecute(() -> rig.chest(rig.dest).removeItem(0, 10))
             .thenIdle(100)
             .thenExecute(() -> {
@@ -3236,8 +3368,12 @@ public class MindCraftTests {
                 long now = rig.level.getGameTime();
                 MindRuntime copy = MindRuntime.load(rig.runtime.save(new CompoundTag()));
                 String report = Uno.report(rig.runtime, alice, now);
-                check(report.contains("I delivered 8 items.") && report.contains("The job is complete."), report);
-                check(Uno.report(copy, alice, now).equals(report), "the report after a save and a load is different");
+                check(report.contains("I delivered 8 items.") && report.contains("The job is complete.") && report.contains(" My fuel level is "), report);
+                // The last contact of a robot belongs to the server session (D24). After a load the robot has not called yet:
+                // the fuel is the last recorded level (since the review of increment B). Each other word is the same.
+                String loaded = Uno.report(copy, alice, now);
+                check(loaded.equals(report.replace(" My fuel level is ", " My last recorded fuel level is ")),
+                    "the report after a save and a load is different: " + loaded);
                 check(Uno.confirm(server, alice).startsWith("I have no pending proposal"), "Uno remembered a proposal that it did not save");
             })
             .thenSucceed();
@@ -4997,9 +5133,24 @@ public class MindCraftTests {
      * The facts are the facts that a provider of the test gets in the conversation with Uno.
      * A turtle that needs no fuel has no fuel level: the report, the facts and the screen say nothing about the fuel.
      * For a robot that is not running or silent the facts do not give the fuel: see b_facts_of_uncertain_numbers.
+     * Then the report gives the last recorded level, not a level in the present tense (brief 2.4). The test gives the account
+     * a record that it writes, the flag of the robot and a game time, without a robot.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void b_fuel_in_the_report(GameTestHelper helper) {
+        long at = 100_000;
+        Consumer<Job> fuel = job -> {
+            job.fuel = 29;
+            job.trips = 4;
+        };
+        String now = " My fuel level is 29: about 4 trips between the stations. ";
+        String last = " My last recorded fuel level is 29: about 4 trips between the stations. ";
+        for (JobAccount account : List.of(new JobAccount(record(900, at, fuel), false, at),
+            new JobAccount(record(900, at, fuel.andThen(job -> job.lastContact--)), true, at))) {
+            check(account.report().contains(last) && !account.report().contains("My fuel level is"), account.report());
+        }
+        JobAccount linked = new JobAccount(record(900, at, fuel), true, at);
+        check(linked.report().contains(now) && !linked.report().contains("recorded fuel"), linked.report());
         Actor player = player("b_fuel_report");
         Rig rig = new Rig(helper, "b_fuel_report", 0, 1000, player);
         MinecraftServer server = rig.level.getServer();
@@ -5700,8 +5851,7 @@ public class MindCraftTests {
                 robot[0] = RobotApi.live(9003);
                 check(robot[0] != null && robot[0].turtle.getDirection() != Direction.NORTH, "the turtle does not turn yet");
             })
-            .thenExecute(() -> MindCraft.command(helper.getLevel().getServer(), "computercraft shutdown #9003"))
-            .thenWaitUntil(() -> check(RobotApi.live(9003) == null, "the computer is not off yet"))
+            .thenWaitUntil(() -> shutDown(helper.getLevel().getServer(), 9003))
             .thenIdle(20)
             .thenExecute(() -> stopped[0] = robot[0].turtle.getDirection())
             .thenIdle(60)

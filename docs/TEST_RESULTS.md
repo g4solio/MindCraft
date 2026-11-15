@@ -175,6 +175,12 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 155 | 106 of 107 | Ticket #28, the final code of increment B. `b_replacement_refused` failed one time: "the computer is not off yet". See "Increment B — final runs and evidence (ticket #28)" |
 | 156 | 107 of 107 | None. Ticket #28, the same code. Server line: `All 107 required tests passed :)` |
 | 157 | 107 of 107 | None. Ticket #28, the same code, one more time. Server line: `All 107 required tests passed :)` |
+| 158 | 105 of 107, expected | The corrections of the code review, red run 1: the fuel of a robot that is not running |
+| 159 | 104 of 107 | Green run 1 and red run 2: the load in the text of a replacement. Two failures expected, one not expected: `t22_t23_proposals_and_contact_points`. See "Increment B — corrections of the code review" |
+| 160 | 106 of 107, expected | Green run 2 and red run 3: the tokens of a refusal and of a cut answer |
+| 161 | 107 of 108, expected | Green run 3 and red run 4: the voice at the moment of the answer |
+| 162 | 108 of 108 | None. Each correction. Server line: `All 108 required tests passed :)` |
+| 163 | 108 of 108 | None. The committed code `afa3717`. Server line: `All 108 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -201,6 +207,7 @@ Run 143 is the run of the integration branch after the merge of ticket #25.
 Runs 150 to 153 are the runs of ticket #26, on the integration branch at `002c636`.
 Run 154 is the run of the integration branch after the merge of ticket #26.
 Runs 155 to 157 are the runs of ticket #28, on the integration branch at `8b0d3e2`. Ticket #28 changed only documents.
+Runs 158 to 163 are the runs of the corrections of the code review of increment B, on the branch `b/review-fixes` from `9722178`.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -247,6 +254,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 125, ticket #24 of increment B | All four | Passed. See "Increment B — the low fuel notice (ticket #24)" |
 | Run 127, tickets #20 and #24 after the merge | All four | Passed |
 | Run 156, ticket #28: the final code of increment B | All four | Passed. See "Increment B — final runs and evidence (ticket #28)" |
+| Run 163, the corrections of the code review of increment B | All four | Passed. See "Increment B — corrections of the code review" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1958,6 +1966,95 @@ What stays not verified for increment B:
 - The screen of a client: the voice, the fixed sentences before it, the proposals of an adoption and of a replacement, the line about low fuel, the order and the height of the screen, and the confirmation of "Cancel". The notices in the chat of a client.
 - The configuration file on a real installation, and the log lines with a key.
 - The play session (ticket #29).
+
+## Increment B — corrections of the code review
+
+Date: 2026-11-15. A code review of increment B, on two axes: the standards and the spec. This section has the corrections of its points. See D42, "The corrections of the code review".
+The code of the runs is the branch `b/review-fixes`, from the integration branch at `9722178`, with tickets #16 to #26 and #28. No run called the real Claude service. The schema and the system text of the Claude provider did not change.
+
+The new texts for the player, from the tests:
+
+- A robot that is not running or silent, in the fixed sentence before the voice: "Robot #9 of job 900 is not running or not loaded. The last recorded data, not the current state: 4 on board, a fuel level of 29 (about 4 trips between the stations), 50 in 'depot' (seen 5 min ago) and 6 in 'furnace' (seen 12 s ago)."
+- The same robot in the fixed report: "My last recorded fuel level is 29: about 4 trips between the stations." A robot that runs and calls keeps "My fuel level is 29: about 4 trips between the stations."
+- The proposal of a replacement for a robot that holds no item of the job: "… Robot #N. The robot holds no minecraft:coal now. The load can change until the confirmation: the new job counts the load that the robot holds then. …"
+
+### Automatic in-game tests
+
+| Test | What it does | Result |
+| --- | --- | --- |
+| `b_fixed_sentences_of_uncertain_numbers` (changed) | Five more cases with a record that has a fuel level of 29 (4 trips). Three robots: one that runs and calls, one that is not running, and a silent one. Then `RECOVERY`, with a robot that is not running and with a robot that runs | Passed in runs 159 to 163. The robot that is not running and the silent robot get the fuel in the recorded data. `RECOVERY` gives the fuel only for a robot that is not running: the facts give it for a robot that runs |
+| `b_fuel_in_the_report` (changed) | First the fixed report of a record that the test writes, without a robot: a robot that is not running, a silent robot, and a robot that runs and calls. Then the steps of before | Passed in runs 159 to 163. "My last recorded fuel level is 29: …" for the first two. "My fuel level is 29: …" for the third |
+| `b_voice_after_uncertain_numbers` (changed) | The fixed sentence of the robot that is not running has its fuel level of the record. The shutdown repeats: see below | Passed in runs 159 to 163. The repeated shutdown since run 162 |
+| `t22_t23_proposals_and_contact_points` (changed) | The report after a save and a load says "My last recorded fuel level is" in the place of "My fuel level is". Each other word is the same | Passed in runs 160 to 163. Run 159 failed here: "the report after a save and a load is different". Cause: the last contact of a robot belongs to the server session (D24). After a load the robot has not called yet. Thus the new rule gives the recorded level. The expectation changed, not the code |
+| `b_replacement_through_the_view` (changed) | The proposal of a replacement for a robot that holds nothing | Passed in runs 160 to 163. The view has "Robot #N. The robot holds no minecraft:coal now. The load can change until the confirmation" |
+| `b_no_voice_for_an_action` (changed) | The whole text of the same kind of proposal | Passed in runs 160 to 163 |
+| `b_adoption_in_the_proposal` (unchanged) | A plain start for a robot that holds nothing | Passed. The text of increment A, without a sentence about the load |
+| `b_model_of_the_setting` (changed) | One more request: a cut answer (`max_tokens`). The refusal has 40 input and 3 output tokens. The cut answer has 50 and 4096 | Passed in runs 161 to 163. The counter grows by the tokens: 3 requests and 42/5 tokens, then 4 requests and 92/4101. The error 404 adds a request and no token: 5 requests and 92/4101. Each record has the tokens of its answer, no action, and `NO_VALID_ACTION`. The answer to the cut answer: "The model gave no valid answer (the answer of the model is incomplete), thus I read your request with the fixed rules: …" |
+| `b_voice_at_the_moment_of_the_answer` (new) | An operator and a provider of the test with a model. The provider waits inside its answer, and the test changes the job in that time. The job delivered 10 of 24 and waits. 1: a report "I delivered 10 of 24 so far.", and the job goes to `RECOVERY`. 2: after a resume, a "none" "The destination had 10 at my last look.", and the observation of the destination becomes old. 3: a report "Something here needs your eyes.", and the job goes to `RECOVERY` again | Passed in runs 162 and 163. 1: the fixed report of A, with "I cannot say how it went.", and the record `FAILED` with the unused sentence. 2: "I cannot answer that. I did nothing.", and the record `FAILED`. 3: the fixed sentence of `RECOVERY` of that moment, then the voice, and the record `PASSED` |
+| `b_replacement_refused`, `t21_report_with_old_data`, `s0_probe_hard_stop`, `b_voice_after_uncertain_numbers` and `b_measurement_with_the_stand_in` (changed) | The wait for a computer that is off repeats `computercraft shutdown` until the computer is off: the helper `MindCraftTests.shutDown`. No timeout changed | Passed in runs 162 and 163 |
+
+The lines of the server log of run 162, for the record of a request (a code examination of the line, as for ticket #23):
+
+```text
+Uno request: model claude-haiku-5-5, 40 input tokens, 3 output tokens, 2 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model claude-haiku-5-5, 50 input tokens, 4096 output tokens, 2 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model claude-haiku-9-9, 0 input tokens, 0 output tokens, 4 ms, action no answer, checks NO_VALID_ACTION, request "x"
+Uno request: model test-model, 12 input tokens, 3 output tokens, 0 ms, action report, checks FAILED, unused sentence "I delivered 10 of 24 so far.", request "x"
+Uno request: model test-model, 12 input tokens, 3 output tokens, 0 ms, action none, checks FAILED, unused sentence "The destination had 10 at my last look.", request "x"
+Uno request: model test-model, 12 input tokens, 3 output tokens, 0 ms, action report, checks PASSED, request "x"
+```
+
+### The failure of run 155
+
+- Run 155 failed one time in `b_replacement_refused`: "the computer is not off yet" at the limit of 2400 ticks. The test sent `computercraft shutdown` one time, then waited.
+- **The cause is not proven.** No run reproduced the failure. The form of the failure fits a known behaviour of CC: Tweaked: it ignores "shutdown" while a computer starts. `MindCraft.reboot` already repeats the command for that reason.
+- The correction: each test that waits for a computer that is off repeats the command, through one helper. Runs 162 and 163 passed. Two passes do not prove that the failure cannot come back.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 158, red | The new cases of `b_fixed_sentences_of_uncertain_numbers` and `b_fuel_in_the_report`, and the code of before | 105 of 107, expected. The three cases with a robot that is not running or silent had no fuel. The report of a robot that is not running said "My fuel level is 29" |
+| 159 | The fuel in the recorded data and in the report, and one function for the words of the trips. The new checks of the text of a replacement | 104 of 107. Expected: `b_replacement_through_the_view` and `b_no_voice_for_an_action`. Not expected: `t22_t23_proposals_and_contact_points`, see above |
+| 160 | The sentence about the empty robot. The changed `t22_t23_proposals_and_contact_points`. The changed `b_model_of_the_setting` | 106 of 107, expected. `b_model_of_the_setting`: "expected 3 requests, 42 input tokens and 5 output tokens, but: Usage[requests=3, inputTokens=2, outputTokens=2]" |
+| 161 | The tokens of a refusal and of a cut answer. The new test `b_voice_at_the_moment_of_the_answer` | 107 of 108, expected. The answer was the fixed sentence of `RECOVERY`, then the voice "I delivered 10 of 24 so far." |
+| 162 | Each correction: the check at the moment of the answer, the voice one time for each answer, the shared texts and loops, and the helper of the shutdown | **108 of 108**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `108 GAME TESTS COMPLETE`, `All 108 required tests passed :)` |
+| 163 | The committed code `afa3717`. Only comments differ from run 162 | **108 of 108**. The same three log lines. "Uno interprets requests with the fixed rules, without a language model." |
+| `stop`, after run 163 | In the game, automatic | Passed. `All 1 required tests passed :)`. The status at the stop, at the game time 82: `RUNNING`, taken 24, delivered 0, on board 24, "fuel: 999, about 166 trips between the stations" |
+| `check` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart, at the game time 84: "robot: not running or not loaded, last contact: none since server start", the fuel 999 of the record, and the diary `RUNNING`. At the end: `DONE`, source 40, destination 24, robot 0, and the diary `RUNNING, DONE`. The summary: "0 s ago: Job 1 on robot #0 (…) is done: 24 delivered." |
+| `crash` | In the game, automatic | The test halted the process at the game time 421, as expected. The record said `DONE`, delivered 24, on board 0 |
+| `check-crash` | In the game, automatic | Passed. `All 1 required tests passed :)`. After the restart: `RECOVERY` ("the world is older than the record of this job"), and the diary `RUNNING, DONE, RECOVERY WORLD_OLDER`. At the end: `DONE`, "1 recovery. The totals can be inexact.", and the diary `RUNNING, DONE, RECOVERY WORLD_OLDER, RUNNING, DONE` |
+
+The four phases ran after run 163, one at a time, on the same world. After them the data folder has `mindcraft.dat` and no temporary file. `RobotApi` changed (point 6): thus the phases ran. No Lua module changed.
+
+### Code examination
+
+- The four places of the words of the trips call `Notices.trips`: the notice, the report, the status and the screen. The automatic tests compare their whole texts: `b_low_fuel`, `b_low_fuel_at_the_start`, `b_fuel_in_the_report` and `a_notices_call_no_provider`. They passed without a change.
+- `Uno.ask` computes the result of the checks one time. The record and the answer use the same value.
+- `Measurement` uses `Uno.sentence`. `LiveTests` uses `Uno.NO_VALID_ANSWER`, `Uno.CANNOT_PROPOSE` and `Uno.CANNOT_ANSWER`. `LiveTests` compiles. It did not run.
+- `RobotApi.others` and `RobotApi.count` share one loop. `b_adoption_in_the_proposal` counts 5 items of other kinds, as before.
+- The harness of the measurement records the tokens of a refusal and of a cut answer too. The stand-in of `b_measurement_with_the_stand_in` has no refusal: this is a code examination.
+- The Javadoc of `Uno.Provider.model()` holds for the provider of the measurement: it names a model and calls no model on the route of Uno.
+- The local flags of `JobAccount.facts` are `deliveredGiven` and `fuelGiven`.
+
+### Not changed
+
+The review marked these points as judgement calls. They stay, each with one reason:
+
+- The `instanceof` chains over the typed `Action`: D41, decision 3 chose a typed action with seven kinds. A visitor adds an interface and changes no behaviour.
+- The travelling pair of the fuel level and the trips, and the shared fields of `Facts` and `Line`: the JSON names them as separate numbers (D42, point 19). A type of its own adds a type and changes no behaviour.
+- `None(reason, sentence)`: the two fields say who wrote the answer, the fixed rules or a provider (D42, point 16). The constructor checks that exactly one is set.
+- The model IDs as text: the setting takes each text, and the service checks it (D42, point 6). A closed list would refuse a new model of the service.
+- The many tickets in `Uno.java`: the class is the one place of the conversation. A split moves code and changes no behaviour: a point for increment C.
+- `JobAccount.lines`: it reads the diary of an actor and the facts of each job, not the account of one job. Thus it is static, next to the facts.
+- The two extra `none` requests of the measurement: they test point 15 of D42, and the project owner did not object (D42, point 7).
+
+### Not covered
+
+- No run with the real service. The usage of a refusal and of a cut answer of the real service is not known from a run.
+- The `-Plive` and `-Pmeasure` runs did not run: they cost money and need the consent of the project owner.
+- The new texts on the screen of a client: the play session of B has them in steps 3 and 4.
+- That the repeated shutdown removes the failure of run 155: not proven.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

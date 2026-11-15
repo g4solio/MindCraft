@@ -26,6 +26,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 /**
  * The "mindcraft" Lua API. CC: Tweaked creates one instance for each turtle computer.
@@ -92,13 +93,7 @@ public class RobotApi implements ILuaAPI {
 
     /** The items on board of each other kind. A new job of this item does not count them (D42, point 9). */
     int others(Item item) {
-        IItemHandler hold = new InvWrapper(turtle.getInventory());
-        int total = 0;
-        for (int slot = 0; slot < hold.getSlots(); slot++) {
-            ItemStack stack = hold.getStackInSlot(slot);
-            if (!stack.isEmpty() && !stack.is(item)) total += stack.getCount();
-        }
-        return total;
+        return count(new InvWrapper(turtle.getInventory()), stack -> !stack.isEmpty() && !stack.is(item));
     }
 
     @Override
@@ -311,10 +306,15 @@ public class RobotApi implements ILuaAPI {
 
     // ponytail: items match by type only. NBT is ignored. Add a stack filter when a job needs it.
     static int count(IItemHandler inventory, Item item) {
+        return count(inventory, stack -> stack.is(item));
+    }
+
+    /** The items of the stacks that the filter accepts. */
+    private static int count(IItemHandler inventory, Predicate<ItemStack> which) {
         int total = 0;
         for (int slot = 0; slot < inventory.getSlots(); slot++) {
             ItemStack stack = inventory.getStackInSlot(slot);
-            if (stack.is(item)) total += stack.getCount();
+            if (which.test(stack)) total += stack.getCount();
         }
         return total;
     }

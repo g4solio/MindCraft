@@ -118,10 +118,16 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 82 | 81 of 81 | None. D41: the account and the behaviour of a job. Server line: `All 81 required tests passed :)` |
 | 83 | 82 of 82 | None. D41, decision 3: the typed seam of the provider. One new test: `a_parse_of_an_answer` |
 | 84 | 83 of 83 | None. D41, decision 4: the buttons of a job go through the requests of the words. One new test: `a_cancel_button_asks_a_confirmation` |
+| 85 | Not valid | Ticket #17, first red run. A failed check of the new test `b_adoption_by_the_command` let its sequence continue. The next step read a job that did not exist, and the `NullPointerException` stopped the server. The test sequence catches only an assertion. Corrected in the tests: see "Increment B — a job adopts the load on board" |
+| 86 | 82 of 86, expected | Ticket #17, red run: three new tests and `t14_cancel`, with the old code |
+| 87 | 85 of 86, expected | Ticket #17, green run of the runtime, red run of the proposal: `b_adoption_in_the_proposal` failed as expected |
+| 88 | 86 of 86 | None. Ticket #17: a job adopts the load on board. Server line: `All 86 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
 Runs 82 to 84 are the runs of the architecture review after increment A (D41).
+
+Runs 85 to 88 are the runs of ticket #17 of increment B. The tickets of increment B run at the same time, each in a working folder of its own. The numbers can change at the merge.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -159,6 +165,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 75, ticket #12 | All four | **Passed**. See "Increment A — final runs and evidence" |
 | Run 82, D41 | All four | Passed. See "The architecture review after increment A" |
 | Run 84, D41, decision 4 | All four | Passed |
+| Run 88, ticket #17 | All four | Passed. See "Increment B — a job adopts the load on board (ticket #17)" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1018,6 +1025,68 @@ Date: 2026-11-14. Type: in the game, automatic. Code: the branch `increment-a` a
 - Not run for decision 3: the restart phases, because the runtime and the Lua modules did not change. `-Plive`, because the schema and the system text of the Claude provider did not change. The JSON of the context is the same: `t18_claude_provider` compares it with the text of S2.
 - Run 84, decision 4: `All 83 required tests passed :)`. The new test `a_cancel_button_asks_a_confirmation` presses "Pause", "Resume" and "Cancel" of a job. "Pause" and "Resume" act at once, with the sentences of the words. "Cancel" gives a proposal: the job stays open until "Confirm #N", then it is `CANCELLED`. The tests of an old view and of another player still get a refusal. The four restart phases passed after run 84.
 - Not verified for decision 4: the proposal of "Cancel" on the screen of a client. The project owner decided that these changes get no manual test.
+
+## Increment B — a job adopts the load on board (ticket #17)
+
+Date: 2026-11-15. A new job counts the items of its item that the robot holds as its first load. See D42, point 9, and D09.
+The code is the branch of increment B at `9d13c95`, with the changes of the ticket. No Lua module changed. No run called the real Claude service.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic, with real turtles and real chests. Each one uses the fixed rules or no provider.
+
+| Test | What it does | Result in run 88 |
+| --- | --- | --- |
+| `b_adoption_by_the_command` | The console sends the real command `/mindcraft job transport … 64` to a turtle with 24 coal on board, and reads the answer | Passed. The answer: "Job N started on robot #M. It counts the 24 x minecraft:coal on board as its first load." The record has 24 on board and 0 taken. The first diary entry is `RUNNING` with 24 on board. The robot delivers 24 while the source still has 64. At the end: `DONE`, source 24, destination 64, robot 0, taken 40, delivered 64, no recovery. The diary is `RUNNING`, `DONE` |
+| `b_adoption_keep_stock` | A stock of 64, a destination with 50, a turtle with 24 coal | Passed. The robot delivers 14 from its load: `SATISFIED`, destination 64, robot 10, source 64, taken 0, "10 stay on board". After a consumption of 30, the robot delivers its 10, then takes 20: destination 64, source 44, robot 0. No `RECOVERY` in the diary |
+| `t14_cancel`, changed | The cancellation test of S1, with 24 on board. Before: a new job of 8 was refused with "Empty it first". Now the new job adopts the 24 | Passed. The new job has 24 on board and 0 taken. It delivers 8, then it is `BLOCKED` with the cause `LOAD_ABOVE_QUANTITY`: source 40, destination 8, robot 16 (D16.1) |
+| `b_adoption_in_the_proposal` | Five written requests of a player to the fixed rules. Then a confirmation | Passed. See below |
+
+The proposals of `b_adoption_in_the_proposal`, in their order. The robot is #62 in run 88. The test compares the whole text.
+
+1. Nothing on board: the text of increment A. "Proposal: carry 24 x minecraft:coal from 'b_proposal_source' to 'b_proposal_destination'. Reserve to leave in 'b_proposal_source': 0. Robot #62. I have done nothing yet. Confirm with /uno confirm."
+2. 5 cobblestone on board: after "Robot #62.", "5 items that are not minecraft:coal stay on board: the job does not count them. When its fuel ends, the robot burns those that can burn."
+3. Also 10 coal: "The robot holds 10 x minecraft:coal: the job counts them as its first load.", then the sentence of the cobblestone.
+4. A stock with a level of 6: after the coal sentence, "That is more than the level: the rest stays on board for the next need."
+5. A transport of 8, from the log of run 88: "… Robot #62. The robot holds 10 x minecraft:coal: the job counts them as its first load. That is more than the quantity: the job delivers at most 8, then it stops with the rest on board for your decision. 5 items that are not minecraft:coal stay on board: the job does not count them. When its fuel ends, the robot burns those that can burn. I have done nothing yet. Confirm with /uno confirm."
+
+- No proposal started a job.
+- The confirmation of proposal 5: "Job N started on robot #62. It counts the 10 x minecraft:coal on board as its first load." The record has 10 on board, not 15.
+- At the end: `BLOCKED` with `LOAD_ABOVE_QUANTITY`, delivered 8, 2 on board. Source 64, destination 8, robot 2 coal and 5 cobblestone. The destination has no cobblestone.
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 85, red 1 | The new tests of the runtime, with the old code | Not valid. `b_adoption_by_the_command` failed its check: "the command did not start the job". The sequence continued, and its next step read a job that did not exist. The `NullPointerException` stopped the server: the test sequence catches only an assertion. The log has no result for the other tests. Correction in the tests: each wait of the new tests reads the job only when it exists, and the helper `accepted` changes a refusal of a start into a failed check |
+| 86, red 2 | The four new and changed tests, with the old code | 82 of 86, expected. `b_adoption_by_the_command`: "the command did not start the job: [Robot #7 already holds 24 of this item. Empty it first.]". `b_adoption_keep_stock` and `t14_cancel`: "the runtime refused a request that it must accept: … Empty it first." `b_adoption_in_the_proposal` failed at proposal 2: the text of A, without the sentence about the cobblestone |
+| 87, green 1, red 3 | The runtime: no refusal, the record counts the load, the answer of a start gives it | 85 of 86, expected. The three tests of the runtime passed. `b_adoption_in_the_proposal` failed at proposal 2, as in run 86 |
+| 88, green 2 | The sentences of the proposal | **86 of 86**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `86 GAME TESTS COMPLETE`, `All 86 required tests passed :)` |
+
+The four restart phases after run 88, one at a time, on the same world. Type: in the game, automatic.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24 |
+| `check` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0 |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY`. The first stable state: source 40, destination 0, robot 24. After `resume`: the diary `RUNNING`, `DONE`, `RECOVERY`, `RUNNING`, `DONE` |
+
+The restart test starts its job with an empty turtle. Thus it does not test an adoption across a restart.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `transport.lua` delivers when the status gives a load on board (`job.carried > 0`). `keep_stock.lua` does a step of the transport when it has a load, also before the first observation of the destination. Thus both modules deliver an adopted load first | `transport.lua`, `keep_stock.lua`, unchanged | |
+| When a move fails for fuel, `transport.lua` burns each item on board that is not the item of the job | `refuel` in `transport.lua` | That a given item burns. No automatic test burns an item of another kind. The play session of increment A saw it once, with charcoal: step 7 in "Increment A — the play session" |
+| `GameTestSequence` of Minecraft 1.20.1 catches only `GameTestAssertException` in a step. Each other exception of a step stops the server | `javap -c` of `GameTestSequence.executeWithoutFail` and `tick`, Forge 47.4.28 jar (official mappings) | |
+
+### Not covered
+
+- An adoption across a restart of the server.
+- The proposal and the answers on the screen of a client. The play session of increment B has a step for an adoption.
+- The singular in the sentences: "1 items" for one item.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

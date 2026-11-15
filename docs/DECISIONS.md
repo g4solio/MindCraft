@@ -149,8 +149,9 @@ The tests are described in [TEST_RESULTS.md](TEST_RESULTS.md). "Sources" means t
 - **Contract:** pause and cancellation apply from the next step. The movement or transfer in progress ends. The cargo stays on board and the state shows it. There is no automatic return.
 - **Forced stop:** the runtime can turn off the computer with the command `/computercraft shutdown #<id>`. It also works with a program that does not cooperate.
 - **Evidence:** T14, `s0_probe_hard_stop`.
-- **Limit:** after a cancellation, a new job for the same item is refused until the player empties the turtle.
-- **Decided on 2026-11-13, not implemented:** a new job will adopt the load on board. Then this limit ends. See D34.
+- **Limit until increment B:** after a cancellation, a new job for the same item was refused until the player emptied the turtle.
+- **Decided on 2026-11-13:** a new job adopts the load on board. Then this limit ends. See D34.
+- **Implemented and verified on 2026-11-15, ticket #17:** the limit ended. A new job counts the items of its item on board as its first load. The load of a cancelled job stays on board until the next job uses it. Automatic in-game tests, run 88: `t14_cancel` now expects the adoption. See D42, point 9.
 - **Disproved assumption:** "`shutdown` followed by `turn-on` restarts the computer". CC: Tweaked has no restart command. It ignores `turn-on` while the shutdown is in progress and ignores `shutdown` while the computer starts (`ComputerExecutor.queueStart` and `queueStop` in the sources). In the third test run, 3 turtles of 20 did not start again for this reason.
 - **Correction:** the runtime repeats `shutdown` at each tick until the old session ends. Then it repeats `turn-on` until a new session starts. The limit is 30 seconds of real time.
 
@@ -892,13 +893,14 @@ Limits on the calls. Increment A.
 
 ## D34 — Waits, blocks and a load on board
 
-**Status:** decided by the project owner on 2026-11-13. It changes a verified behaviour of D06 and replaces a limit of D09. The part of increment A (the obstacle and the causes of `BLOCKED`) is implemented and **verified** with automatic in-game tests on 2026-11-13. See "Increment A, as built" below. The part of increment B is not implemented.
+**Status:** decided by the project owner on 2026-11-13. It changes a verified behaviour of D06 and replaces a limit of D09. The part of increment A (the obstacle and the causes of `BLOCKED`) is implemented and **verified** with automatic in-game tests on 2026-11-13. See "Increment A, as built" below. In the part of increment B, the adoption of a load is implemented and **verified** with automatic in-game tests on 2026-11-15 (ticket #17, run 88): see D42, point 9. The rest of the part of increment B is not implemented.
 
 - **Rule:** a condition that can end by itself is a wait. A condition that needs the hands of the owner is a block.
 - **Obstacle (increment A):** a robot that cannot move goes to `WAITING` with a cause of its own, and tries again slowly. The attention rule of D30 applies. Before increment A the job went to `BLOCKED` after 10 attempts and stayed there until `resume`, also after the obstacle went away. Ticket #5 made the change: see "Increment A, as built" below. `t05_obstacle` now expects the wait.
 - **Causes of `BLOCKED` (increment A):** `BLOCKED` gets causes with fixed values, as `WAITING` in D25. Uno chooses its sentence from the cause. The reason with the coordinates stays in the record. It does not go to the model (D32).
 - **Fuel (increment B):** fuel at zero stays `BLOCKED`. The robot tells the runtime its fuel level at each contact. Uno warns one time when the fuel is sufficient for few trips. The number of trips comes from the distance between the docks: it is approximate.
 - **A load on board (increment B):** a new job adopts the load that the robot already holds, if it is the item of the job. The proposal says so: "The robot holds 24: I count them as the first load." One confirmation cancels the old job and starts the new one. This replaces the limit of D09.
+  - **Implemented and verified, ticket #17:** the adoption, for each source of orders. The limit of D09 ended. The replacement of a job is not implemented: it is ticket #18. Until then a new job for a robot with an open job stays refused.
 - **Until B:** a change of the destination with a load on board is refused, as now.
 - **Counterexample:** the runtime does not know where a load comes from. If the owner keeps coal in the turtle as fuel, a coal job adopts it and delivers it. The proposal shows the number.
 - **Counterexample:** two robots that face each other in a corridor one block wide both wait, without an end. This is deduced from the code. It was not tried.
@@ -1078,7 +1080,7 @@ Gates before a second player:
 
 ## D42 — Increment B: the decisions of the design discussion
 
-**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Nothing is implemented. No test supports a point of this entry. The facts below come from code examinations.
+**Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Point 9 is implemented and **verified** with automatic in-game tests on 2026-11-15: see "As built" under point 9. The other points are not implemented, and no test supports them. The facts below come from code examinations.
 
 - **Spec and tickets:** the spec of increment B is issue #15. Its tickets are issues #16 to #29, with their blocking edges. Tickets #27 (the measurement) and #29 (the play session) need the project owner.
 - **Problem:** D32, D33 and D34 decide the direction of increment B. They leave open: where the model speaks, which data it gets, which numbers are uncertain, how the check works, where the setting is, when the measurement runs, how a job adopts a load, and when the fuel is low. D40 and D41 defer three points to B.
@@ -1145,6 +1147,17 @@ A load on board (D34)
 9. **Adoption.** At the start of a job, the record counts as "on board" each item of the job that the robot holds. This is a rule of the runtime: it holds for each source of orders. The refusal "Empty it first" ends (D09).
    - A load above the quantity follows D16.1: a transport ends `BLOCKED` with the rest on board. The proposal says so before the confirmation.
    - A load of a different item stays on board. The proposal says so in one sentence. It also says that the robot burns it, if it can burn, when the fuel ends (D12).
+   - **As built (ticket #17).** Implemented and **verified** with automatic in-game tests on 2026-11-15: run 88, and the four restart phases after it. The choices of detail below are **proposed**: the project owner did not confirm them one by one.
+     - The ordinary validation of an order (`MindRuntime.check`) does not refuse a robot that holds the item of the job any more. `MindRuntime.start` sets the load on board of the record to the count of that item in the robot. It is the same count as the check of the load at each step of the robot. Thus the first step finds no difference, and no `RECOVERY`. The first diary entry of the job has the load.
+     - The rules of the behaviours did not change. No Lua module changed: `transport@3` and `keep_stock@3` already deliver a load on board first.
+     - The total "taken" does not count the adopted load: the runtime did not take it from the source. The total "delivered" counts it when the robot delivers it.
+     - The sentences of a proposal, after "Robot #N.". The wording is proposed. "The robot holds 24 x minecraft:coal: the job counts them as its first load." For a transport above its quantity: "That is more than the quantity: the job delivers at most 8, then it stops with the rest on board for your decision." For a stock above its level: "That is more than the level: the rest stays on board for the next need." For the other kinds: "5 items that are not minecraft:coal stay on board: the job does not count them. When its fuel ends, the robot burns those that can burn."
+     - The proposal gives one total for the items of other kinds. It does not name them. The runtime does not check which items can burn: the sentence says "those that can burn".
+     - One function writes these sentences: `Uno.adoption`. The proposal of a replacement (point 10, ticket #18) can repeat them.
+     - **Added in the implementation, not in the spec:** the answer to a confirmation of a start gives the adopted load too, as the answer of the start command: "Job 5 started on robot #7. It counts the 10 x minecraft:coal on board as its first load." One function, `Uno.started`, writes both answers. Reason: the load can change between the proposal and the confirmation, also for a free robot. With nothing adopted, both answers keep the text of increment A.
+     - **Evidence:** the new tests `b_adoption_by_the_command`, `b_adoption_keep_stock` and `b_adoption_in_the_proposal`, and `t14_cancel`, which expected the refusal before. They check the real content of the two chests and of the turtle. See TEST_RESULTS.md, "Increment B — a job adopts the load on board (ticket #17)".
+     - **Not verified by an automatic test:** that the robot burns an item of another kind when its fuel ends. The play session of increment A saw it once: step 7 in "Increment A — the play session" of TEST_RESULTS.md. `transport.lua` does it (code examination).
+     - **Not verified:** the proposal and the answers on the screen of a client. The play session of B has a step for an adoption. An adoption across a restart of the server.
 10. **Replacement.** A start for a robot with an open job is one proposal: cancel that job, and start the new one. One confirmation does both in the same tick. This holds in each open state.
     - The proposal holds the ID of the job that it replaces. The confirmation is refused if the robot has a different job.
     - The text gives the load at the moment of the proposal. It says that the new job counts the load at the confirmation. The answer after the confirmation gives the real number.

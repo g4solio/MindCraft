@@ -103,7 +103,7 @@ This procedure uses the commands. The play session of increment A uses commands 
 1. Start the development client with `./gradlew runClient`. Create a world in creative mode with commands enabled.
 2. Place two chests. Put the coal in the first chest.
 3. Place a turtle. Give it fuel: put a fuel item in its inventory and run `refuel` in its terminal.
-   Do not use the coal of the job as fuel.
+   Do not use the coal of the job as fuel. A coal job counts the coal in the turtle as its load: see step 6.
 4. Register the two stations. A station is an inventory and the adjacent position where the turtle stops (the dock).
    The robot does not search a path. At each move it tries the x axis, then z, then y, and it makes the first free move that brings it nearer to the dock.
    Thus a path works when each of its moves brings the robot nearer to the dock, in the two directions.
@@ -128,6 +128,12 @@ This procedure uses the commands. The play session of increment A uses commands 
    ```
    /mindcraft job transport <robot> depot furnace minecraft:coal 24 32
    ```
+
+   The turtle can already hold the item of the job, for example after a cancelled job. The new job counts those items as its first load.
+   You do not empty the turtle. The answer of the command gives the number.
+   The robot delivers that load first. It takes only the rest from the source: a transport of 64 with 24 on board takes 40.
+   A load above the quantity follows the rule of a lower quantity (step 8). The robot delivers the quantity, and the job is `BLOCKED` with the rest on board.
+   The job does not count the items of other kinds. They stay on board. When the fuel ends, the robot burns those that can burn.
 
 7. Check and control the job. Only the owner of the robot, an operator and the console can read the status.
 
@@ -189,6 +195,8 @@ A change, a resume and a cancellation are proposals, as a new job is. Nothing ch
 - The proposal to resume a job also holds the state of the job. If the state is different at the confirmation, for example `RECOVERY` after `PAUSED`, Uno refuses the confirmation and asks you to read the job again.
 - The proposal to cancel a job says that the cargo stays on board.
 - Uno checks the request before the proposal. For example, a resume of a running job gives the reason and no proposal.
+- The proposal of a new job says what the robot holds. The items of the job are the first load of the job, as for the command. The proposal also says when that load is above the quantity, and that items of other kinds stay on board. A robot that holds nothing gets no such sentence.
+- The proposal gives the load at the moment of the proposal. The job counts the load at the confirmation. The answer to the confirmation gives that number.
 - A new job for a robot with an open job stays refused, with the number of that job. Cancel that job first.
 
 ### The tablet
@@ -335,12 +343,12 @@ A request without the words of an action and without two stations gets the reaso
 | --- | --- | --- |
 | `RUNNING` | The robot works | |
 | `WAITING` | The source has no material above the reserve, the destination is full, the robot is full, the area of an inventory is not loaded, or the path is obstructed. The runtime records which one: the cause. The robot tries again each 5 seconds. A robot that cannot move first tries 10 times at 1 second. For an obstacle the reason contains the position, the direction and the block in front of the robot | It unblocks by itself. After an obstacle the robot continues at the first move that succeeds |
-| `SATISFIED` | Only for a stock: at the last observation the destination had the requested level. A load can stay on board, if the owner lowered the level after the pickup | It starts again by itself when the stock goes down |
-| `BLOCKED` | The fuel ended, a station has no inventory, or a transport has a load on board above its quantity, because the owner lowered the quantity after the pickup. The runtime records the cause. A module error, or an impediment of a kind that the runtime does not know, is a block without a cause | The owner, with `resume`. Without fuel: give fuel first. For a load above the quantity: raise the quantity first, or cancel |
+| `SATISFIED` | Only for a stock: at the last observation the destination had the requested level. A load can stay on board, if the owner lowered the level after the pickup, or if the job started with a load above the level | It starts again by itself when the stock goes down |
+| `BLOCKED` | The fuel ended, a station has no inventory, or a transport has a load on board above its quantity: the owner lowered the quantity after the pickup, or the job started with a load above its quantity. The runtime records the cause. A module error, or an impediment of a kind that the runtime does not know, is a block without a cause | The owner, with `resume`. Without fuel: give fuel first. For a load above the quantity: raise the quantity first, or cancel |
 | `PAUSED` | The owner asked for a pause. The cargo stays on board | The owner, with `resume` |
 | `RECOVERY` | The real cargo of the robot is different from the recorded cargo, or the world is older than the record. The runtime does not know the result | The owner, with `resume` (accepts the observed cargo) or `cancel` |
 | `DONE` | The requested quantity was delivered and no load of the job is on board | |
-| `CANCELLED` | The owner cancelled. The cargo stays on board | |
+| `CANCELLED` | The owner cancelled. The cargo stays on board. A new job for the same item counts it as its first load | |
 
 The rule: a condition that can end by itself is a wait. A condition that needs your hands is a block.
 A change to `BLOCKED`, `RECOVERY` or `DONE` gives a notice in the chat of the owner. A `WAITING` of 5 minutes without an interruption gives one notice too. See "Notices".

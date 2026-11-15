@@ -1349,8 +1349,8 @@ public class MindCraftTests {
 
     /**
      * D42, point 10, D23 and T19: a replacement through the screen, with the fixed rules of the server. The request names no robot:
-     * the player has one robot, and it is busy. The proposal is in words above the button "Confirm #N".
-     * A different player sees no proposal and confirms nothing, with the button of the owner or with the command.
+     * the player has one robot, and it is busy. The proposal is in words above the button "Confirm #N". The robot holds nothing:
+     * the proposal says so. A different player sees no proposal and confirms nothing, with the button of the owner or with the command.
      * A start of the other player for the robot of the owner is refused. Then the owner presses the button. Nothing is on board:
      * the answer says that the new job has no first load.
      */
@@ -1377,6 +1377,9 @@ public class MindCraftTests {
                     view.get());
                 check(view.get().contains("Waiting for your confirmation: cancel job " + old[0].id + " on robot #" + rig.id + " (carry minecraft:coal from '"
                     + rig.from + "' to '" + rig.to + "'), and start in its place: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'."),
+                    view.get());
+                // The text of a replacement gives the load at the moment of the proposal, also when it is zero (D42, point 10).
+                check(view.get().contains("Robot #" + rig.id + ". The robot holds no minecraft:coal now. The load can change until the confirmation"),
                     view.get());
                 check(action(otherView.get(), "confirm") == null && !otherView.get().contains(rig.from), otherView.get());
                 UnoView.act(server, other, button[0], "{}");
@@ -2853,7 +2856,8 @@ public class MindCraftTests {
             new Said("x", () -> modelAction("start", sentence, "robot", rig.id, "module", MindRuntime.TRANSPORT, "from", rig.from, "to", rig.to,
                 "item", "minecraft:coal", "quantity", 8, "reserve", 0), answer -> answer.equals("Proposal: cancel " + job.get()
                 + ", and start in its place: carry 8 x minecraft:coal from '" + rig.from + "' to '" + rig.to + "'. Reserve to leave in '" + rig.from
-                + "': 0. Robot #" + rig.id + ". The load can change until the confirmation: the new job counts the load that the robot holds then" + confirm)));
+                + "': 0. Robot #" + rig.id + ". The robot holds no minecraft:coal now."
+                + " The load can change until the confirmation: the new job counts the load that the robot holds then" + confirm)));
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> rig.startJob(24, 0))
             .thenWaitUntil(() -> rig.state(State.WAITING));

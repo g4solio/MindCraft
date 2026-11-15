@@ -936,7 +936,9 @@ public final class Uno {
         }
         String text = describe(order) + adoption(order, robot);
         if (!replace) return propose(mine, actor, text, new Start(order));
-        return propose(mine, actor, "cancel " + name(open) + ", and start in its place: " + text
+        // The text of a replacement gives the load at the moment of the proposal, also when it is zero (D42, point 10).
+        String empty = robot.held(order.item()) > 0 ? "" : ". The robot holds no " + MindRuntime.itemName(order.item()) + " now";
+        return propose(mine, actor, "cancel " + name(open) + ", and start in its place: " + text + empty
             + ". The load can change until the confirmation: the new job counts the load that the robot holds then", new Replace(open.id, order));
     }
 

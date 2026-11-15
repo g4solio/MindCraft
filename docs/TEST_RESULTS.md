@@ -165,6 +165,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 140 | 104 of 105, expected | Ticket #25, red run: the new test `b_conversation_first`, with the old order of the view |
 | 141 | 105 of 105 | None. Ticket #25: the conversation part comes first on the screen. Server line: `All 105 required tests passed :)` |
 | 142 | 105 of 105 | None. Ticket #25, the committed code `a2b66fd`. Server line: `All 105 required tests passed :)` |
+| 143 | 106 of 106 | None. The integration branch after the merge of ticket #25. Server line: `All 106 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -187,6 +188,7 @@ Run 128 is the run of the integration branch after the merge of ticket #23.
 Runs 129 to 131 are the runs of ticket #22, on the integration branch at `c63d75c`.
 Run 132 is the run of the integration branch after the merge of ticket #22.
 Runs 140 to 142 are the runs of ticket #25, on the integration branch at `c075de7`.
+Run 143 is the run of the integration branch after the merge of ticket #25.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 

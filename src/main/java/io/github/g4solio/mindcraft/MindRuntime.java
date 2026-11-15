@@ -605,6 +605,14 @@ public class MindRuntime extends SavedData {
         if (robot != null) robot.wake();
     }
 
+    /**
+     * The jobs that the actor owns: the current or the last job of each robot. Only the owner and an operator read a job.
+     * The context of a model reads the jobs through this one question (D41, decision 6). The map of the jobs becomes private in increment C.
+     */
+    public List<Job> jobs(Actor actor) {
+        return jobs.values().stream().filter(job -> actor.owns(job.owner)).toList();
+    }
+
     /** The diary entries that the actor owns, the oldest first. Only the owner and an operator read an entry, as for a job. */
     public List<Entry> diary(Actor actor) {
         return diary.stream().filter(entry -> actor.owns(entry.owner())).toList();

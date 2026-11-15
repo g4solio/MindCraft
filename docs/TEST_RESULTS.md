@@ -131,6 +131,11 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 95 | 92 of 92 | None. Ticket #18, with one more test of the replacement in each open state. Server line: `All 92 required tests passed :)` |
 | 96 | 92 of 93 | The integration branch after the merge of ticket #18. `b_replacement_in_recovery` failed: `[RUNNING, RECOVERY LOAD_DIFFERS, CANCELLED]`. Ticket #16 adds the cause of `RECOVERY` to the diary, and the test of ticket #18 did not expect it. The expectation of the test changed, not the code |
 | 97 | 93 of 93 | None. The integration branch after the merge of ticket #18, with the corrected expectation. Server line: `All 93 required tests passed :)` |
+| 98 | 87 of 88, expected | Ticket #19, red run 1: `b_facts_in_the_context`, with a context without facts |
+| 99 | Not valid | Ticket #19, green run 1 and red run 2. `b_facts_of_uncertain_numbers` failed as expected. Then a `NullPointerException` in `JobAccount.facts` stopped the server: a conditional expression unboxed a null. Corrected: see "Increment B — the facts of the jobs go to the model" |
+| 100 | 87 of 89, expected | Ticket #19, green run 2 and red run 3: `t18_claude_provider` and `a_screen_model_lines`, with the old JSON and the old line |
+| 101 | 89 of 89 | None. Ticket #19: the facts of the jobs go to the model. Server line: `All 89 required tests passed :)` |
+| 102 | 89 of 89 | None. Ticket #19, the code of the commit: the same, with one more null check in `b_facts_in_the_context`. Server line: `All 89 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -142,6 +147,7 @@ Run 92 is the run of the integration branch of increment B after the merge of ti
 
 Runs 93 to 95 are the runs of ticket #18 of increment B.
 Runs 96 and 97 are the runs of the integration branch after the merge of ticket #18.
+Runs 98 to 102 are the runs of ticket #19 of increment B, on the branch with tickets #16 and #17. See "Increment B — the facts of the jobs go to the model". No run of ticket #19 called the real Claude service.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 
@@ -184,6 +190,7 @@ Restart phases of increment A. Type: in the game, automatic. Each row is the fou
 | Run 92, tickets #16 and #17 after the merge | All four | Passed |
 | Run 95, ticket #18 | All four | Passed. See "Increment B — a job replaces a job (ticket #18)" |
 | Run 96, ticket #18 after the merge | All four | Passed. Run 97 changed only the expectation of one test of the normal run |
+| Run 101, ticket #19 of increment B | All four | Passed. See "Increment B — the facts of the jobs go to the model (ticket #19)" |
 
 Tickets #6, #2, #3 and #11 changed no runtime and no Lua module. Thus they did not run the four phases.
 Not in this table: one run of ticket #7 with a failure of the write built by hand. Its type is "observed in one manual run".
@@ -1212,6 +1219,84 @@ The restart test does not replace a job. A proposal is not saved (D24): thus no 
 - A change of the destination that a model builds from the facts of the job. The facts come with a later ticket of increment B.
 - The proposal, the button and the answers on the screen of a client. The play session of increment B has a step for a replacement.
 - An operator who replaces the job of a different player.
+
+## Increment B — the facts of the jobs go to the model (ticket #19)
+
+Date: 2026-11-15. With each written request, a provider gets the facts of the jobs of the player and the 20 newest lines of the diary. See D42, points 2, 3, 4 and 18, and D41, decision 6.
+The code is the branch of increment B at `39a2afc`, with tickets #16 and #17, and the changes of this ticket. No Lua module changed. The answers of Uno did not change.
+No run called the real Claude service. No run with the real service sent the facts. The system text and the output schema of the Claude provider did not change.
+
+### Automatic in-game tests
+
+Each test of this section is in the game and automatic. Each one uses a provider written in the test, the fixed rules or a local stand-in of the service.
+
+| Test | What it does | Result in run 101 |
+| --- | --- | --- |
+| `b_facts_in_the_context` (new) | A player and a real turtle. A provider of the test keeps the context that Uno gives it, and answers `none`. First a transport of 24 with a reserve of 10 ends `DONE`. A different player writes too. Then the test removes the destination chest, and a transport of 16 is `BLOCKED`: its recorded reason has the position of the destination. Then the owner empties the robot and resumes: `RECOVERY` | Passed. See below |
+| `b_facts_of_uncertain_numbers` (new) | The account gets a record that the test writes, the flag of the robot and a game time. No robot and no world. Then the diary lines of a diary that the test writes | Passed. See below |
+| `t18_claude_provider` (changed) | The robot first does a transport of 8 to `DONE`. The test reads the body of the request that reaches the stand-in of the service | Passed. The body has the stations and the robots as before. It also has the facts of the job: `{"job":N,"robot":R,"module":"transport","item":"minecraft:coal","from":…,"to":…,"quantity":8,"reserve":0,"state":"DONE","cause":"NONE","delivered":8,"onBoard":0,"sourceStock":{"count":56,"age":…},"destinationStock":{"count":8,"age":…},"stillToCarry":0,"aboveReserve":56,"uncertain":[]}`. It has the two lines of the diary, `RUNNING` and `DONE`. Each of the four ages is "N s ago". The test compares the JSON without the ages with a fixed text. The pause of that robot now gets "I cannot pause the job: Robot #R has no open job.": the robot has a job that is done. Before, the robot had no job |
+| `a_screen_model_lines` (changed) | As before, with the new line | Passed. The screen of an operator has "Written requests go to Claude, a model of Anthropic, with the data of your jobs and the newest lines of my diary. No position leaves this server." A player who is not an operator and an operator at the limit do not see it |
+
+The contexts of `b_facts_in_the_context` in run 101, from the log. The robot is #22. The first job is 44, the second is 81.
+
+1. The job that is done: `DONE`, delivered 24, on board 0, source 40 "3 s ago", destination 29 "0 s ago", still to carry 0, above the reserve 30, nothing uncertain. The lines: `44 RUNNING` with 0 delivered and 0 on board, `44 DONE` with 24 delivered. Each line has the age, the robot, the kind `CHANGE`, the cause, the quantity 24 and the reserve 10.
+2. The different player: no station, no robot, no job and no line. The answers of Uno to both players are the answers of increment A: "I cannot propose a job: The test read the context."
+3. The job that is blocked: `BLOCKED DESTINATION_NO_INVENTORY`, delivered 0, on board 16, source 24 "2 s ago", still to carry 16, above the reserve 14. No destination stock, with "No robot observed 'b_facts_destination' yet. Its stock is unknown." The lines of job 44 stay after job 81 replaced it on the robot. The text of the context and its JSON have no position, no recorded reason and no ID of the owner.
+4. The job that needs a check: `RECOVERY LOAD_DIFFERS`, with no delivered total, no load on board, no stock and no derived number. The sentence: "The result of the job is uncertain: the load in the robot differs from the record. Not given: the delivered total, the load on board and the stocks." The four lines of job 81 have no delivered total and no load on board. The two lines of job 44 keep their numbers.
+
+The cases of `b_facts_of_uncertain_numbers`. The record: a transport of 24 with a reserve of 10, 6 delivered, 4 on board. The source had 50 at 6000 ticks before "now". The destination had 6 at 240 ticks before "now". The robot called at 300 ticks before "now". The test compares the whole facts.
+
+| Case | The facts that the account gave |
+| --- | --- |
+| The record as it is: at the limit of an old observation and of a silent robot | Each number: delivered 6, on board 4, source 50 "5 min ago", destination 6 "12 s ago", still to carry 18, above the reserve 40. Nothing uncertain |
+| The source observed 6001 ticks before | No source stock and no stock above the reserve. "The last observation of 'depot' is old. Not given: its stock." |
+| The robot called 301 ticks before, and no call since the server start | No load on board and no stock. "The robot has not contacted the server for a while. Not given: the load on board and the stocks." |
+| The robot is not running | The same, with "The robot is not running or not loaded." The delivered total stays |
+| `RECOVERY` with `LOAD_DIFFERS`, with `WORLD_OLDER`, and without a cause (a record of an older version) | No delivered total, no load on board, no stock, no derived number. The sentence gives the cause: "the load in the robot differs from the record", "the world is older than the record", or no cause |
+| After a recovery | No delivered total and no quantity still to carry. "After a recovery the delivered total can be inexact. Not given: the delivered total." |
+| A stock job with a level of 64, and a source of 8 | Still to carry 58. Above the reserve 0 |
+| A stock job before its first observation of the destination | No destination stock and no quantity still to carry. "No robot observed 'furnace' yet. Its stock is unknown." This is the case of run 99 |
+
+- The diary lines, with job 900 in `RECOVERY`, the robot of job 600 not running, and job 800 with a `RECOVERY` line but no facts: `800 RUNNING` and `800 DONE` have no delivered total. `800 RECOVERY` has no delivered total and no load on board. `700 DONE` keeps its 8. `600 RUNNING` keeps its delivered total and has no load on board. The lines of job 900 have neither.
+- A diary of 25 entries gives 20 lines: the newest, the oldest first. The first is "20 min ago", the last "1 min ago".
+
+### Runs
+
+| Run | Code | Result |
+| --- | --- | --- |
+| 98, red 1 | The new test `b_facts_in_the_context`, without its last part. The typed context exists, but `Uno.context` gives no facts and no lines | 87 of 88, expected. `b_facts_in_the_context` failed: "Context[…, jobs=[], diary=[]]" |
+| 99, green 1, red 2 | The facts and the lines, without the doubts. The new test `b_facts_of_uncertain_numbers`, and the last part of `b_facts_in_the_context` | Not valid. `b_facts_of_uncertain_numbers` failed as expected: each case gave each number. Then a `NullPointerException` in `JobAccount.facts` stopped the server. A conditional expression had an `Integer` and an `int`: for a stock job with an unknown destination, Java unboxed a null. The log has no result for the other tests. The red of the last part of `b_facts_in_the_context` was not observed. Correction: both branches give an `Integer`, and `b_facts_of_uncertain_numbers` has the case of a stock job with an unknown destination |
+| 100, green 2, red 3 | The doubts. The tests of the body of the request and of the screen line, with the old JSON and the old line | 87 of 89, expected. The two new tests passed. `t18_claude_provider` failed: "the body has no facts". `a_screen_model_lines` failed: the view of an operator has the old line |
+| 101, green 3 | The JSON of the context with the facts and the lines. The new line of the screen | **89 of 89**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `89 GAME TESTS COMPLETE`, `All 89 required tests passed :)` |
+| 102 | The code of the commit. Only the test changed after run 101: one more null check before the test empties the robot, the same form for one step of the sequence, and its comment | **89 of 89**. The same three log lines |
+
+The four restart phases after run 101, one at a time, on the same world. Type: in the game, automatic. The code of the mod did not change after run 101: only the test of run 102.
+
+| Phase | Result |
+| --- | --- |
+| `stop` | Passed. `All 1 required tests passed :)`. The status at the stop: `RUNNING`, taken 24, delivered 0, on board 24 |
+| `check` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`. Then source 40, destination 24, robot 0, and the diary `RUNNING`, `DONE` |
+| `crash` | Passed: the process halted, as the phase does. The status at the halt: `DONE`, delivered 24, on board 0 |
+| `check-crash` | Passed. `All 1 required tests passed :)`. The diary after the restart: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`. The first stable state: source 40, destination 0, robot 24. At the end: `RUNNING`, `DONE`, `RECOVERY WORLD_OLDER`, `RUNNING`, `DONE` |
+
+After the four phases the data folder has no temporary file.
+
+### Code examination
+
+| Fact | Where | What it does not prove |
+| --- | --- | --- |
+| `Uno.context` reads the jobs only through `MindRuntime.jobs(actor)`, and the diary through `MindRuntime.diary(actor)`. Both keep only what the actor owns | `Uno.java`, `MindRuntime.java` | That no other code gives the model a job. The map of the jobs is still public (D41, decision 6) |
+| The "free" flag of a robot still reads the job of each robot of the actor, as in increment A | `Uno.context` | |
+| No field of the facts or of a line holds a position, the owner or a recorded reason. The records `Uno.Context.Facts` and `Uno.Context.Line` have no such field | `Uno.java`, `JobAccount.java` | That a station name holds no position: the player chooses the name |
+| `ClaudeProvider` sends `context.toJson()` in the user message, as before. The system text and the schema are the same | `ClaudeProvider.java` | How the real model reads the facts. No `-Plive` run sent them |
+| The fixed report uses the same doubt about the robot as the facts: one function, `JobAccount.silent` | `JobAccount.java` | |
+
+### Not covered
+
+- A request with the facts to the real service. The paid runs of increment B need the consent of the project owner (ticket #27).
+- The line of the screen in a client.
+- A job that the owner cancelled in `RECOVERY`: its facts give its delivered total. See D42, point 3.
+- A diary entry of an older job whose `RECOVERY` the diary limit removed: its later lines give their delivered total.
 
 ## Guardrail — the rules of CLAUDE.md and the CI
 

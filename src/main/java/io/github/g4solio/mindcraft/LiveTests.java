@@ -59,7 +59,7 @@ public class LiveTests {
 
         GameTestSequence sequence = rig.begin()
             .thenExecute(() -> {
-                Uno.Action rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player)).action();
+                Uno.Action rules = new Uno.RuleProvider().answer(REQUEST, Uno.context(rig.runtime, player, rig.level.getGameTime())).action();
                 check(rules instanceof Uno.Action.None, "the fixed rules read the request: it is too easy for this check: " + rules);
                 Uno.ask(server, player, REQUEST, claude, Uno.TIMEOUT_MS, answers::add);
             })

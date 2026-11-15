@@ -1,17 +1,25 @@
 package io.github.g4solio.mindcraft;
 
+import io.github.g4solio.mindcraft.MindRuntime.Entry;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.State;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * The account of a job: what its record says, with the age of each observation and the doubt about the robot (D17).
  * The report, the screen and the status command read a job through it. Each number comes from the record.
  * The inputs are explicit: the record, whether the robot runs now, and the game time. A test can give them without a robot.
- * Increment B adds here the facts for the model and the check of its numbers (D32).
+ * The facts for the model are here too (D42, point 2). Increment B adds here the check of the numbers of the model (D32).
  */
 record JobAccount(Job job, boolean running, long now) {
     /** Game ticks without a call from a running robot. After them Uno does not know whether the robot works. */
     static final int SILENT_TICKS = 300;
+    /** Game ticks after which an observation is old: 5 minutes, the length of a long wait (D42, point 3). An initial value. */
+    static final int OLD_TICKS = 6000;
 
     /** The account in the game: the robot runs when its computer has a live session now. */
     static JobAccount of(Job job, long now) {
@@ -57,7 +65,7 @@ record JobAccount(Job job, boolean running, long now) {
         if (job.state.open() && job.state != State.PAUSED) {
             if (!running) {
                 text.append("The robot is not running or not loaded. These are the last recorded data, not the current state.");
-            } else if (job.lastContact == MindRuntime.UNKNOWN || now - job.lastContact > SILENT_TICKS) {
+            } else if (silent()) {
                 text.append("The robot has not contacted me for a while. I do not know if it is working.");
             }
         }
@@ -94,6 +102,100 @@ record JobAccount(Job job, boolean running, long now) {
             // A record of an older version, or an impediment of a kind that the runtime does not know. The recorded text is all that Uno knows.
             default -> "I am stopped and I need your help. Recorded reason: " + job.reason + ". ";
         };
+    }
+
+    /** No call from the robot for more than SILENT_TICKS, or none since the start of the server. */
+    private boolean silent() {
+        return job.lastContact == MindRuntime.UNKNOWN || now - job.lastContact > SILENT_TICKS;
+    }
+
+    /**
+     * The facts of the job: the part of the account that goes to the model (D42, point 2). Each number comes from the record.
+     * The derived numbers come from the server: the quantity still to carry, and the stock of the source above the reserve (D42, point 4).
+     * No coordinate, no player name and no free text of a reason: a recorded reason can hold a position.
+     * <p>
+     * The model does not get an uncertain number (D32). In its place a fixed sentence says which value is not given, and why (D42, point 3):
+     * <ul>
+     * <li>RECOVERY: the delivered total, the load on board and the stocks. The sentence gives the cause.</li>
+     * <li>After a recovery: the delivered total.</li>
+     * <li>A robot that is not running, or that is silent for more than SILENT_TICKS: the load on board and the stocks.
+     * They are the last recorded data, not the current state (T21). This holds in each state of the job.</li>
+     * <li>An observation older than OLD_TICKS: that stock.</li>
+     * </ul>
+     * A derived number is not given when its number is not given. Ticket #24 adds the fuel level and the trips here.
+     */
+    Uno.Context.Facts facts() {
+        List<String> uncertain = new ArrayList<>();
+        boolean recovery = job.state == State.RECOVERY, delivered = !recovery && job.recoveries == 0, current = !recovery && running && !silent();
+        if (recovery) {
+            uncertain.add("The result of the job is uncertain" + switch (job.cause) {
+                case LOAD_DIFFERS -> ": the load in the robot differs from the record";
+                case WORLD_OLDER -> ": the world is older than the record";
+                // A record of an older version has no cause for its RECOVERY.
+                default -> "";
+            } + ". Not given: the delivered total, the load on board and the stocks.");
+        } else if (!delivered) {
+            uncertain.add("After a recovery the delivered total can be inexact. Not given: the delivered total.");
+        }
+        if (!running) {
+            uncertain.add("The robot is not running or not loaded. Not given: the load on board and the stocks.");
+        } else if (silent()) {
+            uncertain.add("The robot has not contacted the server for a while. Not given: the load on board and the stocks.");
+        }
+        Uno.Context.Stock source = current ? stock(job.from, job.fromSeen, job.fromSeenAt, uncertain) : null;
+        Uno.Context.Stock destination = current ? stock(job.to, job.toSeen, job.toSeenAt, uncertain) : null;
+        // A transport carries its quantity one time. A stock job carries what the destination misses to its level.
+        Integer toCarry = job.keepStock() ? (destination == null ? null : Math.max(0, job.quantity - destination.count()))
+            : (delivered ? Math.max(0, job.quantity - job.delivered) : null);
+        Integer aboveReserve = source == null ? null : Math.max(0, source.count() - job.reserve);
+        return new Uno.Context.Facts(job.id, job.robot, job.behaviour.id, MindRuntime.itemName(job.item), job.from, job.to, job.quantity,
+            job.reserve, job.state, job.cause, delivered ? job.delivered : null, current ? job.carried : null, source, destination,
+            toCarry, aboveReserve, List.copyOf(uncertain));
+    }
+
+    /**
+     * An observed stock for the facts, with its age in words. Null with a sentence for a stock that no robot observed:
+     * unknown is not zero (T02). Null with a sentence for an old observation.
+     */
+    private Uno.Context.Stock stock(String station, int count, long at, List<String> uncertain) {
+        if (count == MindRuntime.UNKNOWN) {
+            uncertain.add("No robot observed '" + station + "' yet. Its stock is unknown.");
+            return null;
+        }
+        if (now - at > OLD_TICKS) {
+            uncertain.add("The last observation of '" + station + "' is old. Not given: its stock.");
+            return null;
+        }
+        return new Uno.Context.Stock(count, Notices.age(now - at));
+    }
+
+    /** The lines of the diary in the context of a model: the newest ones (D42, point 2). An initial value. */
+    static final int DIARY_LINES = 20;
+
+    /**
+     * The newest lines of a diary, as data for the model, the oldest first (D42, point 2). "Diary" is the diary that the actor reads.
+     * "Jobs" are the facts of the jobs of the actor. A line has the quantities of its job at the moment of the entry, with three exceptions.
+     * A line gives no number that the facts of its job do not give. A line in RECOVERY has no delivered total and no load on board,
+     * as the facts of a job in RECOVERY. The lines of a job with a RECOVERY in the diary have no delivered total: after a recovery
+     * the total can be inexact. This also holds for a job that a new job replaced on its robot: it has no facts any more.
+     */
+    static List<Uno.Context.Line> lines(List<Entry> diary, List<Uno.Context.Facts> jobs, long now) {
+        Set<Integer> noDelivered = new HashSet<>(), noLoad = new HashSet<>();
+        for (Uno.Context.Facts facts : jobs) {
+            if (facts.delivered() == null) noDelivered.add(facts.job());
+            if (facts.onBoard() == null) noLoad.add(facts.job());
+        }
+        for (Entry entry : diary) {
+            if (entry.state() == State.RECOVERY) noDelivered.add(entry.job());
+        }
+        List<Uno.Context.Line> lines = new ArrayList<>();
+        for (Entry entry : diary.subList(Math.max(0, diary.size() - DIARY_LINES), diary.size())) {
+            boolean recovery = entry.state() == State.RECOVERY;
+            lines.add(new Uno.Context.Line(Notices.age(now - entry.time()), entry.job(), entry.robot(), entry.kind(), entry.state(), entry.cause(),
+                entry.quantity(), entry.reserve(), noDelivered.contains(entry.job()) ? null : entry.delivered(),
+                recovery || noLoad.contains(entry.job()) ? null : entry.carried()));
+        }
+        return List.copyOf(lines);
     }
 
     /** The whole record, for the status command. */

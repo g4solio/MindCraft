@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.g4solio.mindcraft.MindRuntime.Actor;
+import io.github.g4solio.mindcraft.MindRuntime.Cause;
+import io.github.g4solio.mindcraft.MindRuntime.Entry;
 import io.github.g4solio.mindcraft.MindRuntime.Job;
 import io.github.g4solio.mindcraft.MindRuntime.Order;
 import io.github.g4solio.mindcraft.MindRuntime.Refusal;
@@ -73,12 +75,39 @@ public final class Uno {
     public record Answer(Action action, long inputTokens, long outputTokens) {
     }
 
-    /** What a provider knows: the names of the stations of the player, and the robots of the player, each with a "free" flag (D21). */
-    public record Context(List<String> stations, List<Robot> robots) {
+    /**
+     * What a provider knows: only the data of the player. The names of the stations, and the robots, each with a "free" flag (D21).
+     * The facts of each job of the player, and the newest lines of the diary of the player (D42, point 2).
+     * Never a coordinate, the name of a player or the free text of a reason: a recorded reason can hold a position.
+     */
+    public record Context(List<String> stations, List<Robot> robots, List<Facts> jobs, List<Line> diary) {
         public record Robot(int id, boolean free) {
         }
 
-        /** The context as JSON, for a model. Its shape is the shape of S2. */
+        /**
+         * The facts of one job: the part of its account that goes to the model. JobAccount builds them (D42, point 2).
+         * The model does not get an uncertain number (D32). Such a number is null, and a sentence of "uncertain" says which value
+         * is not given, and why (D42, point 3). "Still to carry" and "above the reserve" are derived numbers: the model does not
+         * calculate (D42, point 4). The age of an observation is in words.
+         */
+        public record Facts(int job, int robot, String module, String item, String from, String to, int quantity, int reserve,
+                            State state, Cause cause, Integer delivered, Integer onBoard, Stock source, Stock destination,
+                            Integer stillToCarry, Integer aboveReserve, List<String> uncertain) {
+        }
+
+        /** An observed stock: the count, and the age of the observation in words, for example "12 min ago". */
+        public record Stock(int count, String age) {
+        }
+
+        /**
+         * One line of the diary (D31), as data: the age in words, the job, the robot, the kind, the state, the cause, and the quantities
+         * of the job at that moment. A number that the facts of its job do not give is null here too.
+         */
+        public record Line(String age, int job, int robot, Entry.Kind kind, State state, Cause cause, int quantity, int reserve,
+                           Integer delivered, Integer onBoard) {
+        }
+
+        /** The context as JSON, for a model. The stations and the robots have the shape of S2. A value that is null is not in the JSON. */
         String toJson() {
             JsonArray names = new JsonArray();
             stations.forEach(names::add);
@@ -89,10 +118,65 @@ public final class Uno {
                 item.addProperty("free", robot.free());
                 list.add(item);
             }
+            JsonArray facts = new JsonArray();
+            for (Facts job : jobs) {
+                JsonObject item = new JsonObject();
+                item.addProperty("job", job.job());
+                item.addProperty("robot", job.robot());
+                item.addProperty("module", job.module());
+                item.addProperty("item", job.item());
+                item.addProperty("from", job.from());
+                item.addProperty("to", job.to());
+                item.addProperty("quantity", job.quantity());
+                item.addProperty("reserve", job.reserve());
+                item.addProperty("state", job.state().name());
+                item.addProperty("cause", job.cause().name());
+                put(item, "delivered", job.delivered());
+                put(item, "onBoard", job.onBoard());
+                put(item, "sourceStock", job.source());
+                put(item, "destinationStock", job.destination());
+                put(item, "stillToCarry", job.stillToCarry());
+                put(item, "aboveReserve", job.aboveReserve());
+                JsonArray uncertain = new JsonArray();
+                job.uncertain().forEach(uncertain::add);
+                item.add("uncertain", uncertain);
+                facts.add(item);
+            }
+            JsonArray lines = new JsonArray();
+            for (Line line : diary) {
+                JsonObject item = new JsonObject();
+                item.addProperty("age", line.age());
+                item.addProperty("job", line.job());
+                item.addProperty("robot", line.robot());
+                item.addProperty("kind", line.kind().name());
+                item.addProperty("state", line.state().name());
+                item.addProperty("cause", line.cause().name());
+                item.addProperty("quantity", line.quantity());
+                item.addProperty("reserve", line.reserve());
+                put(item, "delivered", line.delivered());
+                put(item, "onBoard", line.onBoard());
+                lines.add(item);
+            }
             JsonObject context = new JsonObject();
             context.add("stations", names);
             context.add("robots", list);
+            context.add("jobs", facts);
+            context.add("diary", lines);
             return context.toString();
+        }
+
+        /** A number that is not null. An uncertain number is not in the JSON: the model cannot repeat it. */
+        private static void put(JsonObject json, String name, Integer value) {
+            if (value != null) json.addProperty(name, value);
+        }
+
+        /** A stock that is not null: its count and its age. */
+        private static void put(JsonObject json, String name, Stock stock) {
+            if (stock == null) return;
+            JsonObject item = new JsonObject();
+            item.addProperty("count", stock.count());
+            item.addProperty("age", stock.age());
+            json.add(name, item);
         }
     }
 
@@ -350,7 +434,7 @@ public final class Uno {
      */
     public static void ask(MinecraftServer server, Actor actor, String request, Provider provider, long timeoutMs, Consumer<String> reply) {
         Session mine = session;
-        Context context = context(MindRuntime.get(server), actor);
+        Context context = context(MindRuntime.get(server), actor, server.overworld().getGameTime());
         if (!mine.pending.add(actor.id())) {
             reply.accept("I am still working on your previous request.");
             return;
@@ -383,8 +467,11 @@ public final class Uno {
             }));
     }
 
-    /** Only the data that the actor owns. A provider must not see the stations or robots of other players. */
-    static Context context(MindRuntime runtime, Actor actor) {
+    /**
+     * Only the data that the actor owns. A provider must not see the stations, the robots, the jobs or the diary of other players.
+     * "Now" is the game time of the request: the ages and the doubts of the facts come from it. A test gives a later moment.
+     */
+    static Context context(MindRuntime runtime, Actor actor, long now) {
         List<String> stations = new ArrayList<>();
         runtime.stations.forEach((name, station) -> {
             if (actor.owns(station.owner())) stations.add(name);
@@ -395,7 +482,8 @@ public final class Uno {
             Job job = runtime.jobs.get(id);
             robots.add(new Context.Robot(id, job == null || !job.state.open()));
         });
-        return new Context(List.copyOf(stations), List.copyOf(robots));
+        List<Context.Facts> jobs = runtime.jobs(actor).stream().map(job -> JobAccount.of(job, now).facts()).toList();
+        return new Context(List.copyOf(stations), List.copyOf(robots), jobs, JobAccount.lines(runtime.diary(actor), jobs, now));
     }
 
     /**

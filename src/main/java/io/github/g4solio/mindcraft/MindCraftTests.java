@@ -1598,15 +1598,18 @@ public class MindCraftTests {
     }
 
     /**
-     * T18: the provider is offline, slow or gives a bad answer. Uno says so and creates no proposal.
-     * A job in progress continues. A valid answer with an invalid order does not pass the ordinary validation.
+     * T18: the provider is offline, slow or gives a bad answer. A job in progress continues.
+     * A valid answer with an invalid order does not pass the ordinary validation.
+     * D42, point 17: a provider with a model gives no valid action. The fixed rules read the same request, and the answer starts
+     * with one sentence about the model and the reason. The request counts. A provider without a model keeps the failure sentence of A.
      */
     @GameTest(template = EMPTY, timeoutTicks = TIMEOUT)
     public static void t18_provider_failures(GameTestHelper helper) {
-        Actor player = player("t18");
+        // Only an operator uses a provider with a model (D33).
+        Actor player = operator("t18");
         Rig rig = new Rig(helper, "t18", 64, 1000, player);
         MinecraftServer server = rig.level.getServer();
-        List<String> invalid = new CopyOnWriteArrayList<>(), failed = new CopyOnWriteArrayList<>();
+        List<String> invalid = new CopyOnWriteArrayList<>(), failed = new CopyOnWriteArrayList<>(), noAction = new CopyOnWriteArrayList<>();
         GameTestSequence sequence = rig.begin();
         sequence = ask(sequence, server, player, "x", (r, c) -> answer(startJson(MindRuntime.TRANSPORT, rig.id, rig.from, "t18_unknown", 8)), 5000, invalid);
         sequence = ask(sequence, server, player, "x", (r, c) -> answer(startJson(MindRuntime.TRANSPORT, rig.id, rig.from, rig.to, -5)), 5000, invalid);
@@ -1619,29 +1622,56 @@ public class MindCraftTests {
             check(Uno.confirm(server, player).startsWith("I have no pending proposal"), "an invalid order became a proposal");
             rig.startJob(24, 0);
         });
+        // D42, point 17: the four ways in which a model gives no valid action. The answers of the fixed rules have each kind:
+        // a reason, an immediate action (a report) and a proposal. A request with the robot number is written after the enrollment.
+        sequence = ask(sequence, server, player, "x", new CountingModel((r, c) -> {
+            throw new IOException("model offline");
+        }), 5000, noAction);
+        sequence = sequence
+            .thenExecute(() -> Uno.ask(server, player, "How is robot " + rig.id + "?", new CountingModel((r, c) -> {
+                Thread.sleep(3000);
+                return answer("{}");
+            }), 300, noAction::add))
+            .thenWaitUntil(() -> check(noAction.size() == 2, "Uno did not answer yet"))
+            // The Claude provider gives a refusal of the model as this exception.
+            .thenExecute(() -> Uno.ask(server, player, "Carry 8 coal from " + rig.from + " to " + rig.to + " with robot " + rig.id,
+                new CountingModel((r, c) -> {
+                    throw new IllegalStateException("the model declined the request");
+                }), 5000, noAction::add))
+            .thenWaitUntil(() -> check(noAction.size() == 3, "Uno did not answer yet"))
+            .thenExecute(() -> check(Uno.hasProposal(player), "the proposal of the fixed rules is missing: " + noAction));
+        // An answer that Uno cannot read, with the tokens of that answer. The other kinds of such an answer are in a_parse_of_an_answer.
+        sequence = ask(sequence, server, player, "x", new CountingModel((r, c) -> new Uno.Answer(Uno.parse("this is not JSON"), 7, 3)), 5000, noAction);
+        // An exception is always a failure, also an IllegalArgumentException. Only the action "none" says that a value is missing.
+        sequence = ask(sequence, server, player, "x", new CountingModel((r, c) -> {
+            throw new IllegalArgumentException("a defect of the provider");
+        }), 5000, noAction);
+        sequence = sequence.thenExecute(() -> {
+            MindCraft.LOGGER.info("t18_provider_failures, a model without a valid action: {}", noAction);
+            check(noAction.size() == 5, noAction.toString());
+            String rules = ", thus I read your request with the fixed rules: they understand only simple sentences. ";
+            check(noAction.get(0).equals("The model gave no valid answer (model offline)" + rules + RULES_X), noAction.get(0));
+            check(noAction.get(1).startsWith("The model gave no valid answer (the request reached the time limit)" + rules
+                + "Job " + rig.job().id + ", robot #" + rig.id + ": carry 24 items"), noAction.get(1));
+            check(noAction.get(2).startsWith("The model gave no valid answer (the model declined the request)" + rules + "Proposal: "), noAction.get(2));
+            check(noAction.get(3).equals("The model gave no valid answer (I cannot read its answer)" + rules + RULES_X), noAction.get(3));
+            check(noAction.get(4).equals("The model gave no valid answer (a defect of the provider)" + rules + RULES_X), noAction.get(4));
+            // Each request counts, with the tokens of its answer. A failure and the time limit have none. The fixed rules add nothing.
+            usage(player, 5, 7, 3);
+        });
+        // A provider without a model keeps the sentences of increment A: a failure, and an answer that Uno cannot read.
         sequence = ask(sequence, server, player, "x", (r, c) -> {
             throw new IOException("provider offline");
         }, 5000, failed);
-        sequence = ask(sequence, server, player, "x", (r, c) -> {
-            Thread.sleep(3000);
-            return answer("{}");
-        }, 300, failed);
-        // An answer that Uno cannot read. The other kinds of such an answer are in a_parse_of_an_answer.
         sequence = ask(sequence, server, player, "x", (r, c) -> answer("this is not JSON"), 5000, failed);
-        // An exception is always a failure, also an IllegalArgumentException. Only the action "none" says that a value is missing.
-        sequence = ask(sequence, server, player, "x", (r, c) -> {
-            throw new IllegalArgumentException("a defect of the provider");
-        }, 5000, failed);
         // Not a failure: the request has no quantity. The answer must not look like a failure of the provider.
         sequence = ask(sequence, server, player, "carry coal", new Uno.RuleProvider(), 5000, failed);
         sequence
             .thenExecute(() -> {
                 MindCraft.LOGGER.info("t18_provider_failures failures: {}", failed);
-                check(failed.stream().filter(a -> a.startsWith("I cannot interpret the request now")).count() == 3, failed.toString());
-                check(failed.stream().anyMatch(a -> a.contains("provider offline")) && failed.stream().anyMatch(a -> a.contains("TimeoutException"))
-                    && failed.contains("I cannot interpret the request now (a defect of the provider). The jobs in progress continue."), failed.toString());
-                check(failed.stream().filter(a -> a.startsWith("I did not get a valid configuration")).count() == 1, failed.toString());
-                check(failed.contains("I cannot propose a job: the quantity is missing."), failed.toString());
+                check(failed.equals(List.of("I cannot interpret the request now (provider offline). The jobs in progress continue.",
+                    "I did not get a valid configuration. I created no proposal.", "I cannot propose a job: the quantity is missing.")), failed.toString());
+                usage(player, 5, 7, 3);
                 check(Uno.confirm(server, player).startsWith("I have no pending proposal"), "a failure became a proposal");
             })
             .thenWaitUntil(() -> rig.state(State.DONE))
@@ -2875,14 +2905,16 @@ public class MindCraftTests {
             })
             .thenWaitUntil(() -> check(answers.size() == 2, "Uno did not answer yet"))
             .thenExecute(() -> usage(operator, 2, 125, 35));
+        // After a failure and after the time limit the fixed rules read the request (D42, point 17). They add no request to the counter.
+        String rules = ", thus I read your request with the fixed rules: they understand only simple sentences. " + RULES_X;
         sequence = ask(sequence, server, operator, "x", broken, 5000, answers)
             .thenExecute(() -> {
-                check(answers.get(2).startsWith("I cannot interpret the request now (model offline)"), answers.get(2));
+                check(answers.get(2).equals("The model gave no valid answer (model offline)" + rules), answers.get(2));
                 usage(operator, 3, 125, 35);
             });
         sequence = ask(sequence, server, operator, "x", late, 300, answers)
             .thenExecute(() -> {
-                check(answers.get(3).contains("TimeoutException"), answers.get(3));
+                check(answers.get(3).equals("The model gave no valid answer (the request reached the time limit)" + rules), answers.get(3));
                 usage(operator, 4, 125, 35);
             })
             // The provider answers after the time limit, with tokens. Uno does not use that answer.

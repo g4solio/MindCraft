@@ -1080,6 +1080,7 @@ Gates before a second player:
 
 **Status:** decided by the project owner on 2026-11-15, in a design discussion of two rounds. The first round: points 1 to 14. The second round: points 15 to 20, the change of point 13, and the choices of the implementation at the end. Each number is an initial value: decided as a start, to review after the play session of B. The example sentences are **proposed** wording. Nothing is implemented. No test supports a point of this entry. The facts below come from code examinations.
 
+- **Spec and tickets:** the spec of increment B is issue #15. Its tickets are issues #16 to #29, with their blocking edges. Tickets #27 (the measurement) and #29 (the play session) need the project owner.
 - **Problem:** D32, D33 and D34 decide the direction of increment B. They leave open: where the model speaks, which data it gets, which numbers are uncertain, how the check works, where the setting is, when the measurement runs, how a job adopts a load, and when the fuel is low. D40 and D41 defer three points to B.
 
 Facts from code examinations, 2026-11-15:
@@ -1135,6 +1136,7 @@ The model (D33)
    - **Requests:** one fixed set of about 20, the same for Haiku 5.5, Sonnet 5.5 and Opus 5.5. The seven actions. The T21 cases: a wait at the reserve, a block without fuel, `RECOVERY`, a robot that is not running, an old observation. The adversarial case of D32: `BLOCKED` with a load on board. One question about the diary.
    - **Rule, decided before the measurement.** A model is out if it gives a wrong action where a model with a higher price gives the right one. A model is out if one of its sentences contradicts the record. A model is out if the check of the numbers fails more than 1 time in 5. The model with the lowest price that stays is the choice.
    - The measurement also records the time and the tokens of each request.
+   - **Added in the spec, proposed:** the set also has one request in Italian, a change of the destination and a question about the fuel. The project owner did not object.
 8. **The budget.** 5 dollars for all paid runs of B: three passes of the measurement at most, and the play session. Each run still needs the consent of the project owner (CLAUDE.md).
    - **Estimate, not a measurement:** one pass of 20 requests on the three models costs about 0.45 dollars: Opus 0.29, Sonnet 0.15, Haiku 0.01. The assumption is 2400 input tokens and 250 output tokens for each request.
 

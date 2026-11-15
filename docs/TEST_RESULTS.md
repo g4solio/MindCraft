@@ -140,6 +140,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 104 | 91 of 93, expected | Ticket #21, red run: two changed tests, with the old code of Uno. Runs 96 and 97 are runs of the integration branch |
 | 105 | 93 of 93 | None. Ticket #21: the fixed rules read a request when the model gives no valid action. Server line: `All 93 required tests passed :)` |
 | 106 | 93 of 93 | None. Ticket #21, the committed code: one comment changed after run 105. Server line: `All 93 required tests passed :)` |
+| 107 | 95 of 95 | None. The integration branch after the merge of ticket #21. Server line: `All 95 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -153,6 +154,7 @@ Runs 93 to 95 are the runs of ticket #18 of increment B.
 Runs 96 and 97 are the runs of the integration branch after the merge of ticket #18.
 Runs 98 to 102 are the runs of ticket #19 of increment B, on the branch with tickets #16 and #17. See "Increment B — the facts of the jobs go to the model". No run of ticket #19 called the real Claude service.
 Run 103 is the run of the integration branch after the merge of ticket #19.
+Runs 104 to 106 are the runs of ticket #21. Run 107 is the run of the integration branch after its merge.
 
 Run 76 is the first run of the schema of increment A with the real service. Run 78 gave the reason of its error. Run 81 passed with the corrected schema. See D29.1.
 

@@ -320,15 +320,22 @@ The server log says which provider is active: look for the line `Uno interprets 
 - A new job, a change, a resume and a cancellation from Claude are only proposals. They go through the same validation as the commands and act only after your confirmation.
 - The model is Claude Opus 5.5. You can write the request in any language. Uno answers in English.
 - If Claude cannot find a necessary value, Uno says what is missing.
+- If Claude gives no valid action, Uno reads the same request with the fixed rules (see below). This holds when the model service fails, when the request reaches the time limit, when the model declines the request, and when Uno cannot read the answer. The answer starts with one sentence that says so, with the reason. Then comes the answer of the fixed rules: a proposal, an immediate action, or the reason why they cannot propose a job. For example:
+
+```
+Uno › The model gave no valid answer (the model service is not reachable), thus I read your request with the fixed rules: they understand only simple sentences. I cannot propose a job: the quantity is missing.
+```
+
+- Such a request still counts in the counter of the session. The jobs in progress continue. The fixed rules can read a request in a different way than Claude: read the proposal before you confirm.
 - Uno asks Claude to follow the rule above for a request that names no robot. A new job from Claude for a robot with an open job becomes the proposal of a replacement, as with the fixed rules.
 - Claude changes the request into one action: start, change, pause, resume, cancel, report or none. The server writes the text of each proposal, never the model.
 - A pause and a report from Claude run immediately. The server finds the job, as described above. A written report request is a paid call. The "Report" button and `/uno report` are not.
 
-Details and limits: D21 and D33.1 in [docs/DECISIONS.md](docs/DECISIONS.md).
+Details and limits: D21, D33.1 and D42 (point 17) in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ### What Uno understands without Claude
 
-Without a key Uno knows only these elements.
+Without a key Uno knows only these elements. The same rules read the request of an operator when Claude gives no valid action.
 
 A request that names two of your stations is a new job:
 

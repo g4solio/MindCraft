@@ -1,6 +1,7 @@
 package io.github.g4solio.mindcraft;
 
 import io.github.g4solio.mindcraft.MindRuntime.Entry;
+import io.github.g4solio.mindcraft.MindRuntime.Entry.Kind;
 import io.github.g4solio.mindcraft.MindRuntime.Forgotten;
 import io.github.g4solio.mindcraft.MindRuntime.State;
 import net.minecraft.Util;
@@ -41,13 +42,14 @@ public final class Notices {
     }
 
     /**
-     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and a long wait.
+     * The attention rule (D30): a change to BLOCKED, RECOVERY or DONE that the runtime observed, and each one-time warning: a long wait.
+     * The rule reads the kind of the entry (D41, decision 5).
      * A change that a request made is not selected: a pause, a resume or a cancellation does not come back to the owner as a notice.
      * The other changes to WAITING are not selected: the ordinary cycle of a stock job is silent.
      */
     static boolean selected(Entry entry) {
-        return !entry.requested()
-            && (entry.longWait() || entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
+        return !entry.requested() && (entry.kind() != Kind.CHANGE
+            || entry.state() == State.BLOCKED || entry.state() == State.RECOVERY || entry.state() == State.DONE);
     }
 
     /** How Uno names a job in a sentence: "job 3 on robot #7". */
@@ -64,7 +66,7 @@ public final class Notices {
     static String sentence(Entry entry) {
         String subject = capital(job(entry.job(), entry.robot())) + " (" + MindRuntime.itemName(entry.item())
             + " from '" + entry.from() + "' to '" + entry.to() + "')";
-        if (entry.longWait()) return subject + longWait(entry);
+        if (entry.kind() == Kind.LONG_WAIT) return subject + longWait(entry);
         return switch (entry.state()) {
             case BLOCKED -> subject + switch (entry.cause()) {
                 case OUT_OF_FUEL -> " is blocked: the robot has no fuel.";

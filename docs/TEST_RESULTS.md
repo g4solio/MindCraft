@@ -131,6 +131,7 @@ Work in parallel: each ticket writes its runs in a section of its own, at the en
 | 95 | 92 of 92 | None. Ticket #18, with one more test of the replacement in each open state. Server line: `All 92 required tests passed :)` |
 | 98 | 91 of 93, expected | Ticket #21, red run: two changed tests, with the old code of Uno. Runs 96 and 97 are runs of the integration branch |
 | 99 | 93 of 93 | None. Ticket #21: the fixed rules read a request when the model gives no valid action. Server line: `All 93 required tests passed :)` |
+| 100 | 93 of 93 | None. Ticket #21, the committed code: one comment changed after run 99. Server line: `All 93 required tests passed :)` |
 
 Runs 34 to 75 are the runs of increment A, on 2026-11-13.
 
@@ -1236,6 +1237,7 @@ The texts of `t18_provider_failures`, from the log of run 99. The test compares 
 | --- | --- | --- |
 | 98, red | The two changed tests, with the old code of Uno | 91 of 93, expected. `a_model_requests_count`: "I cannot interpret the request now (model offline). The jobs in progress continue." `t18_provider_failures`: "the proposal of the fixed rules is missing", after three answers with the failure sentence of increment A. `b_replacement_in_recovery` passed with the change of `5e3439a` |
 | 99, green | The code of the ticket | **93 of 93**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `93 GAME TESTS COMPLETE`, `All 93 required tests passed :)` |
+| 100 | The commit `edb70a3`: the code of run 99, with one comment changed | **93 of 93**. Log lines: `Enabled Gametest Namespaces: [mindcraft]`, `93 GAME TESTS COMPLETE`, `All 93 required tests passed :)` |
 
 The two branches of the code came in one step: an exception or the time limit, and an answer that Uno cannot read. Thus run 98 is the red run of both. Its first failed check stopped `t18_provider_failures` before the case of an answer that Uno cannot read.
 
